@@ -1,0 +1,22 @@
+dem_path: examples/synthetic/gaussian-hill.tif
+output_dir: outputs/milestone-01-synthetic
+model_width_mm: 180.0
+model_depth_mm: null
+base_thickness_mm: 3.0
+max_height_mm: 42.0
+vertical_scale_mode: fit-height
+terrain_mode: best-available
+dataset_type: dtm
+dataset_name: TopoForge analytic Gaussian mountain
+vertical_datum: synthetic-local-zero
+data_license: Apache-2.0 synthetic fixture
+attribution: TopoForge deterministic analytic fixture
+printer_profile:
+  profile_id: bambu-p2s-0.4
+  build_volume_mm: [256.0, 256.0, 256.0]
+  nozzle_diameter_mm: 0.4
+  layer_height_mm: 0.2
+  minimum_feature_mm: 0.5
+  preferred_mesh_sampling_mm: 0.5
+  minimum_base_thickness_mm: 2.0
+  connector_tolerance_mm: 0.2

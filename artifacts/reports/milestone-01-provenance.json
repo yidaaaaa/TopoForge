@@ -1,0 +1,127 @@
+{
+  "dataset": {
+    "acquisition_period": "deterministic analytic fixture",
+    "attribution": "TopoForge deterministic analytic fixture",
+    "checksums": {
+      "gaussian-hill.tif": "32f4a421099c5ec6c8b1ed990c234dc0dfb4373dabed99143aa3421d014a6114"
+    },
+    "dataset_name": "TopoForge analytic Gaussian mountain",
+    "dataset_type": "dtm",
+    "dataset_version": "milestone-01-fixture-v1",
+    "download_time": "not-applicable-local-input",
+    "horizontal_crs": "EPSG:32648",
+    "horizontal_resolution_m": 10.0,
+    "license": "Apache-2.0 synthetic fixture",
+    "provider": "local",
+    "source_urls": [],
+    "vertical_crs": "synthetic-local-metre",
+    "vertical_datum": "synthetic-local-zero"
+  },
+  "formats": {
+    "3mf": {
+      "lib3mf_version": [
+        2,
+        5,
+        0
+      ],
+      "strict_warning_count": 0,
+      "writer": "lib3mf"
+    },
+    "glb": {
+      "role": "preview only"
+    },
+    "stl": {
+      "units_contract": "millimetres"
+    }
+  },
+  "generated_at": "2026-07-30T19:53:13.037818+00:00",
+  "geometry": {
+    "construction": "explicit regular-grid top, four boundary walls, and flat bottom",
+    "manufacturing_units": "millimetres",
+    "self_intersection_status": "not_fully_checked"
+  },
+  "license_note": "Dataset terms are separate from the Apache-2.0 TopoForge code license.",
+  "processing": {
+    "array_shape": [
+      64,
+      80
+    ],
+    "automatic_projection_choice": "EPSG:32648",
+    "elevation_max_m": 738.7041015625,
+    "elevation_min_m": 90.0511474609375,
+    "horizontal_resolution_m": 10.0,
+    "interpolated_percentage": 0.0,
+    "nodata_percentage": 0.0,
+    "original_nodata_mask": "original_nodata_mask.tif",
+    "pipeline": [
+      "read metadata",
+      "normalize to a north-up metric CRS when required",
+      "enforce cell budget using average resampling",
+      "preserve original NoData mask",
+      "interpolate bounded interior holes from nearest valid cells",
+      "write processed DEM"
+    ],
+    "processed_crs": "EPSG:32648"
+  },
+  "provider_selection": {
+    "attempted_providers": [
+      {
+        "provider": "local",
+        "status": "selected"
+      }
+    ],
+    "reason": [
+      "user supplied a local elevation raster",
+      "local inputs have priority over network providers",
+      "no provider fallback was required"
+    ],
+    "selected": "local"
+  },
+  "scaling": {
+    "base_thickness_mm": 3.0,
+    "baseline_elevation_m": 90.0511474609375,
+    "height_limit_applied": true,
+    "height_limit_mm": 42.0,
+    "horizontal_scale_mm_per_m": 0.225,
+    "model_depth_mm": 144.0,
+    "model_width_mm": 180.0,
+    "policy_vertical_exaggeration": 0.27586079166019484,
+    "predicted_max_z_mm": 42.0,
+    "predicted_min_z_mm": 3.0,
+    "robust_high_elevation_m": 718.4337768554688,
+    "robust_low_elevation_m": 90.0975341796875,
+    "scale_mode": "fit-height",
+    "vertical_exaggeration": 0.26722044852692334
+  },
+  "slicer_validation": {
+    "gcode_generated": true,
+    "gcode_size_bytes": 5030602,
+    "metrics": {
+      "empty_layer_warning": false,
+      "estimated_time_seconds": 25901,
+      "estimated_time_text": "7h 11m 41s",
+      "filament_used_cm3": 97.54,
+      "filament_used_g": 0.0,
+      "filament_used_mm": 40552.39,
+      "floating_region_warning": false,
+      "layer_count": 140,
+      "out_of_bed": false,
+      "support_material": false,
+      "warnings": []
+    },
+    "profile": "slicer defaults",
+    "report": "slicer_validation.json",
+    "slicer": {
+      "detail": null,
+      "executable": "/usr/bin/prusa-slicer",
+      "name": "PrusaSlicer",
+      "status": "available",
+      "version": "2.4.0"
+    },
+    "success": true
+  },
+  "source_file_checksums": {
+    "gaussian-hill.tif": "32f4a421099c5ec6c8b1ed990c234dc0dfb4373dabed99143aa3421d014a6114"
+  },
+  "topoforge_version": "0.1.0"
+}

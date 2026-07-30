@@ -1,0 +1,106 @@
+{
+  "bottom_planarity_error_mm": 0.0,
+  "connected_components": 1,
+  "degenerate_faces": 0,
+  "dimension_error_mm": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "dimensions_mm": [
+    180.0,
+    144.0,
+    42.0
+  ],
+  "dimensions_within_tolerance": true,
+  "duplicate_faces": 0,
+  "expected_dimensions_mm": [
+    180.0,
+    144.0,
+    42.0
+  ],
+  "finite_face_normals": true,
+  "finite_vertices": true,
+  "flat_bottom": true,
+  "height_limit_mm": 42.0,
+  "height_limit_passed": true,
+  "manifold": true,
+  "mesh_units": "millimetres by TopoForge coordinate contract",
+  "minimum_base_thickness_mm": 3.0,
+  "minimum_base_thickness_passed": true,
+  "minimum_base_thickness_required_mm": 2.0,
+  "positive_volume": true,
+  "required_checks_passed": true,
+  "self_intersection_method": "No exhaustive robust self-intersection predicate is available in the Phase 1 backend.",
+  "self_intersection_status": "not_fully_checked",
+  "slicer_result": {
+    "command": [
+      "/usr/bin/prusa-slicer",
+      "--export-gcode",
+      "--output",
+      "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/.milestone-01-final-_gj9jvm7.gcode",
+      "/root/autodl-tmp/bambu/TopoForge/outputs/milestone-01-synthetic/model.3mf"
+    ],
+    "duration_seconds": 1.7511003613471985,
+    "error": null,
+    "exit_code": 0,
+    "gcode_generated": true,
+    "gcode_size_bytes": 5030602,
+    "input_model": "/root/autodl-tmp/bambu/TopoForge/outputs/milestone-01-synthetic/model.3mf",
+    "metrics": {
+      "empty_layer_warning": false,
+      "estimated_time_seconds": 25901,
+      "estimated_time_text": "7h 11m 41s",
+      "filament_used_cm3": 97.54,
+      "filament_used_g": 0.0,
+      "filament_used_mm": 40552.39,
+      "floating_region_warning": false,
+      "layer_count": 140,
+      "out_of_bed": false,
+      "support_material": false,
+      "warnings": []
+    },
+    "output_gcode": "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/milestone-01-final.gcode",
+    "profile": "slicer defaults",
+    "slicer": {
+      "detail": null,
+      "executable": "/usr/bin/prusa-slicer",
+      "name": "PrusaSlicer",
+      "status": "available",
+      "version": "2.4.0"
+    },
+    "status": "succeeded",
+    "stderr": "",
+    "stdout": "[2026-07-31 03:53:16.851525] [0x00007fd59afb6d00] [trace]   Initializing StaticPrintConfigs\n10 => Processing triangulated mesh\n20 => Generating perimeters\n70 => Infilling layers\n30 => Preparing infill\n88 => Generating skirt and brim\n90 => Exporting G-code to /root/autodl-tmp/bambu/TopoForge/artifacts/slicer/.milestone-01-final-_gj9jvm7.gcode\nSlicing result exported to /root/autodl-tmp/bambu/TopoForge/artifacts/slicer/.milestone-01-final-_gj9jvm7.gcode\n"
+  },
+  "three_mf_dimensions_match": true,
+  "three_mf_round_trip": {
+    "build_item_count": 1,
+    "dimensions_mm": [
+      180.0,
+      144.0,
+      42.0
+    ],
+    "lib3mf_version": [
+      2,
+      5,
+      0
+    ],
+    "object_count": 1,
+    "object_names": [
+      "TopoForge terrain"
+    ],
+    "strict_warning_count": 0,
+    "triangle_count": 20476,
+    "unit": "millimeter",
+    "vertex_count": 10240
+  },
+  "triangle_budget": 6000016,
+  "triangle_budget_passed": true,
+  "triangle_count": 20476,
+  "units": "mm",
+  "validation_source": "reopened model.stl",
+  "volume_mm3": 246266.78983896555,
+  "watertight": true,
+  "winding_consistent": true
+}

@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use TopoForge, cite this software and the elevation datasets listed in provenance.json."
+title: "TopoForge"
+type: software
+version: 0.1.0
+date-released: 2026-07-31
+license: Apache-2.0
+authors:
+  - name: "TopoForge contributors"

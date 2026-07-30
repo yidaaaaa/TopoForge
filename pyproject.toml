@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "topoforge"
+version = "0.1.0"
+description = "Reproducible, provenance-aware terrain models for additive manufacturing"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12,<3.13"
+authors = [{ name = "TopoForge contributors" }]
+dependencies = [
+  "lib3mf==2.5.0",
+  "numpy>=2.1,<3",
+  "pillow>=11,<12",
+  "pydantic>=2.10,<3",
+  "pyproj>=3.7,<4",
+  "pyyaml>=6.0.2,<7",
+  "rasterio>=1.4,<2",
+  "scipy>=1.14,<2",
+  "shapely>=2.0,<3",
+  "trimesh[easy]>=4.6,<5",
+  "typer>=0.15,<1",
+]
+
+[project.optional-dependencies]
+api = ["fastapi>=0.115,<1", "uvicorn[standard]>=0.34,<1"]
+
+[dependency-groups]
+dev = [
+  "hypothesis>=6.125,<7",
+  "pyright>=1.1.395,<2",
+  "pytest>=8.3,<9",
+  "pytest-cov>=6,<7",
+  "ruff>=0.9,<1",
+]
+
+[project.scripts]
+topoforge = "topoforge.cli.app:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/topoforge"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+markers = [
+  "integration: uses external tools or network",
+  "slicer: invokes a real slicer executable",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+include = ["src"]
+reportMissingTypeStubs = false
+exclude = ["outputs", "artifacts"]
+
+[tool.coverage.run]
+source = ["topoforge"]
+branch = true

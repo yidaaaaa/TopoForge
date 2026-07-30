@@ -1,0 +1,8 @@
+profile_id: bambu-p2s-0.2
+build_volume_mm: [256.0, 256.0, 256.0]
+nozzle_diameter_mm: 0.2
+layer_height_mm: 0.1
+minimum_feature_mm: 0.3
+preferred_mesh_sampling_mm: 0.35
+minimum_base_thickness_mm: 2.0
+connector_tolerance_mm: 0.15

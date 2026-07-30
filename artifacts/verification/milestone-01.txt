@@ -1,0 +1,139 @@
+TopoForge milestone-01 verification record
+Date: 2026-07-31
+
+BASELINE
+  repository: /root/autodl-tmp/bambu/TopoForge
+  commit: 10112b0a827bd27db6054d3ecf01a47d62b4aed5
+  behavior: empty project tree; no TopoForge package or CLI entry point
+
+MODIFIED SOURCE
+  commit: PENDING_SOURCE_COMMIT
+  behavior: local GeoTIFF/synthetic DEM -> reopened and validated STL/3MF/GLB bundle
+
+QUALITY GATES (source workspace)
+
+  command: uv sync
+  literal output:
+    Resolved 71 packages in 2ms
+    Building topoforge @ file:///root/autodl-tmp/bambu/TopoForge
+    Built topoforge @ file:///root/autodl-tmp/bambu/TopoForge
+    Prepared 1 package in 1.46s
+    Uninstalled 1 package in 0.91ms
+    Installed 1 package in 2ms
+    ~ topoforge==0.1.0 (from file:///root/autodl-tmp/bambu/TopoForge)
+  exit_status: 0
+
+  command: uv run ruff check .
+  literal output:
+    All checks passed!
+  exit_status: 0
+
+  command: uv run ruff format --check .
+  literal output:
+    78 files already formatted
+  exit_status: 0
+
+  command: uv run pyright
+  literal output:
+    0 errors, 0 warnings, 0 informations
+  exit_status: 0
+
+  command: uv run pytest
+  literal result:
+    71 passed, 33 warnings in 5.42s
+  exit_status: 0
+
+CANONICAL INPUT
+  /root/autodl-tmp/bambu/TopoForge/examples/synthetic/gaussian-hill.tif
+  sha256: 32f4a421099c5ec6c8b1ed990c234dc0dfb4373dabed99143aa3421d014a6114
+  shape: 64 rows x 80 columns
+  CRS: EPSG:32648
+  pixel size: 10 metres
+
+CANONICAL BUILD
+  command:
+    uv run topoforge build --dem examples/synthetic/gaussian-hill.tif \
+      --size-mm 180 0 --base-mm 3 --max-height-mm 42 \
+      --vertical-scale fit-height --printer-profile bambu-p2s-0.4 \
+      --dataset-type dtm \
+      --dataset-name "TopoForge analytic Gaussian mountain" \
+      --vertical-datum synthetic-local-zero \
+      --data-license "Apache-2.0 synthetic fixture" \
+      --attribution "TopoForge deterministic analytic fixture" \
+      --output outputs/milestone-01-synthetic
+  exit_status: 0
+  literal verified result:
+    dimensions_mm: [180.0, 144.0, 42.0]
+    triangle_count: 20476
+    watertight: true
+    manifold: true
+    winding_consistent: true
+    connected_components: 1
+    degenerate_faces: 0
+    duplicate_faces: 0
+    bottom_planarity_error_mm: 0.0
+    minimum_base_thickness_mm: 3.0
+    height_limit_mm: 42.0
+    height_limit_passed: true
+    minimum_base_thickness_passed: true
+    triangle_budget_passed: true
+    self_intersection_status: not_fully_checked
+
+3MF STRICT REREAD
+  command: uv run topoforge inspect outputs/milestone-01-synthetic/model.3mf
+  exit_status: 0
+  literal output:
+    unit: millimeter
+    object_count: 1
+    build_item_count: 1
+    vertex_count: 10240
+    triangle_count: 20476
+    dimensions_mm: [180.0, 144.0, 42.0]
+    object_names: ["TopoForge terrain"]
+    strict_warning_count: 0
+    lib3mf_version: [2, 5, 0]
+
+ACTUAL SLICE
+  command:
+    uv run topoforge slice outputs/milestone-01-synthetic/model.3mf \
+      --output artifacts/slicer/milestone-01-final.gcode
+  exit_status: 0
+  literal result:
+    slicer: PrusaSlicer 2.4.0
+    gcode_generated: true
+    gcode_size_bytes: 5030602
+    layer_count: 140
+    estimated_time_text: 7h 11m 41s
+    filament_used_mm: 40552.39
+    filament_used_cm3: 97.54
+    support_material: false
+    out_of_bed: false
+    empty_layer_warning: false
+    floating_region_warning: false
+
+CANONICAL OUTPUT SHA-256
+  model.stl: 086b3358a9a1dc741c056dbcfb17945f7e6f5a4d23143e5b2d87cbd5da6aa4f2
+  model.3mf: c6ddb22a4238ee27c3ebabd7373333084cc48f785e3430b351dddc0ed576ea0c
+  preview.glb: 5bc9bb9f839525770d72bd4d425babb8b7d81a0ce94d5c9f7cca0af77a12c101
+  processed_dem.tif: 4f0da82154965b54e9b0214b3cee2c07984fb8ba7232429307a9110ad7fdf1cf
+
+PATCH ROLE
+  path: /root/autodl-tmp/bambu/TopoForge/artifacts/patches/milestone-01.patch
+  sha256: PENDING_PATCH_SHA256
+  baseline_apply_worktree: PENDING
+  apply_command: git apply --check PATCH && git apply PATCH
+  verification_command: PENDING
+  verification_output: PENDING
+  exit_status: PENDING
+
+ROLLBACK ROLE
+  path: /root/autodl-tmp/bambu/TopoForge/scripts/rollback-milestone-01.sh
+  modified_worktree: PENDING
+  command: scripts/rollback-milestone-01.sh --confirm-rollback
+  literal output: PENDING
+  exit_status: PENDING
+  verified_head: PENDING
+  verified_status: PENDING
+
+EVIDENCE COMMIT
+  commit: PENDING_EVIDENCE_COMMIT

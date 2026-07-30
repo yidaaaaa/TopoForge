@@ -1,0 +1,8 @@
+profile_id: resin-generic
+build_volume_mm: [145.0, 89.0, 175.0]
+nozzle_diameter_mm: 0.05
+layer_height_mm: 0.05
+minimum_feature_mm: 0.15
+preferred_mesh_sampling_mm: 0.2
+minimum_base_thickness_mm: 1.5
+connector_tolerance_mm: 0.1

@@ -1,0 +1,40 @@
+{
+  "command": [
+    "/usr/bin/prusa-slicer",
+    "--export-gcode",
+    "--output",
+    "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/.milestone-01-final-_gj9jvm7.gcode",
+    "/root/autodl-tmp/bambu/TopoForge/outputs/milestone-01-synthetic/model.3mf"
+  ],
+  "duration_seconds": 1.7511003613471985,
+  "error": null,
+  "exit_code": 0,
+  "gcode_generated": true,
+  "gcode_size_bytes": 5030602,
+  "input_model": "/root/autodl-tmp/bambu/TopoForge/outputs/milestone-01-synthetic/model.3mf",
+  "metrics": {
+    "empty_layer_warning": false,
+    "estimated_time_seconds": 25901,
+    "estimated_time_text": "7h 11m 41s",
+    "filament_used_cm3": 97.54,
+    "filament_used_g": 0.0,
+    "filament_used_mm": 40552.39,
+    "floating_region_warning": false,
+    "layer_count": 140,
+    "out_of_bed": false,
+    "support_material": false,
+    "warnings": []
+  },
+  "output_gcode": "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/milestone-01-final.gcode",
+  "profile": "slicer defaults",
+  "slicer": {
+    "detail": null,
+    "executable": "/usr/bin/prusa-slicer",
+    "name": "PrusaSlicer",
+    "status": "available",
+    "version": "2.4.0"
+  },
+  "status": "succeeded",
+  "stderr": "",
+  "stdout": "[2026-07-31 03:53:16.851525] [0x00007fd59afb6d00] [trace]   Initializing StaticPrintConfigs\n10 => Processing triangulated mesh\n20 => Generating perimeters\n70 => Infilling layers\n30 => Preparing infill\n88 => Generating skirt and brim\n90 => Exporting G-code to /root/autodl-tmp/bambu/TopoForge/artifacts/slicer/.milestone-01-final-_gj9jvm7.gcode\nSlicing result exported to /root/autodl-tmp/bambu/TopoForge/artifacts/slicer/.milestone-01-final-_gj9jvm7.gcode\n"
+}
