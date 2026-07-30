@@ -2,6 +2,7 @@
 
 Date: 2026-07-31
 Baseline commit: `10112b0a827bd27db6054d3ecf01a47d62b4aed5`
+Source commit: `c8a1ef38711d76111d8c8922db709e6ef2fe958a`
 Scope: Phase 0 plus the verified full-raster local subset of Phases 1 and 2
 
 ## Implemented
@@ -113,6 +114,9 @@ Committed compact evidence:
 - `artifacts/reports/milestone-01-provenance.json`
 - `artifacts/reports/milestone-01-3mf-slice.json`
 - `artifacts/reports/milestone-01-slicer-validation.json`
+- `artifacts/patches/milestone-01.patch`
+- `artifacts/verification/milestone-01.txt`
+- `scripts/rollback-milestone-01.sh`
 
 Verified geometry and manufacturing measurements:
 
@@ -128,6 +132,10 @@ Verified geometry and manufacturing measurements:
 - Estimated print time: `7h 11m 41s`
 - Filament: `40,552.39 mm / 97.54 cm3`
 - Support, out-of-bed, empty-layer, and floating-region warnings: none
+
+Patch replay from the empty baseline passed 71 tests, rebuilt the 42.0 mm model, strict-read
+the 3MF, completed a real slice, and checksum-reopened the bundle. The rollback script was
+executed in a separate modified worktree and returned it to the clean baseline commit.
 
 ## Known issues
 

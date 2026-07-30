@@ -2,7 +2,7 @@
 
 - **Current milestone:** Milestone 02 — AOI normalization/local clipping followed by the no-key global provider.
 - **Current branch/worktree:** `main`, `/root/autodl-tmp/bambu/TopoForge`.
-- **Last completed task:** Corrected baseline preservation and hard height enforcement, rebuilt the canonical 42.0 mm model, strict-read its 3MF, actually sliced it, and passed all code gates.
+- **Last completed task:** Committed Milestone 01, replayed its binary-safe patch from the empty baseline with tests/build/slice, and executed rollback to a clean baseline in a second worktree.
 - **Current implementation status:** Full-raster local GeoTIFF/synthetic builds emit and reopen STL, 3MF, GLB, processed DEM, original NoData mask, provenance, validation JSON/HTML, resolved YAML, checksum-verified manifest, and PNG. Explicit local AOI cropping, network provider fetching, and geocoding remain next.
 - **Known failing tests:** None. Latest full suite: 71 passed.
 - **Current blockers:** No blocking external dependency. OrcaSlicer 2.4.2 targets a newer system runtime; verified OrcaSlicer 2.3.0 and PrusaSlicer 2.4.0 paths are available.

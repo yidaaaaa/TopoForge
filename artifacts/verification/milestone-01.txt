@@ -7,7 +7,7 @@ BASELINE
   behavior: empty project tree; no TopoForge package or CLI entry point
 
 MODIFIED SOURCE
-  commit: PENDING_SOURCE_COMMIT
+  commit: c8a1ef38711d76111d8c8922db709e6ef2fe958a
   behavior: local GeoTIFF/synthetic DEM -> reopened and validated STL/3MF/GLB bundle
 
 QUALITY GATES (source workspace)
@@ -57,6 +57,8 @@ CANONICAL BUILD
       --vertical-scale fit-height --printer-profile bambu-p2s-0.4 \
       --dataset-type dtm \
       --dataset-name "TopoForge analytic Gaussian mountain" \
+      --dataset-version "milestone-01-fixture-v1" \
+      --acquisition-period "deterministic analytic fixture" \
       --vertical-datum synthetic-local-zero \
       --data-license "Apache-2.0 synthetic fixture" \
       --attribution "TopoForge deterministic analytic fixture" \
@@ -119,21 +121,63 @@ CANONICAL OUTPUT SHA-256
 
 PATCH ROLE
   path: /root/autodl-tmp/bambu/TopoForge/artifacts/patches/milestone-01.patch
-  sha256: PENDING_PATCH_SHA256
-  baseline_apply_worktree: PENDING
-  apply_command: git apply --check PATCH && git apply PATCH
-  verification_command: PENDING
-  verification_output: PENDING
-  exit_status: PENDING
+  sha256: a7e9be54c80ab7d9d9b6feb139f63af7b41c44ceca7db5a1fac649b126ba32ff
+  bytes: 633418
+  baseline_apply_worktree: /tmp/topoforge-milestone01-apply.U3a2mO
+  apply_commands:
+    git apply --check PATCH
+    git apply --whitespace=error-all PATCH
+    git diff --check
+  literal output:
+    git_apply_check_exit=0
+    git_apply_exit=0
+    patched_diff_check_exit=0
+  replay_test_command:
+    PYTHONPATH=WORKTREE/src SOURCE_REPO/.venv/bin/python -m pytest -q
+  replay_test_result:
+    71 passed, 33 warnings in 5.69s
+  replay_build_result:
+    dimensions_mm: [180.0, 144.0, 42.0]
+    vertical_exaggeration: 0.26722044852692334
+    watertight: true
+    manifold: true
+    required_checks_passed: true
+  replay_3mf_result:
+    unit: millimeter
+    object_count: 1
+    build_item_count: 1
+    vertex_count: 10240
+    triangle_count: 20476
+    dimensions_mm: [180.0, 144.0, 42.0]
+    strict_warning_count: 0
+    lib3mf_version: [2, 5, 0]
+  replay_slice_result:
+    slicer: PrusaSlicer 2.4.0
+    exit_code: 0
+    gcode_size_bytes: 5030602
+    layer_count: 140
+    estimated_time_text: 7h 11m 41s
+    filament_used_mm: 40552.39
+    filament_used_cm3: 97.54
+  replay_bundle_result:
+    required_checks_passed: true
+    manifest_artifact_count: 12
+  exit_status: 0
 
 ROLLBACK ROLE
   path: /root/autodl-tmp/bambu/TopoForge/scripts/rollback-milestone-01.sh
-  modified_worktree: PENDING
+  sha256: 34c2aef838747aa48ff52d24e8a40ff413106590b1ac88507b63b46dd236b59c
+  modified_worktree: /tmp/topoforge-milestone01-rollback.tk9j5e
   command: scripts/rollback-milestone-01.sh --confirm-rollback
-  literal output: PENDING
-  exit_status: PENDING
-  verified_head: PENDING
-  verified_status: PENDING
+  literal output:
+    HEAD is now at 10112b0 chore: capture empty repository baseline
+    rollback_head=10112b0a827bd27db6054d3ecf01a47d62b4aed5
+    rollback_status=clean
+  exit_status: 0
+  verified_head: 10112b0a827bd27db6054d3ecf01a47d62b4aed5
+  verified_status: clean
 
 EVIDENCE COMMIT
-  commit: PENDING_EVIDENCE_COMMIT
+  resolution_command:
+    git log -1 --format=%H -- artifacts/verification/milestone-01.txt
+  relation: the commit returned by this command contains the patch and this final record
