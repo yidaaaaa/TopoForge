@@ -25,4 +25,3 @@ uv run topoforge fetch-dem \
 The resulting bundles contain STL and 3MF manufacturing models, a GLB preview,
 a rendered PNG, the processed DEM, source NoData mask, provenance, resolved
 configuration, checksum manifest, and geometry validation reports.
-

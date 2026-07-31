@@ -204,3 +204,15 @@ Result: `topoforge doctor` reports 0.2.0. The 18-role post-slice bundle passes a
 Command: final `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, and `git diff --check` after version, documentation, quality-mask integration, and real verification updates.
 
 Result: exit 0; Ruff `All checks passed!`; format `99 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `118 passed, 45 warnings in 7.75s`; diff whitespace check passed. Log: `artifacts/logs/topoforge-0.2.0-quality-gates.log`.
+
+Command: `git commit -m "feat: release global AOI terrain pipeline v0.2.0"`.
+
+Result: commit `d70e62497d97fdeafefad75f821874fc0637ff80` created with 97 audited files; version is 0.2.0.
+
+Command: clone the repository without hardlinks into `/tmp`, run `git revert --no-edit d70e624`, and compare the resulting tree with `d70e624^1`.
+
+Result: revert exit 0; rollback tree `89de6c49d88002a169b80c2bb82c5e3555a0c2d7` exactly matched the release parent tree and the isolated working tree was clean. Record: `artifacts/verification/topoforge-0.2.0-git-rollback.txt`; runnable main-worktree script: `scripts/rollback-topoforge-0.2.0.sh --confirm-rollback`.
+
+Command: generate `artifacts/patches/topoforge-0.2.0-source.patch` from the release parent while excluding binary previews and prior verification/patch archives; in the reverted clone run forward check/apply, `git diff --check`, reverse check/apply.
+
+Result: patch SHA-256 `084864af80303683ab9d980b82f2c206410def1b2157cd8854942ed9ab6341db`, 341,952 bytes; all five statuses were 0 and the clone was clean after reverse. Record: `artifacts/verification/topoforge-0.2.0-source-patch-verification.txt`.

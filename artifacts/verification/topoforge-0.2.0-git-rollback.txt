@@ -1,0 +1,81 @@
+command=git revert --no-edit d70e624
+clone=/tmp/topoforge-0.2.0-rollback.XVeJih/repo
+before_head=d70e62497d97fdeafefad75f821874fc0637ff80
+exit_status=0
+after_head=3c9e47cbddbb0f209afecef7cc608447fe73f5a0
+release_parent_tree=89de6c49d88002a169b80c2bb82c5e3555a0c2d7
+rollback_tree=89de6c49d88002a169b80c2bb82c5e3555a0c2d7
+tree_matches_release_parent=true
+working_tree_clean=true
+output_begin
+[main 3c9e47c] Revert "feat: release global AOI terrain pipeline v0.2.0"
+ Date: Sat Aug 1 02:47:57 2026 +0800
+ 97 files changed, 487 insertions(+), 18464 deletions(-)
+ rewrite .agent/RUN_LOG.md (68%)
+ rewrite .agent/STATE.md (99%)
+ rewrite README.md (66%)
+ delete mode 100644 artifacts/patches/bambu-project-3mf-metadata.patch
+ delete mode 100644 artifacts/patches/fidelity-aoi.patch
+ delete mode 100644 artifacts/patches/p2s-bambu-validation.patch
+ delete mode 100644 artifacts/patches/provider-cache-copernicus.patch
+ delete mode 100644 artifacts/patches/terrain-examples.patch
+ delete mode 100644 artifacts/previews/great-trango-tower-example.jpg
+ delete mode 100644 artifacts/previews/great-trango-tower-glo30-quicklook.jpg
+ delete mode 100644 artifacts/previews/great-trango-tower-glo30-quicklook.png
+ delete mode 100644 artifacts/previews/mount-thor-example.jpg
+ delete mode 100644 artifacts/previews/mount-thor-glo30-quicklook.jpg
+ delete mode 100644 artifacts/previews/mount-thor-glo30-quicklook.png
+ delete mode 100644 artifacts/verification/amazon-copernicus-aws-quality-v2-verification.json
+ delete mode 100644 artifacts/verification/amazon-copernicus-aws-v2-verification.json
+ delete mode 100644 artifacts/verification/bambu-project-3mf-verification.json
+ delete mode 100644 artifacts/verification/fidelity-aoi-baseline.txt
+ delete mode 100644 artifacts/verification/fidelity-aoi-patch-rollback-summary.txt
+ delete mode 100644 artifacts/verification/fidelity-aoi-patch-rollback.txt
+ delete mode 100644 artifacts/verification/gongga-fidelity-v2-determinism.txt
+ delete mode 100644 artifacts/verification/gongga-fidelity-v2-post-slice-bundle.json
+ delete mode 100644 artifacts/verification/gongga-fidelity-v2-reread.txt
+ delete mode 100644 artifacts/verification/gongga-fidelity-v2-verification.json
+ delete mode 100644 artifacts/verification/great-trango-tower-pre-bambu-project/build_manifest.json
+ delete mode 100644 artifacts/verification/great-trango-tower-pre-bambu-project/provenance.json
+ delete mode 100644 artifacts/verification/great-trango-tower-pre-bambu-project/validation.json
+ delete mode 100644 artifacts/verification/mount-thor-pre-bambu-project/build_manifest.json
+ delete mode 100644 artifacts/verification/mount-thor-pre-bambu-project/provenance.json
+ delete mode 100644 artifacts/verification/mount-thor-pre-bambu-project/validation.json
+ delete mode 100644 artifacts/verification/p2s-bambu-validation.json
+ delete mode 100644 artifacts/verification/provider-cache-copernicus-patch-rollback.txt
+ delete mode 100644 artifacts/verification/terrain-examples-summary.json
+ delete mode 100644 artifacts/verification/terrain-examples-verification.json
+ rewrite docs/printing.md (91%)
+ rewrite docs/provenance.md (89%)
+ delete mode 100644 examples/real-terrain/README.md
+ delete mode 100644 examples/real-terrain/great-trango-tower.yaml
+ delete mode 100644 examples/real-terrain/mount-thor.yaml
+ rewrite printer_profiles/bambu-p2s-0.4.yaml (72%)
+ delete mode 100755 scripts/resolve_bambu_profiles.py
+ delete mode 100755 scripts/rollback-bambu-project-3mf.sh
+ delete mode 100755 scripts/rollback-fidelity-aoi.sh
+ delete mode 100755 scripts/rollback-p2s-bambu-validation.sh
+ delete mode 100755 scripts/rollback-provider-cache-copernicus.sh
+ delete mode 100755 scripts/rollback-terrain-examples.sh
+ rewrite src/topoforge/providers/__init__.py (80%)
+ delete mode 100644 src/topoforge/providers/cache.py
+ delete mode 100644 src/topoforge/providers/copernicus_aws.py
+ delete mode 100644 src/topoforge/providers/transport.py
+ rewrite src/topoforge/raster/__init__.py (74%)
+ delete mode 100644 src/topoforge/raster/aoi.py
+ delete mode 100644 src/topoforge/raster/sampling.py
+ delete mode 100644 src/topoforge/validation/manufacturing.py
+ delete mode 100644 src/topoforge/validation/slicers/bambu.py
+ delete mode 100644 tests/integration/test_aoi_clipping.py
+ delete mode 100644 tests/integration/test_orientation.py
+ delete mode 100644 tests/integration/test_sampling_fidelity.py
+ delete mode 100644 tests/providers/test_cache.py
+ delete mode 100644 tests/providers/test_copernicus_aws.py
+ delete mode 100644 tests/providers/test_transport.py
+ delete mode 100644 tests/slicer/test_bambu.py
+ delete mode 100644 tests/unit/test_aoi.py
+ delete mode 100644 tests/unit/test_bambu_profile_resolver.py
+ delete mode 100644 tests/unit/test_manufacturing_gate.py
+ delete mode 100644 tests/unit/test_printer_profiles.py
+ delete mode 100644 tests/unit/test_sampling.py
+output_end

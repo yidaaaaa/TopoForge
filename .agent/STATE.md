@@ -1,7 +1,7 @@
 # Current State
 
 - **Current milestone:** Milestone 02 — normalized local/global AOI, no-key Copernicus AWS provider/cache, and official ancillary quality-mask preservation are complete; explainable provider selection/fallback and candidate geocoding are next.
-- **Current version/branch/worktree:** TopoForge `0.2.0`, branch `main`, `/root/autodl-tmp/bambu/TopoForge`; the milestone release commit is the next Git action.
+- **Current version/branch/worktree:** TopoForge `0.2.0`, branch `main`, `/root/autodl-tmp/bambu/TopoForge`; release implementation commit `d70e624`, followed by committed rollback/patch evidence.
 - **Last completed task:** Discovered EDM/FLM/HEM/WBM from exact per-tile S3 prefix listings, cached every exposed source by SHA-256, required exact source-grid alignment with its DEM, applied nearest-neighbour reprojection plus the identical DEM crop, copied complete roles into build bundles, and verified a real Amazon rebuild/slice.
 - **Provider implementation:** `copernicus-aws` is `implemented: true`. Complete GLO-30 is preferred; complete GLO-90 is a whole-AOI fallback only. Dataset ids are not blended. Catalog, DEM, tile-prefix inventory, and ancillary-mask URL/ETag/Last-Modified/bytes/SHA-256/attempt/cache evidence are retained. Raw mask values never alter elevation samples.
 - **Real provider result:** `/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-quality-v2`; source/processed 74 x 74 at 29.7638 m, model 80 x 80.6587 x 9.7146 mm, 21,900 triangles, watertight/manifold/winding/positive-volume/flat-bottom/orientation true, strict 3MF warnings 0. EDM/FLM/HEM/WBM align exactly and are independent checksummed bundle roles. PrusaSlicer exit 0, 32 layers, support false, no floating/empty/out-of-bed warning.

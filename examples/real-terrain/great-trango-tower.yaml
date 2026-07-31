@@ -45,4 +45,3 @@ printer_profile:
   minimum_base_thickness_mm: 2.0
   connector_tolerance_mm: 0.2
 output_formats: [stl, 3mf, glb]
-
