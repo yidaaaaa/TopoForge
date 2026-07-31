@@ -41,6 +41,7 @@ def test_synthetic_geotiff_to_complete_validated_bundle(tmp_path: Path) -> None:
         "preview.glb",
         "processed_dem.tif",
         "original_nodata_mask.tif",
+        "manufacturing_preflight.json",
         "provenance.json",
         "validation.json",
         "validation.html",

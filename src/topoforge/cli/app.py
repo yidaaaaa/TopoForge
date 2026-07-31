@@ -18,7 +18,12 @@ from rasterio.errors import RasterioError
 
 from topoforge import __version__
 from topoforge.config import DEFAULT_PRINTER_PROFILE_ID, get_printer_profile, load_build_config
-from topoforge.engine import build_local_terrain, record_slice_validation, verify_artifact_bundle
+from topoforge.engine import (
+    build_local_terrain,
+    preflight_local_terrain,
+    record_slice_validation,
+    verify_artifact_bundle,
+)
 from topoforge.exceptions import TopoForgeError
 from topoforge.exporters.three_mf import inspect_3mf
 from topoforge.geocoding import (
@@ -33,6 +38,7 @@ from topoforge.models import (
     AreaOfInterestInput,
     BuildConfig,
     DatasetType,
+    ResourceBudgetMode,
     SamplingMode,
     TerrainMode,
     VerticalScaleMode,
@@ -220,6 +226,14 @@ def build(
     max_grid_cells: Annotated[
         int, typer.Option("--max-grid-cells", min=16, help="Hard processed-grid cell budget.")
     ] = 1_500_000,
+    max_estimated_triangles: Annotated[
+        int | None,
+        typer.Option("--max-estimated-triangles", min=12, help="Hard triangle budget."),
+    ] = None,
+    resource_budget_mode: Annotated[
+        ResourceBudgetMode,
+        typer.Option("--resource-budget-mode", help="adapt or strict."),
+    ] = ResourceBudgetMode.ADAPT,
     max_estimated_memory_mb: Annotated[
         float,
         typer.Option("--max-estimated-memory-mb", min=1.0, help="Estimated mesh memory budget."),
@@ -268,6 +282,8 @@ def build(
                 "sampling_mode": ("sampling_mode", sampling_mode),
                 "mesh_sampling_mm": ("mesh_sampling_mm", mesh_sampling_mm),
                 "max_grid_cells": ("max_grid_cells", max_grid_cells),
+                "max_estimated_triangles": ("max_estimated_triangles", max_estimated_triangles),
+                "resource_budget_mode": ("resource_budget_mode", resource_budget_mode),
                 "max_estimated_memory_mb": (
                     "max_estimated_memory_mb",
                     max_estimated_memory_mb,
@@ -314,7 +330,9 @@ def build(
                 sampling_mode=sampling_mode,
                 mesh_sampling_mm=mesh_sampling_mm,
                 max_grid_cells=max_grid_cells,
+                max_estimated_triangles=max_estimated_triangles,
                 max_estimated_memory_mb=max_estimated_memory_mb,
+                resource_budget_mode=resource_budget_mode,
                 aoi=(
                     AreaOfInterestInput(
                         bbox_wgs84=bbox,
@@ -355,6 +373,74 @@ def build(
                 "artifacts": {key: str(path) for key, path in result.artifacts.items()},
             }
         )
+    except (TopoForgeError, ValueError, OSError) as exc:
+        _fail(exc)
+
+
+@app.command("preflight")
+def preflight(
+    dem: Annotated[Path | None, typer.Option("--dem")] = None,
+    config: Annotated[Path | None, typer.Option("--config")] = None,
+    size_mm: Annotated[tuple[float, float], typer.Option("--size-mm")] = (180.0, 0.0),
+    base_mm: Annotated[float, typer.Option("--base-mm", min=0.01)] = 3.0,
+    max_height_mm: Annotated[float, typer.Option("--max-height-mm", min=0.01)] = 45.0,
+    printer_profile: Annotated[str, typer.Option("--printer-profile")] = DEFAULT_PRINTER_PROFILE_ID,
+    vertical_scale: Annotated[
+        VerticalScaleMode, typer.Option("--vertical-scale")
+    ] = VerticalScaleMode.AUTO_PERCEPTUAL,
+    vertical_exaggeration: Annotated[
+        float, typer.Option("--vertical-exaggeration", min=0.01)
+    ] = 1.0,
+    sampling_mode: Annotated[
+        SamplingMode, typer.Option("--sampling-mode")
+    ] = SamplingMode.PRINT_AWARE,
+    mesh_sampling_mm: Annotated[float | None, typer.Option("--mesh-sampling-mm")] = None,
+    max_grid_cells: Annotated[int, typer.Option("--max-grid-cells", min=16)] = 1_500_000,
+    max_estimated_triangles: Annotated[
+        int | None, typer.Option("--max-estimated-triangles", min=12)
+    ] = None,
+    max_estimated_memory_mb: Annotated[
+        float, typer.Option("--max-estimated-memory-mb", min=1.0)
+    ] = 1024.0,
+    resource_budget_mode: Annotated[
+        ResourceBudgetMode, typer.Option("--resource-budget-mode")
+    ] = ResourceBudgetMode.ADAPT,
+    bbox: Annotated[tuple[float, float, float, float] | None, typer.Option("--bbox")] = None,
+    center: Annotated[tuple[float, float] | None, typer.Option("--center")] = None,
+    radius_m: Annotated[float | None, typer.Option("--radius-m", min=0.001)] = None,
+) -> None:
+    """Resolve printer fit, sampling, triangles, memory, and vertical scale without a build."""
+    try:
+        if config is not None:
+            if dem is not None:
+                raise ValueError("use either --config or --dem for preflight")
+            resolved = load_build_config(config)
+        else:
+            if dem is None:
+                raise ValueError("--dem is required unless --config is supplied")
+            resolved = BuildConfig(
+                dem_path=dem,
+                output_dir=Path("outputs/preflight-not-published"),
+                model_width_mm=size_mm[0],
+                model_depth_mm=size_mm[1] if size_mm[1] > 0 else None,
+                base_thickness_mm=base_mm,
+                max_height_mm=max_height_mm,
+                printer_profile=get_printer_profile(printer_profile),
+                vertical_scale_mode=vertical_scale,
+                vertical_exaggeration=vertical_exaggeration,
+                sampling_mode=sampling_mode,
+                mesh_sampling_mm=mesh_sampling_mm,
+                max_grid_cells=max_grid_cells,
+                max_estimated_triangles=max_estimated_triangles,
+                max_estimated_memory_mb=max_estimated_memory_mb,
+                resource_budget_mode=resource_budget_mode,
+                aoi=(
+                    AreaOfInterestInput(bbox_wgs84=bbox, center_wgs84=center, radius_m=radius_m)
+                    if bbox is not None or center is not None or radius_m is not None
+                    else None
+                ),
+            )
+        _emit(preflight_local_terrain(resolved).model_dump(mode="json"))
     except (TopoForgeError, ValueError, OSError) as exc:
         _fail(exc)
 
@@ -661,6 +747,12 @@ def build_global(
     ),
     mesh_sampling_mm: Annotated[float | None, typer.Option("--mesh-sampling-mm", min=0.001)] = None,
     max_grid_cells: Annotated[int, typer.Option("--max-grid-cells", min=16)] = 1_500_000,
+    max_estimated_triangles: Annotated[
+        int | None, typer.Option("--max-estimated-triangles", min=12)
+    ] = None,
+    resource_budget_mode: Annotated[
+        ResourceBudgetMode, typer.Option("--resource-budget-mode")
+    ] = ResourceBudgetMode.ADAPT,
     max_estimated_memory_mb: Annotated[
         float, typer.Option("--max-estimated-memory-mb", min=1.0)
     ] = 1024.0,
@@ -730,7 +822,9 @@ def build_global(
             sampling_mode=sampling_mode,
             mesh_sampling_mm=mesh_sampling_mm,
             max_grid_cells=max_grid_cells,
+            max_estimated_triangles=max_estimated_triangles,
             max_estimated_memory_mb=max_estimated_memory_mb,
+            resource_budget_mode=resource_budget_mode,
             aoi=request,
             dataset_type=dataset.dataset_type,
             dataset_name=dataset.dataset_name,

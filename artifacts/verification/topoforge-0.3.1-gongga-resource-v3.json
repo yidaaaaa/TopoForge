@@ -1,0 +1,577 @@
+{
+  "all_deterministic_roles_match": true,
+  "artifacts": {
+    "bambu_studio_validation.json": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/bambu_studio_validation.json",
+      "sha256": "30ceaa7845e01768a02bded1fe5cad28953c7ffb9842e03df784fdaa9d1a56f2",
+      "size_bytes": 8025
+    },
+    "build_config.resolved.yaml": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/build_config.resolved.yaml",
+      "sha256": "1a9f5bbb96a264990edf02df82eca80cc861b857c472760641af8071bbea520b",
+      "size_bytes": 2267
+    },
+    "build_manifest.json": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/build_manifest.json",
+      "sha256": "bf980358d13121863dc87550ff53303a628491208b0937716ecbb917aa681ff3",
+      "size_bytes": 2106
+    },
+    "gongga-resource-v3-prusa.gcode": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/gongga-resource-v3-prusa.gcode",
+      "sha256": "34387b06170e718340368f3ea2bd22ee4c26839257f2c5fb56085032f281ea3e",
+      "size_bytes": 30325346
+    },
+    "manufacturing_preflight.json": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/manufacturing_preflight.json",
+      "sha256": "609bdaeee147dc7112da390c6315d77fb55aef53e47ca870c6d0ee10ddd21ae4",
+      "size_bytes": 2646
+    },
+    "model.3mf": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/model.3mf",
+      "sha256": "abe693062b36de19604b3d1c111fb3e170be220d01a79c34179996b4a46811a5",
+      "size_bytes": 9649246
+    },
+    "model.stl": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/model.stl",
+      "sha256": "dfd6ad58f8998b11f02e6b253b83593393b8296bd449d30f65c4714da14235cc",
+      "size_bytes": 39597684
+    },
+    "original_nodata_mask.tif": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/original_nodata_mask.tif",
+      "sha256": "b1c9b5617058c88ce7f2772de1c195bc101f735f80842de32c964eb648583be8",
+      "size_bytes": 2011
+    },
+    "preview.glb": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/preview.glb",
+      "sha256": "e7b25b54e58457a22ab5203f20d6e34195464e6ddf53e5048b476e6d19eb7fdf",
+      "size_bytes": 14256196
+    },
+    "preview.png": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/preview.png",
+      "sha256": "d131560fddc66ebb5ac38f74c3f2caea6299995fb280bf11e35d4e61e34358d9",
+      "size_bytes": 880567
+    },
+    "processed_dem.tif": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/processed_dem.tif",
+      "sha256": "ea43b92e7d0de2db6cdf8b0c6aba14344b9cfae3c42830d6b2ff3252ac52023d",
+      "size_bytes": 499538
+    },
+    "provenance.json": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/provenance.json",
+      "sha256": "fada4590897dd2ef298b8d1510d09941ae3c9862ddf8f239436df44757dfcdd7",
+      "size_bytes": 19994
+    },
+    "slicer_validation.json": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/slicer_validation.json",
+      "sha256": "4f21aebd27a8d1b5e61ed193486cbe67edebcb430cd3e2955930887ab3e5f33e",
+      "size_bytes": 2771
+    },
+    "validation.html": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/validation.html",
+      "sha256": "64788dd836012993c40001abf28321dce3543a40a60505dad5fc57022f7fbc1e",
+      "size_bytes": 20398
+    },
+    "validation.json": {
+      "absolute_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/validation.json",
+      "sha256": "2463800650ba19d2c9583d17c1b5485634bc6e914f349e10376a6cbfe264a702",
+      "size_bytes": 16459
+    }
+  },
+  "baseline_commit": "1284a17",
+  "commands": {
+    "build": {
+      "command": "uv run topoforge build --config downloads/gongga-copernicus-glo30/build-config.fidelity-v2.yaml --output outputs/gongga-copernicus-glo30-resource-v3 --max-estimated-triangles 900000 --resource-budget-mode adapt",
+      "exit_code": 0
+    },
+    "bundle_reopen": {
+      "command": "uv run topoforge preview outputs/gongga-copernicus-glo30-resource-v3",
+      "exit_code": 0,
+      "result": {
+        "dataset_name": "Copernicus DEM GLO-30 2021 \u2014 Mount Gongga",
+        "manifest_artifact_count": 14,
+        "raster_crs": "EPSG:32647",
+        "raster_shape": [
+          439,
+          451
+        ],
+        "required_checks_passed": true,
+        "resolved_output_dir": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3"
+      }
+    },
+    "repeat_build": {
+      "command": "uv run topoforge build --config downloads/gongga-copernicus-glo30/build-config.fidelity-v2.yaml --output outputs/gongga-copernicus-glo30-resource-v3-repeat --max-estimated-triangles 900000 --resource-budget-mode adapt",
+      "exit_code": 0
+    },
+    "slice": {
+      "command": "uv run topoforge slice outputs/gongga-copernicus-glo30-resource-v3/model.3mf --slicer prusa --output artifacts/slicer/gongga-resource-v3-prusa.gcode",
+      "exit_code": 0
+    },
+    "stl_reopen": {
+      "command": "uv run topoforge validate outputs/gongga-copernicus-glo30-resource-v3/model.stl",
+      "exit_code": 0,
+      "result": {
+        "bottom_planarity_error_mm": 0.0,
+        "connected_components": 1,
+        "degenerate_faces": 0,
+        "dimension_error_mm": null,
+        "dimensions_mm": [
+          180.0,
+          175.35911560058594,
+          45.0
+        ],
+        "dimensions_within_tolerance": null,
+        "duplicate_faces": 0,
+        "expected_dimensions_mm": null,
+        "finite_face_normals": true,
+        "finite_vertices": true,
+        "flat_bottom": true,
+        "manifold": true,
+        "minimum_base_thickness_mm": 3.0,
+        "positive_volume": true,
+        "self_intersection_method": "No exhaustive robust self-intersection predicate is available in the Phase 1 backend.",
+        "self_intersection_status": "not_fully_checked",
+        "triangle_count": 791952,
+        "units": "mm",
+        "volume_mm3": 639175.1232061993,
+        "watertight": true,
+        "winding_consistent": true
+      }
+    },
+    "three_mf_reopen": {
+      "command": "uv run topoforge inspect outputs/gongga-copernicus-glo30-resource-v3/model.3mf",
+      "exit_code": 0,
+      "result": {
+        "build_item_count": 1,
+        "dimensions_mm": [
+          180.0,
+          175.35912,
+          45.0
+        ],
+        "lib3mf_version": [
+          2,
+          5,
+          0
+        ],
+        "metadata": {
+          "Application": "TopoForge",
+          "Title": "TopoForge terrain",
+          "customXMLNS0:dataset_name": "Copernicus DEM GLO-30 2021 \u2014 Mount Gongga",
+          "customXMLNS0:dataset_type": "dsm",
+          "customXMLNS0:east_axis": "+X = East",
+          "customXMLNS0:horizontal_crs": "EPSG:4326",
+          "customXMLNS0:north_axis": "+Y = North",
+          "customXMLNS0:north_edge": "y=model_depth_mm",
+          "customXMLNS0:orientation_transform": "mesh_heightfield=flipud(processed_dem); source row 0 north maps to y=model_depth_mm",
+          "customXMLNS0:source_bounds": "{\"full_grid_shape\":[1008,1181],\"native\":[101.66986111111112,29.450138888888887,101.99791666666667,29.730138888888888],\"native_crs\":\"EPSG:4326\",\"wgs84\":[101.66986111111112,29.450138888888887,101.99791666666667,29.730138888888888]}",
+          "customXMLNS0:vertical_datum": "EGM2008",
+          "customXMLNS0:vertical_exaggeration": "1.48746447"
+        },
+        "object_count": 1,
+        "object_names": [
+          "TopoForge terrain"
+        ],
+        "peak_coordinate_mm": [
+          115.6,
+          91.282832,
+          45.0
+        ],
+        "peak_coordinates_mm": [
+          [
+            115.6,
+            91.282832,
+            45.0
+          ]
+        ],
+        "strict_warning_count": 0,
+        "triangle_count": 791952,
+        "unit": "millimeter",
+        "vertex_count": 395978
+      }
+    }
+  },
+  "comparison_table": {
+    "print_model": {
+      "grid_shape": [
+        439,
+        451
+      ],
+      "maximum_z_mm": 45.0,
+      "peak_coordinate_mm": [
+        115.6,
+        91.282832,
+        45.0
+      ],
+      "physical_sample_spacing_mm": 0.4001816392946341,
+      "triangle_count": 791952
+    },
+    "processed_dem": {
+      "grid_shape": [
+        439,
+        451
+      ],
+      "horizontal_resolution_m": 68.9588820624312,
+      "maximum_elevation_m": 7432.48291015625,
+      "peak_coordinate": {
+        "column": 289,
+        "crs": "EPSG:32647",
+        "latitude": 29.594826103368952,
+        "longitude": 101.87932304347841,
+        "row": 210,
+        "x": 778885.7567007126,
+        "y": 3277352.7871931894
+      },
+      "peak_elevation_loss_m": 5.04150390625,
+      "peak_horizontal_shift_m": 24.51627596861209
+    },
+    "source_dem": {
+      "grid_shape": [
+        1008,
+        1181
+      ],
+      "horizontal_resolution_m": 28.850813554696742,
+      "maximum_elevation_m": 7437.5244140625,
+      "peak_coordinate": {
+        "column": 753,
+        "crs": "EPSG:4326",
+        "latitude": 29.595,
+        "longitude": 101.87916666666668,
+        "row": 486,
+        "x": 101.87916666666668,
+        "y": 29.595
+      }
+    }
+  },
+  "determinism": {
+    "manufacturing_preflight.json": {
+      "byte_identical": true,
+      "first_sha256": "609bdaeee147dc7112da390c6315d77fb55aef53e47ca870c6d0ee10ddd21ae4",
+      "repeat_sha256": "609bdaeee147dc7112da390c6315d77fb55aef53e47ca870c6d0ee10ddd21ae4"
+    },
+    "model.3mf": {
+      "byte_identical": true,
+      "first_sha256": "abe693062b36de19604b3d1c111fb3e170be220d01a79c34179996b4a46811a5",
+      "repeat_sha256": "abe693062b36de19604b3d1c111fb3e170be220d01a79c34179996b4a46811a5"
+    },
+    "model.stl": {
+      "byte_identical": true,
+      "first_sha256": "dfd6ad58f8998b11f02e6b253b83593393b8296bd449d30f65c4714da14235cc",
+      "repeat_sha256": "dfd6ad58f8998b11f02e6b253b83593393b8296bd449d30f65c4714da14235cc"
+    },
+    "original_nodata_mask.tif": {
+      "byte_identical": true,
+      "first_sha256": "b1c9b5617058c88ce7f2772de1c195bc101f735f80842de32c964eb648583be8",
+      "repeat_sha256": "b1c9b5617058c88ce7f2772de1c195bc101f735f80842de32c964eb648583be8"
+    },
+    "preview.glb": {
+      "byte_identical": true,
+      "first_sha256": "e7b25b54e58457a22ab5203f20d6e34195464e6ddf53e5048b476e6d19eb7fdf",
+      "repeat_sha256": "e7b25b54e58457a22ab5203f20d6e34195464e6ddf53e5048b476e6d19eb7fdf"
+    },
+    "preview.png": {
+      "byte_identical": true,
+      "first_sha256": "d131560fddc66ebb5ac38f74c3f2caea6299995fb280bf11e35d4e61e34358d9",
+      "repeat_sha256": "d131560fddc66ebb5ac38f74c3f2caea6299995fb280bf11e35d4e61e34358d9"
+    },
+    "processed_dem.tif": {
+      "byte_identical": true,
+      "first_sha256": "ea43b92e7d0de2db6cdf8b0c6aba14344b9cfae3c42830d6b2ff3252ac52023d",
+      "repeat_sha256": "ea43b92e7d0de2db6cdf8b0c6aba14344b9cfae3c42830d6b2ff3252ac52023d"
+    }
+  },
+  "geometry": {
+    "orientation": {
+      "coordinate_correction_only": true,
+      "east_axis": "+X = East",
+      "expected_processed_peak_mm": [
+        115.6,
+        91.28282751835314,
+        45.0
+      ],
+      "north_axis": "+Y = North",
+      "north_edge": "y=model_depth_mm",
+      "orientation_transform": "mesh_heightfield=flipud(processed_dem); source row 0 north maps to y=model_depth_mm",
+      "reopened_format_peak_coordinates_mm": {
+        "3mf": [
+          115.6,
+          91.282832,
+          45.0
+        ],
+        "glb": [
+          115.5999984741211,
+          91.28282928466797,
+          45.0
+        ],
+        "in_memory": [
+          115.60000000000001,
+          91.28282751835313,
+          45.0
+        ],
+        "stl": [
+          115.5999984741211,
+          91.28282928466797,
+          45.0
+        ]
+      },
+      "up_axis": "+Z = Up"
+    },
+    "orientation_consistent": true,
+    "required_checks_passed": true,
+    "stl": {
+      "bottom_planarity_error_mm": 0.0,
+      "connected_components": 1,
+      "degenerate_faces": 0,
+      "dimension_error_mm": null,
+      "dimensions_mm": [
+        180.0,
+        175.35911560058594,
+        45.0
+      ],
+      "dimensions_within_tolerance": null,
+      "duplicate_faces": 0,
+      "expected_dimensions_mm": null,
+      "finite_face_normals": true,
+      "finite_vertices": true,
+      "flat_bottom": true,
+      "manifold": true,
+      "minimum_base_thickness_mm": 3.0,
+      "positive_volume": true,
+      "self_intersection_method": "No exhaustive robust self-intersection predicate is available in the Phase 1 backend.",
+      "self_intersection_status": "not_fully_checked",
+      "triangle_count": 791952,
+      "units": "mm",
+      "volume_mm3": 639175.1232061993,
+      "watertight": true,
+      "winding_consistent": true
+    },
+    "strict_3mf_warning_count": 0,
+    "terrain_fidelity_passed": true,
+    "terrain_fidelity_status": "documented-downsampling"
+  },
+  "known_limits": [
+    "not_fully_checked",
+    "PrusaSlicer is diagnostic; official Bambu Studio remains the P2S production release boundary.",
+    "Published summit elevation remains contextual and did not alter the DSM."
+  ],
+  "manifest": {
+    "artifacts": {
+      "bambu_studio_validation": "bambu_studio_validation.json",
+      "manifest": "build_manifest.json",
+      "manufacturing_preflight": "manufacturing_preflight.json",
+      "model_3mf": "model.3mf",
+      "model_stl": "model.stl",
+      "original_nodata_mask": "original_nodata_mask.tif",
+      "preview_glb": "preview.glb",
+      "preview_png": "preview.png",
+      "processed_dem": "processed_dem.tif",
+      "provenance": "provenance.json",
+      "resolved_config": "build_config.resolved.yaml",
+      "slicer_validation": "slicer_validation.json",
+      "validation_html": "validation.html",
+      "validation_json": "validation.json"
+    },
+    "generated_at": "2026-07-31T21:14:27.417680+00:00",
+    "resolved_config_sha256": "1a9f5bbb96a264990edf02df82eca80cc861b857c472760641af8071bbea520b",
+    "sha256": {
+      "bambu_studio_validation": "30ceaa7845e01768a02bded1fe5cad28953c7ffb9842e03df784fdaa9d1a56f2",
+      "manufacturing_preflight": "609bdaeee147dc7112da390c6315d77fb55aef53e47ca870c6d0ee10ddd21ae4",
+      "model_3mf": "abe693062b36de19604b3d1c111fb3e170be220d01a79c34179996b4a46811a5",
+      "model_stl": "dfd6ad58f8998b11f02e6b253b83593393b8296bd449d30f65c4714da14235cc",
+      "original_nodata_mask": "b1c9b5617058c88ce7f2772de1c195bc101f735f80842de32c964eb648583be8",
+      "preview_glb": "e7b25b54e58457a22ab5203f20d6e34195464e6ddf53e5048b476e6d19eb7fdf",
+      "preview_png": "d131560fddc66ebb5ac38f74c3f2caea6299995fb280bf11e35d4e61e34358d9",
+      "processed_dem": "ea43b92e7d0de2db6cdf8b0c6aba14344b9cfae3c42830d6b2ff3252ac52023d",
+      "provenance": "fada4590897dd2ef298b8d1510d09941ae3c9862ddf8f239436df44757dfcdd7",
+      "resolved_config": "1a9f5bbb96a264990edf02df82eca80cc861b857c472760641af8071bbea520b",
+      "slicer_validation": "4f21aebd27a8d1b5e61ed193486cbe67edebcb430cd3e2955930887ab3e5f33e",
+      "validation_html": "64788dd836012993c40001abf28321dce3543a40a60505dad5fc57022f7fbc1e",
+      "validation_json": "2463800650ba19d2c9583d17c1b5485634bc6e914f349e10376a6cbfe264a702"
+    },
+    "source_sha256": "00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc",
+    "topoforge_version": "0.3.1"
+  },
+  "preflight": {
+    "base_thickness_mm": 3.0,
+    "build_volume_headroom_mm": {
+      "x": 76.0,
+      "y": 80.64088397790056,
+      "z": 211.0
+    },
+    "build_volume_passed": true,
+    "build_volume_utilization": {
+      "x": 0.703125,
+      "y": 0.684996546961326,
+      "z": 0.17578125
+    },
+    "decisions": [
+      "normalized metric grid before sampling is 1058 x 1086",
+      "normalized metric samples map to 0.165899 x 0.165903 mm on the model",
+      "print-aware spacing uses the finest of preferred mesh sampling (0.500000 mm), nozzle diameter (0.400000 mm), and minimum feature (0.500000 mm)",
+      "resolved printer-aware target spacing is 0.400000 mm",
+      "target shape is capped at the normalized metric grid so no terrain detail is invented",
+      "effective cell limit is 225001 from max_grid_cells=600000, max_estimated_triangles=900000, and max_estimated_memory_mb=768.000",
+      "resolved footprint is 180.000000 x 175.359116 mm inside printer volume 256.000000 x 256.000000 x 256.000000 mm",
+      "terrain height budget is 42.000000 mm above a 3.000000 mm base",
+      "vertical policy requested 1.99391846x and resolved 1.48746447x",
+      "estimated resources are 197989 cells, 791952 triangles, 60.421448 MiB"
+    ],
+    "estimated_memory_mb": 60.42144775390625,
+    "estimated_triangle_count": 791952,
+    "grid_cell_budget_passed": true,
+    "grid_cell_budget_utilization": 0.3299816666666667,
+    "height_limit_applied": true,
+    "height_limit_passed": true,
+    "max_grid_cells": 600000,
+    "maximum_estimated_memory_mb": 768.0,
+    "maximum_estimated_triangles": 900000,
+    "memory_budget_passed": true,
+    "memory_budget_utilization": 0.0786737600962321,
+    "physical_sample_spacing_xy_mm": [
+      0.4,
+      0.4003632785892681
+    ],
+    "policy_vertical_exaggeration": 1.9939184644199428,
+    "printer_build_volume_mm": [
+      256.0,
+      256.0,
+      256.0
+    ],
+    "printer_profile_id": "bambu-p2s-0.4",
+    "processed_grid_cells": 197989,
+    "processed_grid_shape": [
+      439,
+      451
+    ],
+    "resolved_model_dimensions_mm": [
+      180.0,
+      175.35911602209944,
+      45.0
+    ],
+    "resolved_vertical_exaggeration": 1.4874644669769723,
+    "resource_budget_mode": "adapt",
+    "sampling_mode": "print-aware",
+    "source_grid_cells": 1190448,
+    "source_grid_shape": [
+      1008,
+      1181
+    ],
+    "status": "passed-with-warnings",
+    "suggested_actions": [
+      "increase max_height_mm, lower minimum vertical exaggeration, or reduce model width"
+    ],
+    "terrain_height_budget_mm": 42.0,
+    "triangle_budget_passed": true,
+    "triangle_budget_utilization": 0.8799466666666667,
+    "vertical_scale_mode": "fit-height",
+    "warnings": [
+      "vertical exaggeration was reduced to satisfy the hard model-height limit"
+    ]
+  },
+  "quality_gates": {
+    "git_diff_check": {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "literal_result": "no output"
+    },
+    "log_path": "/root/autodl-tmp/bambu/TopoForge/artifacts/logs/topoforge-0.3.1-quality-gates.log",
+    "pyright": {
+      "command": "uv run pyright",
+      "exit_code": 0,
+      "literal_result": "0 errors, 0 warnings, 0 informations"
+    },
+    "pytest": {
+      "command": "uv run pytest",
+      "exit_code": 0,
+      "literal_result": "141 passed, 50 warnings in 9.28s"
+    },
+    "ruff_check": {
+      "command": "uv run ruff check .",
+      "exit_code": 0,
+      "literal_result": "All checks passed!"
+    },
+    "ruff_format_check": {
+      "command": "uv run ruff format --check .",
+      "exit_code": 0,
+      "literal_result": "106 files already formatted"
+    }
+  },
+  "release": "0.3.1",
+  "slicer": {
+    "command": [
+      "/usr/bin/prusa-slicer",
+      "--export-gcode",
+      "--output",
+      "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/.gongga-resource-v3-prusa-s7dqze9q.gcode",
+      "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/model.3mf"
+    ],
+    "duration_seconds": 16.34686414897442,
+    "error": null,
+    "exit_code": 0,
+    "gcode_generated": true,
+    "gcode_size_bytes": 30325346,
+    "input_model": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3/model.3mf",
+    "metrics": {
+      "empty_layer_warning": false,
+      "estimated_time_seconds": 54853,
+      "estimated_time_text": "15h 14m 13s",
+      "filament_used_cm3": 217.05,
+      "filament_used_g": 0.0,
+      "filament_used_mm": 90237.44,
+      "floating_region_warning": false,
+      "layer_count": 149,
+      "out_of_bed": false,
+      "settings": {
+        "bed_temperature_c": null,
+        "bed_type": null,
+        "bottom_shell_layers": null,
+        "brim_type": "outer_only",
+        "brim_width_mm": 0.0,
+        "filament_density_g_cm3": null,
+        "filament_diameter_mm": 1.75,
+        "filament_flow_ratio": null,
+        "filament_max_volumetric_speed_mm3_s": null,
+        "filament_settings_ids": [],
+        "filament_type": "PLA",
+        "filament_vendor": null,
+        "initial_layer_height_mm": null,
+        "layer_height_mm": 0.3,
+        "nozzle_diameter_mm": 0.4,
+        "nozzle_temperature_c": null,
+        "printable_depth_mm": null,
+        "printable_height_mm": null,
+        "printable_width_mm": null,
+        "printer_model": "; printer_notes =",
+        "printer_settings_id": "; printer_technology = FFF",
+        "printer_variant": null,
+        "process_settings_id": "; printer_model =",
+        "sparse_infill_density_percent": null,
+        "sparse_infill_pattern": null,
+        "support_enabled": null,
+        "support_type": null,
+        "top_shell_layers": null,
+        "wall_loops": null
+      },
+      "support_material": false,
+      "warnings": []
+    },
+    "output_gcode": "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/gongga-resource-v3-prusa.gcode",
+    "profile": "slicer defaults",
+    "slicer": {
+      "detail": null,
+      "executable": "/usr/bin/prusa-slicer",
+      "name": "PrusaSlicer",
+      "status": "available",
+      "version": "2.4.0"
+    },
+    "status": "succeeded",
+    "stderr": "",
+    "stdout": "[2026-08-01 05:15:59.252631] [0x00007f856cfe9d00] [trace]   Initializing StaticPrintConfigs\n10 => Processing triangulated mesh\n20 => Generating perimeters\n70 => Infilling layers\n30 => Preparing infill\n88 => Generating skirt and brim\n90 => Exporting G-code to /root/autodl-tmp/bambu/TopoForge/artifacts/slicer/.gongga-resource-v3-prusa-s7dqze9q.gcode\nSlicing result exported to /root/autodl-tmp/bambu/TopoForge/artifacts/slicer/.gongga-resource-v3-prusa-s7dqze9q.gcode\n"
+  },
+  "source": {
+    "absolute_path": "/root/autodl-tmp/bambu/TopoForge/downloads/gongga-copernicus-glo30/gongga-copernicus-glo30-crop.tif",
+    "dataset_type": "dsm",
+    "redownloaded": false,
+    "sha256": "00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc",
+    "size_bytes": 2748024,
+    "vertical_datum": "EGM2008"
+  }
+}

@@ -13,17 +13,18 @@ BuildConfig (Pydantic)
   -> north-up metric CRS selection/reprojection after clipping
   -> source-coverage crop for rotated reprojection corners
   -> deterministic print-aware/source-preserving/custom sampling
-  -> cell/triangle/memory budget enforcement with average resampling
+  -> adapt/strict cell/triangle/memory budget enforcement with average resampling
   -> conservative interior-hole NoData fill + preserved binary mask
   -> processed_dem.tif
   -> aspect-preserving horizontal scale
   -> natural / fit-height / auto-perceptual / custom vertical scale
+  -> manufacturing preflight: printer fit/headroom, resource utilization, height policy
   -> row flip from raster-north row 0 to manufacturing +Y North
   -> explicit regular-grid top + perimeter walls + flat bottom
   -> in-memory geometry invariants
   -> STL + lib3mf 3MF + GLB
   -> reopened STL validation + strict lib3mf reread + OPC/XML hardening
-  -> preview.png + provenance/validation/config/manifest
+  -> preview.png + manufacturing_preflight/provenance/validation/config/manifest
   -> official Bambu Studio P2S release gate + optional diagnostic slicers
   -> separate interoperable model.3mf and embedded-settings model.bambu-p2s.3mf
 ```
@@ -40,7 +41,7 @@ Builds use a sibling staging directory. Every required file is written and reope
 - `validation`: measured geometry, official Bambu Studio/P2S release checks, and optional OrcaSlicer/PrusaSlicer diagnostics.
 - `rendering`: hillshade/color derived only from measured elevation samples.
 - `provenance`: stable JSON and dependency-free HTML reports.
-- `engine`: atomic orchestration and bundle verification.
+- `engine`: atomic orchestration, reusable local preflight, and bundle verification. `preflight_local_terrain()` runs the production raster/scaling path in a temporary directory without publishing a build.
 - `cli`: Typer argument parsing and JSON presentation.
 - `providers`: normalized-AOI provider contracts, explainable deterministic selection/fetch fallback, Copernicus AWS catalog/tile/ancillary-mask planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
 - `geocoding`: cached Nominatim-compatible candidate search and explicit ambiguity resolution; selected candidates become ordinary recorded AOIs before provider selection.
@@ -57,4 +58,4 @@ The interoperable 3MF path adds official lib3mf strict read with zero warnings, 
 
 ## Extension sequence
 
-The local/resolved-place AOI, printer-aware sampling, content-addressed cache, configurable no-key Copernicus AWS GLO-30/GLO-90 provider, explainable provider-selection/fetch-fallback engine, Nominatim-compatible candidate handling, and quality-mask preservation are complete. Network acquisitions enter the existing local pipeline as a metric AOI raster plus `source_acquisition.json`; no download-first parallel geometry path exists. Next steps are additional production provider implementations, remaining manufacturing-resource UX, tiling, API, and Web.
+The local/resolved-place AOI, printer-aware sampling, adapt/strict resource budgets, manufacturing preflight, content-addressed cache, configurable no-key Copernicus AWS GLO-30/GLO-90 provider, explainable provider-selection/fetch-fallback engine, Nominatim-compatible candidate handling, and quality-mask preservation are complete. Network acquisitions enter the existing local pipeline as a metric AOI raster plus `source_acquisition.json`; no download-first parallel geometry path exists. Phase 5 now defines deterministic tile IDs, overlap/seam contracts, assembly manifests/maps, multi-tile mesh assembly, and connector tolerances. Worker API work begins after those contracts stabilize; Web follows the API contract.

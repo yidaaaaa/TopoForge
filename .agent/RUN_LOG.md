@@ -252,3 +252,25 @@ Result: release implementation commit `b44b518f852cbfb6569c2024567121a633e72635`
 Command: in no-hardlink isolated clones, execute `scripts/rollback-topoforge-0.3.0.sh --confirm-rollback` and forward/check/apply/reverse-check/reverse `artifacts/patches/topoforge-0.3.0-source.patch`.
 
 Result: rollback exit 0 and tree exactly matched baseline `434eb7e663d251ad6fcef70ab8d7daf8afe6856a`; patch verification statuses were all 0 and the clone was clean after reverse. Patch SHA-256 `b4914d0f69900e9bb75b2ab4f29f8ee19a98fc8dd25803566edfa07cb9fd3de6`, 105,051 bytes.
+
+### Manufacturing resource preflight and 0.3.1 real evidence
+
+Command: implement `ResourceBudgetMode`, exact triangle ceilings, deterministic adapt/strict sampling, early printer-dimension validation, reusable `preflight_local_terrain`, `topoforge preflight`, a typed `manufacturing_preflight.json` bundle role, and cross-report verification.
+
+Result: focused phase-4 suites pass. The report includes printer fit/headroom, source/processed grids, cells, exact triangles, memory, physical spacing, requested/resolved vertical exaggeration, hard pass booleans, warnings, decisions, and suggested actions.
+
+Command: reuse `downloads/gongga-copernicus-glo30/gongga-copernicus-glo30-crop.tif` to build `outputs/gongga-copernicus-glo30-resource-v3` and `-repeat` with `--max-estimated-triangles 900000 --resource-budget-mode adapt`.
+
+Result: both builds exited 0 without a source download. Source SHA-256 is `00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc`. The output is 439 x 451 at 68.958882 m, 791,952 triangles, estimated 60.421448 MiB, and 180 x 175.359116 x 45 mm. DEM, NoData mask, preflight JSON, STL, 3MF, GLB, and PNG match byte-for-byte across repeats.
+
+Command: bundle preview, STL validation, strict 3MF inspect, independent GLB reopen, and `uv run topoforge slice outputs/gongga-copernicus-glo30-resource-v3/model.3mf --slicer prusa --output artifacts/slicer/gongga-resource-v3-prusa.gcode`.
+
+Result: reopened STL/GLB are watertight, winding-consistent, positive-volume, and 791,952 triangles; strict lib3mf warning count is 0. PrusaSlicer 2.4.0 exited 0 with 149 layers, 30,325,346 bytes, 15h14m13s estimate, support false, and no floating/empty/out-of-bed warning. G-code SHA-256 is `34387b06170e718340368f3ea2bd22ee4c26839257f2c5fb56085032f281ea3e`.
+
+Command: first full 0.3.1 quality gate.
+
+Result: Pyright, 141 tests, and diff whitespace passed, but Ruff found three new line-length errors in explanatory strings. The strings were split without changing their literal values.
+
+Command: corrected final `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, and `git diff --check`.
+
+Result: exit 0; Ruff `All checks passed!`; format `106 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `141 passed, 50 warnings in 9.28s`; diff whitespace passed. Final log: `artifacts/logs/topoforge-0.3.1-quality-gates.log`.

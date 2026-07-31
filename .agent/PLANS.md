@@ -8,8 +8,8 @@ Updated: 2026-08-01
 - [x] Milestone 01 — full-raster local GeoTIFF/synthetic manufacturing core, deterministic 3MF/provenance, validation, and real slicer evidence. Completed 2026-07-31.
 - [x] Phase 1 closure — explicit local AOI bbox/center-radius clipping and GIS edge contracts. Completed 2026-07-31.
 - [x] Phase 2 closure — deterministic export/provenance revalidated after Phase 1 AOI closure. Completed 2026-07-31.
-- [ ] Phase 3 — global/high-resolution providers, AOI/geocoding, cache, selection/fallback.
-- [ ] Phase 4 — printer-aware sampling foundation is complete; remaining build-volume/resource UX and vertical-scaling refinements continue.
+- [x] Phase 3 — global/high-resolution providers, AOI/geocoding, cache, selection/fallback. Completed in 0.3.0.
+- [x] Phase 4 — build-volume/resource UX, adapt/strict budgets, vertical-scaling preflight, real rebuild, and slice evidence. Completed in 0.3.1.
 - [ ] Phase 5 — tiling, assembly manifest/map, labels, and verified connectors.
 - [ ] Phase 6 — worker-backed FastAPI and React/MapLibre/Three.js Web application.
 - [ ] Phase 7 — provenance-aware GPX/road/river/contour/label/coast overlays.
@@ -73,6 +73,28 @@ Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> wi
 - [x] Execute a real Gongga build from fetched DSM data (reference bundle complete; integrated provider automation remains pending).
 - [x] Execute a real Amazon low-relief build with DSM semantics visible; v2 provider/cache bundle and diagnostic slice completed 2026-07-31.
 - [x] Slice at least one global-provider 3MF and publish milestone-02 evidence (official Bambu Studio P2S bundle).
+
+## Completed Phase 4 — manufacturing resource preflight (0.3.1)
+
+- [x] Add explicit `max_estimated_triangles` and `resource_budget_mode: adapt | strict`.
+- [x] Make cells, exact triangles, and estimated memory participate in one deterministic effective sampling budget.
+- [x] Make `adapt` record the limiting setting and deterministic downsampling; make `strict` reject with requested cells/triangles/memory and corrective action.
+- [x] Reject impossible explicit printer dimensions and non-positive terrain height budgets before raster work.
+- [x] Add reusable `topoforge preflight` with printer fit/headroom, resource utilization, physical spacing, vertical-policy adjustment, warnings, and suggested actions.
+- [x] Publish `manufacturing_preflight.json`, embed the identical object in validation/provenance, and require/cross-check it during bundle reopen.
+- [x] Reuse the retained Gongga DEM without a download; create new `resource-v3` and repeat bundles.
+- [x] Verify seven deterministic core roles byte-identical, strict 3MF warnings zero, STL/GLB geometry consistent, and PrusaSlicer exit 0 with no floating/empty/out-of-bed/support warning.
+- [x] Final gates: Ruff, format, Pyright, 141 tests, and diff whitespace all pass.
+
+## Current Phase 5 sequence
+
+1. [ ] Define a deterministic map-tile schema, tile IDs, and stable row/column mapping.
+2. [ ] Define overlap/edge sampling and per-tile DEM/mask/provenance/validation contracts.
+3. [ ] Publish an assembly manifest and tile coverage map.
+4. [ ] Verify seam consistency and multi-tile mesh assembly.
+5. [ ] Add connector geometry and printer-profile tolerance tests.
+6. [ ] Stabilize tile/assembly contracts before worker API implementation.
+7. [ ] Stabilize worker API contracts before Web/MapLibre/Three.js implementation.
 
 ## Milestone 02 acceptance — passed in 0.3.0
 

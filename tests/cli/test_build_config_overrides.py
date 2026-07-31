@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 from typer.testing import CliRunner
 
-from topoforge.models import BuildConfig, DatasetType, VerticalScaleMode
+from topoforge.models import BuildConfig, DatasetType, ResourceBudgetMode, VerticalScaleMode
 
 cli_module = importlib.import_module("topoforge.cli.app")
 runner = CliRunner()
@@ -45,6 +45,8 @@ def _write_config(path: Path) -> None:
         "max_height_mm": 39.0,
         "vertical_scale_mode": "natural",
         "vertical_exaggeration": 2.5,
+        "max_estimated_triangles": 123456,
+        "resource_budget_mode": "strict",
         "dataset_type": "dsm",
         "dataset_name": "YAML dataset",
         "dataset_version": "v-yaml",
@@ -86,6 +88,8 @@ def test_config_defaults_are_not_overwritten_by_cli_defaults(
     assert resolved.base_thickness_mm == 4.0
     assert resolved.max_height_mm == 39.0
     assert resolved.vertical_scale_mode is VerticalScaleMode.NATURAL
+    assert resolved.max_estimated_triangles == 123_456
+    assert resolved.resource_budget_mode is ResourceBudgetMode.STRICT
     assert resolved.dataset_type is DatasetType.DSM
     assert resolved.dataset_version == "v-yaml"
     assert resolved.source_urls == ["https://example.test/yaml"]
@@ -117,6 +121,10 @@ def test_explicit_cli_options_override_all_corresponding_yaml_fields(
         "custom",
         "--vertical-exaggeration",
         "3.5",
+        "--max-estimated-triangles",
+        "200000",
+        "--resource-budget-mode",
+        "adapt",
         "--printer-profile",
         "bambu-p2s-0.4",
         "--dataset-type",
@@ -153,6 +161,8 @@ def test_explicit_cli_options_override_all_corresponding_yaml_fields(
     assert resolved.max_height_mm == 44.0
     assert resolved.vertical_scale_mode is VerticalScaleMode.CUSTOM
     assert resolved.vertical_exaggeration == 3.5
+    assert resolved.max_estimated_triangles == 200_000
+    assert resolved.resource_budget_mode is ResourceBudgetMode.ADAPT
     assert resolved.printer_profile.profile_id == "bambu-p2s-0.4"
     assert resolved.dataset_type is DatasetType.DTM
     assert resolved.dataset_name == "CLI dataset"
@@ -189,6 +199,10 @@ def test_cli_custom_sampling_and_bbox_are_resolved(monkeypatch: Any) -> None:
             "0.75",
             "--max-grid-cells",
             "50000",
+            "--max-estimated-triangles",
+            "120000",
+            "--resource-budget-mode",
+            "strict",
             "--max-estimated-memory-mb",
             "256",
             "--bbox",
@@ -204,6 +218,8 @@ def test_cli_custom_sampling_and_bbox_are_resolved(monkeypatch: Any) -> None:
     assert resolved.sampling_mode.value == "custom"
     assert resolved.mesh_sampling_mm == 0.75
     assert resolved.max_grid_cells == 50_000
+    assert resolved.max_estimated_triangles == 120_000
+    assert resolved.resource_budget_mode is ResourceBudgetMode.STRICT
     assert resolved.max_estimated_memory_mb == 256.0
     assert resolved.aoi is not None
     assert resolved.aoi.bbox_wgs84 == (170.0, -10.0, -170.0, 10.0)

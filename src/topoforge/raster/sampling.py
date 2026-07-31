@@ -5,7 +5,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from topoforge.models import BuildConfig, SamplingMode
+from topoforge.exceptions import ConfigurationError
+from topoforge.models import BuildConfig, ResourceBudgetMode, SamplingMode
 
 _ESTIMATED_BYTES_PER_GRID_CELL = 320
 _MEBIBYTE = 1024 * 1024
@@ -74,9 +75,9 @@ def resolve_sampling_decision(
     source_spacing_x_mm = config.model_width_mm / max(source_columns - 1, 1)
     source_spacing_y_mm = model_depth_mm / max(source_rows - 1, 1)
     reasons = [
-        f"source grid is {source_rows} x {source_columns}",
+        f"normalized metric grid before sampling is {source_rows} x {source_columns}",
         (
-            "source samples map to "
+            "normalized metric samples map to "
             f"{source_spacing_x_mm:.6f} x {source_spacing_y_mm:.6f} mm on the model"
         ),
     ]
@@ -103,7 +104,10 @@ def resolve_sampling_decision(
                     f"feature ({config.printer_profile.minimum_feature_mm:.6f} mm)"
                 ),
                 f"resolved printer-aware target spacing is {printer_spacing_mm:.6f} mm",
-                "target shape is capped at the source grid so no terrain detail is invented",
+                (
+                    "target shape is capped at the normalized metric grid so no terrain "
+                    "detail is invented"
+                ),
             )
         )
     elif config.sampling_mode is SamplingMode.SOURCE_PRESERVING:
@@ -120,7 +124,10 @@ def resolve_sampling_decision(
             reasons.extend(
                 (
                     f"custom mode requested {config.mesh_sampling_mm:.6f} mm mesh spacing",
-                    "custom spacing is capped at the source grid so no terrain detail is invented",
+                    (
+                        "custom spacing is capped at the normalized metric grid so no terrain "
+                        "detail is invented"
+                    ),
                 )
             )
         else:
@@ -131,25 +138,46 @@ def resolve_sampling_decision(
         16,
         int(config.max_estimated_memory_mb * _MEBIBYTE // _ESTIMATED_BYTES_PER_GRID_CELL),
     )
-    effective_cell_limit = min(config.max_grid_cells, memory_cell_limit)
+    triangle_cell_limit = (
+        max(4, (config.max_estimated_triangles + 4) // 4)
+        if config.max_estimated_triangles is not None
+        else config.max_grid_cells
+    )
+    effective_cell_limit = min(config.max_grid_cells, memory_cell_limit, triangle_cell_limit)
     target_shape = _fit_shape_to_budget(requested_shape, effective_cell_limit)
     if target_shape != requested_shape:
         reasons.append(
             f"resource budget reduced {requested_shape[0]} x {requested_shape[1]} to "
             f"{target_shape[0]} x {target_shape[1]}"
         )
-        limiting_budget = (
-            "max_grid_cells"
-            if config.max_grid_cells <= memory_cell_limit
-            else "max_estimated_memory_mb"
-        )
-        warnings.append(
+        limits = {
+            "max_grid_cells": config.max_grid_cells,
+            "max_estimated_memory_mb": memory_cell_limit,
+            "max_estimated_triangles": triangle_cell_limit,
+        }
+        limiting_budget = min(limits, key=lambda name: limits[name])
+        message = (
             f"{config.sampling_mode.value} request was limited by {limiting_budget}; "
             "the processed grid does not retain every requested sample"
         )
+        if config.resource_budget_mode is ResourceBudgetMode.STRICT:
+            requested_cells = requested_shape[0] * requested_shape[1]
+            requested_triangles = triangle_count_for_shape(requested_shape)
+            requested_memory_mb = requested_cells * _ESTIMATED_BYTES_PER_GRID_CELL / _MEBIBYTE
+            raise ConfigurationError(
+                f"strict resource budget rejected requested grid "
+                f"{requested_shape[0]} x {requested_shape[1]} "
+                f"({requested_cells} cells, {requested_triangles} triangles, "
+                f"{requested_memory_mb:.3f} MiB); limiting setting is "
+                f"{limiting_budget}. Increase the corresponding budget or use "
+                "resource_budget_mode=adapt."
+            )
+        warnings.append(message)
     reasons.append(
         f"effective cell limit is {effective_cell_limit} from max_grid_cells="
-        f"{config.max_grid_cells} and max_estimated_memory_mb={config.max_estimated_memory_mb:.3f}"
+        f"{config.max_grid_cells}, max_estimated_triangles="
+        f"{config.max_estimated_triangles}, and "
+        f"max_estimated_memory_mb={config.max_estimated_memory_mb:.3f}"
     )
 
     rows, columns = target_shape

@@ -103,3 +103,36 @@ def test_memory_budget_can_be_the_limiting_resource() -> None:
     assert decision.estimated_memory_mb <= 2.0
     assert decision.warnings
     assert "max_estimated_memory_mb" in decision.warnings[0]
+
+
+def test_explicit_triangle_budget_limits_the_processed_grid() -> None:
+    decision = resolve_sampling_decision(
+        (500, 600),
+        ground_width_m=18_000.0,
+        ground_depth_m=15_000.0,
+        config=_config(
+            sampling_mode=SamplingMode.SOURCE_PRESERVING,
+            max_estimated_triangles=40_000,
+        ),
+    )
+
+    assert decision.estimated_triangle_count <= 40_000
+    assert decision.warnings
+    assert "max_estimated_triangles" in decision.warnings[0]
+
+
+def test_strict_resource_mode_rejects_instead_of_downsampling() -> None:
+    from topoforge.exceptions import ConfigurationError
+    from topoforge.models import ResourceBudgetMode
+
+    with pytest.raises(ConfigurationError, match="strict resource budget rejected"):
+        resolve_sampling_decision(
+            (500, 600),
+            ground_width_m=18_000.0,
+            ground_depth_m=15_000.0,
+            config=_config(
+                sampling_mode=SamplingMode.SOURCE_PRESERVING,
+                max_grid_cells=10_000,
+                resource_budget_mode=ResourceBudgetMode.STRICT,
+            ),
+        )

@@ -56,7 +56,7 @@
 - **Status:** Open
 - **Reproduction:** Run the full suite with Rasterio 1.5.0 and NumPy 2.5.1.
 - **Expected behavior:** No upstream deprecation warnings.
-- **Actual behavior:** 33 warnings about masked-array shape assignment; 80 tests pass.
+- **Actual behavior:** 50 warnings about masked-array shape assignment and related reads; 141 tests pass.
 - **Owner:** Primary agent
 - **Resolution:** Track upstream compatibility or constrain NumPy after benchmark/compatibility evidence; warnings are not hidden.
 
@@ -160,3 +160,10 @@
 - **Reproduction:** Acquire any Copernicus AWS tile before 0.2.0; only the DEM COG and tile catalog enter cache/provenance.
 - **Expected behavior:** Preserve every exposed official EDM, FLM, HEM, and WBM source with exact identity and an AOI-aligned bundle role.
 - **Resolution:** Cache the exact S3 tile-prefix listing, discover rather than guess ancillary keys, store each source by content SHA-256, require exact source-grid alignment with its DEM, apply nearest-neighbour reprojection and the identical DEM crop, and publish complete roles without remapping values or modifying elevations. Offline present/absent/misaligned/cache-corrupt/GLO-90 tests and a real Amazon build/slice pass.
+## TF-018 — Resource limits adapted sampling without a standalone manufacturing preflight
+
+- **Severity:** Medium
+- **Status:** Resolved
+- **Reproduction:** Request source-preserving sampling above the configured cell/memory budget before 0.3.1; the build adapts but there is no separate printer-fit/resource report or explicit strict rejection mode.
+- **Expected behavior:** Users can inspect resolved dimensions, headroom, cells, exact triangles, memory, physical spacing, and vertical adjustment before mesh export and choose deterministic adaptation or rejection.
+- **Resolution:** Added typed adapt/strict budgets, exact triangle limits, early build-volume checks, reusable CLI/core preflight, cross-checked bundle evidence, focused tests, and a retained-DEM Gongga rebuild/repeat/slice.

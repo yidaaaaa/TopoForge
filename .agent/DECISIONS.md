@@ -131,3 +131,10 @@
 - **Context:** Same-name places make automatic first-result selection unsafe, and public Nominatim has usage, attribution, rate, and caching requirements.
 - **Decision:** Use bounded Nominatim-compatible JSONv2 search with canonical cached URLs. Enforce a one-second minimum interval for the public endpoint, no autocomplete, and OSM attribution. Return zero/unique/ambiguous states. Ambiguous results require a returned candidate id. Preserve query, candidate id, display name, and exact bbox in a network-free resolved-place AOI, then run the existing normalization/provider/build pipeline.
 - **Impact:** Place inputs cannot silently choose the wrong feature. Repeated search is cached, acquisition provenance includes search evidence, and bbox/center/place converge on one AOI contract.
+## ADR-018 — Manufacturing preflight is a reusable core contract with explicit resource modes
+
+- **Date:** 2026-08-01
+- **Context:** Printer-aware sampling estimated cells/triangles/memory, but users could not inspect the resolved printer fit and vertical policy without generating a complete bundle. Resource-limit reductions also needed an explicit reject-versus-adapt policy.
+- **Decision:** Add `resource_budget_mode: adapt | strict` and an optional exact triangle ceiling. Resolve cells, triangle topology, and memory into one deterministic sampling limit. Expose `preflight_local_terrain()` and `topoforge preflight` using the production raster/scaling path in a temporary directory. Every build publishes and cross-checks a typed `manufacturing_preflight.json` with printer volume/headroom, resource pass/utilization fields, physical spacing, vertical exaggeration, warnings, and suggested actions.
+- **Alternatives:** Always preserve source pixels; always silently adapt; estimate only after mesh allocation; duplicate preflight logic in future API/Web adapters.
+- **Impact:** Oversized or expensive requests are explainable before export, strict workflows fail early with corrective values, adapt workflows remain deterministic, and CLI/API/Web can share one manufacturing-resource contract.

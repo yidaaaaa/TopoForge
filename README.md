@@ -2,7 +2,7 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Implemented milestone (TopoForge 0.3.0):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Additional provider implementations, tiling/connectors, API, and Web remain on the authoritative roadmap in `.agent/PLANS.md`.
+**Implemented milestone (TopoForge 0.3.1):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, explicit adapt/strict cell-triangle-memory budgets, build-volume/vertical-scale preflight, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Phase 5 tiling/assembly/connectors is next; worker API and Web follow stable tile contracts.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
 
@@ -47,7 +47,7 @@ This is a software-validated example, not a claim of a completed physical P2S pr
 
 ## Printer-aware fidelity rebuild
 
-The existing real source raster was reused without another download and rebuilt under `outputs/gongga-copernicus-glo30-fidelity-v2`:
+The existing real source raster was reused without another download. The fidelity baseline remains under `outputs/gongga-copernicus-glo30-fidelity-v2`; the 0.3.1 resource/preflight rebuild is under `outputs/gongga-copernicus-glo30-resource-v3`:
 
 | Measurement | Source DEM | Processed DEM / model |
 | --- | --- | --- |
@@ -58,9 +58,10 @@ The existing real source raster was reused without another download and rebuilt 
 | Physical mesh sampling | — | `0.40018 mm` |
 | Triangle count | — | `791,952` |
 | Axes | source row 0 north | `+X East, +Y North, +Z Up` |
+| Resource preflight | — | `197,989` cells, `791,952 / 900,000` triangles, `60.421 / 768 MiB`, all hard gates passed |
 | Diagnostic slice | — | PrusaSlicer exit `0`, `149` layers, no floating/empty/out-of-bed/support warning |
 
-The source is a DSM. A previously confirmed published nominal summit elevation is recorded only as context; `terrain_adjustment_applied=false`, so no synthetic spike or elevation correction is introduced. Exact checksums are in `outputs/gongga-copernicus-glo30-fidelity-v2/checksums.sha256`.
+The source is a DSM. A previously confirmed published nominal summit elevation is recorded only as context; `terrain_adjustment_applied=false`, so no synthetic spike or elevation correction is introduced. `manufacturing_preflight.json` records printer fit, headroom, sampling/resource utilization, vertical-policy adjustment, warnings, and suggested actions. Exact checksums are bound by each bundle's `build_manifest.json`; the release verification record is under `artifacts/verification/`.
 
 ## Verified no-key Amazon provider example
 
@@ -104,7 +105,9 @@ uv run topoforge build \
   --printer-profile bambu-p2s-0.4 \
   --sampling-mode print-aware \
   --max-grid-cells 600000 \
+  --max-estimated-triangles 900000 \
   --max-estimated-memory-mb 768 \
+  --resource-budget-mode adapt \
   --bbox 101.67 29.45 101.998 29.73 \
   --dataset-type dtm \
   --vertical-datum unknown \
@@ -113,7 +116,21 @@ uv run topoforge build \
   --output outputs/local-dem
 ```
 
-A depth of `0` preserves the raster aspect ratio. An explicit depth that conflicts with the geographic aspect ratio is rejected rather than applying hidden horizontal distortion. `--center LON LAT --radius-m METRES` is the center-radius AOI form. AOIs are normalized in WGS84, clipped to source pixels before metric reprojection, and recorded in provenance.
+A depth of `0` preserves the raster aspect ratio. An explicit depth that conflicts with the geographic aspect ratio is rejected rather than applying hidden horizontal distortion. `--resource-budget-mode adapt` deterministically coarsens a request when a cell, triangle, or memory limit is exceeded and records the limiting setting; `strict` rejects it with requested cells/triangles/memory and corrective actions. `--center LON LAT --radius-m METRES` is the center-radius AOI form. AOIs are normalized in WGS84, clipped to source pixels before metric reprojection, and recorded in provenance.
+
+Inspect resource and printer fit without publishing a model bundle:
+
+```bash
+uv run topoforge preflight \
+  --dem data/input.tif \
+  --size-mm 200 0 --max-height-mm 45 \
+  --sampling-mode print-aware \
+  --max-grid-cells 600000 \
+  --max-estimated-triangles 900000 \
+  --max-estimated-memory-mb 768
+```
+
+Preflight reuses the production raster and scaling path in a temporary directory and reports resolved dimensions, build-volume headroom/utilization, source/processed grids, exact triangle estimate, memory estimate, physical spacing, vertical exaggeration, hard-gate booleans, warnings, and suggested actions.
 
 ## Fetch or build from the no-key global provider
 
@@ -174,6 +191,7 @@ model.3mf
 preview.glb
 processed_dem.tif
 original_nodata_mask.tif
+manufacturing_preflight.json
 provenance.json
 validation.json
 validation.html
@@ -211,6 +229,7 @@ Evidence is attached to `validation.json`, `provenance.json`, `build_manifest.js
 ```text
 topoforge build       local GeoTIFF to complete artifact bundle
 topoforge build-global no-key Copernicus AWS AOI to complete artifact bundle
+topoforge preflight   printer fit, sampling, triangles, memory, and vertical-scale report
 topoforge fetch-dem   cache and normalize a Copernicus AWS AOI GeoTIFF
 topoforge synthetic   deterministic analytic GeoTIFF fixtures
 topoforge inspect     raster/STL/GLB/3MF measurements
@@ -225,7 +244,9 @@ topoforge doctor      Python/GDAL/PROJ/slicer versions
 ## Correctness policy
 
 - Geographic rasters are explicitly AOI-clipped, then reprojected to a north-up metric CRS before mesh construction.
-- `print-aware`, `source-preserving`, and `custom` sampling modes combine source resolution, model size, nozzle/minimum-feature limits, cell count, triangle estimate, and memory estimate.
+- `print-aware`, `source-preserving`, and `custom` sampling modes combine source resolution, model size, nozzle/minimum-feature limits, cell count, exact triangle estimate, and memory estimate.
+- `adapt` resource mode deterministically reduces the requested grid and records the limiting budget; `strict` rejects rather than silently reducing it.
+- Every build publishes `manufacturing_preflight.json` and embeds the identical object in validation and provenance; bundle verification reopens and cross-checks all three copies.
 - Source and processed resolution, grid shape, peak loss, peak shift, and sampling reasons are reported separately; processed data is never labeled with source resolution.
 - Manufacturing axes are `+X East`, `+Y North`, `+Z Up`; source row 0 is flipped to the model north edge, and STL/GLB/3MF peak coordinates are cross-checked.
 - Rotated raster corner gaps are cropped to the largest source-covered rectangle.
@@ -247,7 +268,7 @@ uv run pyright
 uv run pytest
 ```
 
-The 113-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run.
+The 141-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, adapt/strict manufacturing preflight and build-volume gates, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run.
 
 ## Documentation
 

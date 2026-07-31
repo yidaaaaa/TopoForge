@@ -54,6 +54,13 @@ class SamplingMode(StrEnum):
     CUSTOM = "custom"
 
 
+class ResourceBudgetMode(StrEnum):
+    """Whether resource limits adapt sampling or reject the request."""
+
+    ADAPT = "adapt"
+    STRICT = "strict"
+
+
 class AreaOfInterestInput(BaseModel):
     """User-supplied WGS84 bbox or geodesic center-radius request."""
 
@@ -194,7 +201,9 @@ class BuildConfig(BaseModel):
     sampling_mode: SamplingMode = SamplingMode.PRINT_AWARE
     mesh_sampling_mm: float | None = Field(default=None, gt=0)
     max_grid_cells: int = Field(default=1_500_000, ge=16)
+    max_estimated_triangles: int | None = Field(default=None, ge=12)
     max_estimated_memory_mb: float = Field(default=1024.0, gt=0)
+    resource_budget_mode: ResourceBudgetMode = ResourceBudgetMode.ADAPT
     aoi: AreaOfInterestInput | None = None
     printer_profile: PrinterProfile = Field(default_factory=PrinterProfile)
     output_formats: list[str] = Field(default_factory=lambda: ["stl", "3mf", "glb"])
@@ -218,9 +227,15 @@ class BuildConfig(BaseModel):
                 f"{self.printer_profile.profile_id}"
             )
             raise ValueError(msg)
-        if self.max_height_mm > self.printer_profile.build_volume_mm[2]:
-            msg = "max_height_mm exceeds the printer build height"
-            raise ValueError(msg)
+        build_x, build_y, build_z = self.printer_profile.build_volume_mm
+        if self.model_width_mm > build_x:
+            raise ValueError("model_width_mm exceeds the printer build width")
+        if self.model_depth_mm is not None and self.model_depth_mm > build_y:
+            raise ValueError("model_depth_mm exceeds the printer build depth")
+        if self.max_height_mm > build_z:
+            raise ValueError("max_height_mm exceeds the printer build height")
+        if self.max_height_mm <= self.base_thickness_mm:
+            raise ValueError("max_height_mm must exceed base_thickness_mm")
         if self.sampling_mode is not SamplingMode.CUSTOM and self.mesh_sampling_mm is not None:
             msg = "mesh_sampling_mm is only valid when sampling_mode is custom"
             raise ValueError(msg)

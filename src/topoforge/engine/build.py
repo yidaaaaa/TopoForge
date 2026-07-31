@@ -19,6 +19,10 @@ from rasterio.crs import CRS as RasterioCRS
 
 from topoforge import __version__
 from topoforge.config import dump_resolved_config
+from topoforge.engine.preflight import (
+    ManufacturingPreflightReport,
+    evaluate_manufacturing_preflight,
+)
 from topoforge.exceptions import ConfigurationError, MeshValidationError
 from topoforge.exporters import export_glb, export_stl
 from topoforge.exporters.three_mf import ThreeMFInspection, export_3mf, inspect_3mf
@@ -146,6 +150,7 @@ def _artifact_map(stage: Path, formats: list[str]) -> dict[str, Path]:
     artifacts: dict[str, Path] = {
         "processed_dem": stage / "processed_dem.tif",
         "original_nodata_mask": stage / "original_nodata_mask.tif",
+        "manufacturing_preflight": stage / "manufacturing_preflight.json",
         "provenance": stage / "provenance.json",
         "validation_json": stage / "validation.json",
         "validation_html": stage / "validation.html",
@@ -236,6 +241,13 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
             write_json(artifacts["source_acquisition"], source_acquisition)
         processed = process_local_raster(stage_config)
         scaling = resolve_scaling(processed.elevations_m, processed.report, resolved_config)
+        manufacturing_preflight = evaluate_manufacturing_preflight(
+            processed.report, scaling, resolved_config
+        )
+        write_json(
+            artifacts["manufacturing_preflight"],
+            manufacturing_preflight.model_dump(mode="json"),
+        )
         top_z_mm = apply_vertical_scale(processed.elevations_m, scaling)
         expected_peak_mm = _expected_model_peak_mm(
             processed.elevations_m,
@@ -304,10 +316,13 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
         )
         validation["mesh_units"] = "millimetres by TopoForge coordinate contract"
         validation["estimated_triangle_count"] = processed.report.estimated_triangle_count
-        validation["triangle_budget"] = config.max_grid_cells * 4 - 4
+        validation["triangle_budget"] = config.max_estimated_triangles or (
+            config.max_grid_cells * 4 - 4
+        )
         validation["triangle_budget_passed"] = int(validation["triangle_count"]) <= int(
             validation["triangle_budget"]
         )
+        validation["manufacturing_preflight"] = manufacturing_preflight.model_dump(mode="json")
         validation["height_limit_mm"] = scaling.height_limit_mm
         validation["height_limit_passed"] = (
             float(validation["dimensions_mm"][2]) <= scaling.height_limit_mm + 0.05
@@ -471,6 +486,7 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
             "source_acquisition": source_acquisition,
             "dataset": processed.report.metadata.model_dump(mode="json"),
             "source_file_checksums": processed.report.metadata.checksums,
+            "manufacturing_preflight": manufacturing_preflight.model_dump(mode="json"),
             "elevation_reference_comparison": {
                 "raw_dem_peak_elevation_m": processed.report.raw_elevation_max_m,
                 "published_reference_peak_elevation_m": config.reference_peak_elevation_m,
@@ -490,7 +506,10 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
                     "read metadata",
                     "normalize to a north-up metric CRS when required",
                     "resolve print-aware/source-preserving/custom sampling",
-                    "enforce deterministic cell and memory budgets using average resampling",
+                    (
+                        "enforce deterministic cell, triangle, and memory budgets "
+                        "using average resampling"
+                    ),
                     "preserve original NoData mask",
                     "interpolate bounded interior holes from nearest valid cells",
                     "write processed DEM",
@@ -512,7 +531,9 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
                 "sampling_mode": config.sampling_mode.value,
                 "mesh_sampling_mm": config.mesh_sampling_mm,
                 "max_grid_cells": config.max_grid_cells,
+                "max_estimated_triangles": config.max_estimated_triangles,
                 "max_estimated_memory_mb": config.max_estimated_memory_mb,
+                "resource_budget_mode": config.resource_budget_mode.value,
                 "sampling_decision_reasons": processed.report.sampling_decision_reasons,
                 "sampling_warnings": processed.report.sampling_warnings,
                 "horizontal_resolution_m": (processed.report.processed_horizontal_resolution_m),
@@ -635,6 +656,7 @@ def verify_artifact_bundle(
     required = [
         "processed_dem.tif",
         "original_nodata_mask.tif",
+        "manufacturing_preflight.json",
         "provenance.json",
         "validation.json",
         "validation.html",
@@ -668,6 +690,16 @@ def verify_artifact_bundle(
             raise MeshValidationError("Reopened original_nodata_mask.tif is not binary")
     provenance = json.loads((output_dir / "provenance.json").read_text(encoding="utf-8"))
     validation = json.loads((output_dir / "validation.json").read_text(encoding="utf-8"))
+    preflight = ManufacturingPreflightReport.model_validate_json(
+        (output_dir / "manufacturing_preflight.json").read_text(encoding="utf-8")
+    )
+    if preflight.status not in {"passed", "passed-with-warnings"}:
+        raise MeshValidationError("manufacturing_preflight.json did not pass")
+    preflight_payload = preflight.model_dump(mode="json")
+    if validation.get("manufacturing_preflight") != preflight_payload:
+        raise MeshValidationError("validation.json manufacturing preflight does not match artifact")
+    if provenance.get("manufacturing_preflight") != preflight_payload:
+        raise MeshValidationError("provenance.json manufacturing preflight does not match artifact")
     manifest = json.loads((output_dir / "build_manifest.json").read_text(encoding="utf-8"))
     manifest_artifacts = manifest.get("artifacts", {})
     manifest_checksums = manifest.get("sha256", {})
