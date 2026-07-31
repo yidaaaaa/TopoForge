@@ -1,7 +1,7 @@
 patch=artifacts/patches/topoforge-0.2.0-source.patch
-sha256=084864af80303683ab9d980b82f2c206410def1b2157cd8854942ed9ab6341db
-bytes=341952
-baseline_clone=/tmp/topoforge-0.2.0-rollback.XVeJih/repo
+sha256=c81dd1e6cfd19add991086a78b1a8bfbc584670207d1a6354d68e8ef16a31a75
+bytes=304748
+baseline_clone=/tmp/topoforge-0.2.0-final-rollback.NCabt9/repo
 forward_check_exit=0
 forward_apply_exit=0
 post_apply_diff_check_exit=0

@@ -1,411 +1,3 @@
-diff --git a/.agent/DECISIONS.md b/.agent/DECISIONS.md
-index 28c8c4b..56ae18d 100644
---- a/.agent/DECISIONS.md
-+++ b/.agent/DECISIONS.md
-@@ -42,6 +42,7 @@
- 
- ## ADR-006 — Slicer adapter preference and truth boundary
- 
-+- **Status:** Superseded for the default production release by ADR-009; retained for diagnostic fallback.
- - **Date:** 2026-07-31
- - **Context:** Slicer availability and CLI flags differ by release/host.
- - **Decision:** Prefer a working OrcaSlicer adapter and fall back to PrusaSlicer. Execute argument arrays without a shell, publish G-code atomically, parse the G-code itself, and embed literal version/command/output/exit/metrics into the build.
-@@ -63,3 +64,55 @@
- - **Decision:** Reproject a separate source-coverage mask, crop to its largest all-covered rectangle, then apply the normal source-NoData policy inside that crop.
- - **Alternatives:** Interpolate corners; reject every rotated raster; zero-fill outside coverage.
- - **Impact:** Rectangular Phase 1 models stay evidence-backed without confusing geometric reprojection gaps with source observations.
-+
-+## ADR-009 — Official Bambu Studio and dual 3MF roles define the default P2S release boundary
-+
-+- **Date:** 2026-07-31
-+- **Context:** The default printer must be Bambu Lab P2S 0.4. Official leaf preset JSON files can return success while omitting inherited/include fragments and falling back to a generic 200 x 200 mm platform. Bambu project 3MF files also contain vendor parts outside the Core-only lib3mf source contract.
-+- **Decision:** Default builds to bambu-p2s-0.4. Flatten official machine/process/filament presets in parent/include/child order, run official Bambu Studio with normative checks, assert resolved machine and print parameters from generated G-code, export a separate model.bambu-p2s.3mf, then reopen that project without external profiles and slice it again. Keep interoperable model.3mf unchanged as the strict lib3mf geometry source. OrcaSlicer and PrusaSlicer remain diagnostic.
-+- **Alternatives:** Keep generic FDM as default; trust leaf preset names or exit code alone; use OrcaSlicer/PrusaSlicer as release evidence; replace the Core 3MF with the Bambu project.
-+- **Impact:** P2S releases have reproducible official-tool and parameter evidence, while portability and strict Core 3MF validation remain intact. Builds store two intentional 3MF artifacts and a larger Bambu validation record.
-+
-+## ADR-010 — Printer-aware sampling is explicit and resource-bounded
-+
-+- **Date:** 2026-07-31
-+- **Context:** A fixed cell budget reduced a nominal ~30 m DSM to ~89 m without enough explanation, while unconditional source preservation can create meshes finer than the printer can reproduce.
-+- **Decision:** Provide `print-aware`, `source-preserving`, and `custom` modes. Resolve print-aware spacing from preferred mesh sampling, nozzle diameter, minimum feature size, source/model scale, max cells, exact triangle count, and estimated memory. Never upsample beyond source data.
-+- **Impact:** The real reference resolves to 0.40018 mm physical spacing and 68.9589 m processed resolution. Source and processed claims are separate, resource limits are deterministic, and source-preserving limitations emit explicit warnings.
-+
-+## ADR-011 — Manufacturing axes are +X East, +Y North, +Z Up
-+
-+- **Date:** 2026-07-31
-+- **Context:** North-up raster row 0 previously mapped to y=0, making +Y point south in viewers.
-+- **Decision:** Flip the processed heightfield once before mesh construction. Record the transform/source bounds in provenance and 3MF metadata; verify asymmetric corners and peak coordinates after STL, GLB, and 3MF serialization.
-+- **Impact:** North is the maximum-y edge without east/west mirroring, winding reversal, negative volume, or terrain alteration.
-+
-+## ADR-012 — AOIs normalize in WGS84 before source-pixel clipping
-+
-+- **Date:** 2026-07-31
-+- **Context:** Provider and local builds need one explicit bbox/center-radius contract, including dateline, high-latitude, cross-zone, partial-overlap, and empty-result behavior.
-+- **Decision:** Normalize user input to recorded WGS84 bounds/geometry. Use UTM only for a single mid-latitude zone and local AEQD otherwise. Clip local rasters to an explicit pixel window before metric reprojection; record full/partial coverage and reject empty/NoData-only results.
-+- **Impact:** Local AOI behavior is complete and testable. Global providers must consume this contract rather than implementing a parallel download-first AOI path.
-+
-+
-+## ADR-013 — Provider bytes are content-addressed and network requests are bounded
-+
-+- **Date:** 2026-07-31
-+- **Context:** A no-key provider needs reproducible source identities, corruption detection, operational limits, and offline tests before global downloads enter the manufacturing engine.
-+- **Decision:** Index canonical provider/dataset/version/URL requests separately from immutable SHA-256 objects; atomically publish and reopen both. Enforce timeout, bounded attempts, exponential backoff, minimum request spacing, and byte limits. Preserve ETag, Last-Modified, byte count, attempts, cache state, and content hash.
-+- **Impact:** Cache hits are verified rather than trusted by filename, corrupt content is refetched, duplicate content is deduplicated, and network behavior has testable upper bounds.
-+
-+## ADR-014 — Copernicus AWS plans one complete product through normalized AOIs
-+
-+- **Date:** 2026-07-31
-+- **Context:** Filename formulas do not establish coverage, partial GLO-30/GLO-90 blending obscures dataset identity, and projected AOI rectangles can contain cells outside source footprints.
-+- **Decision:** Treat `tileList.txt` as coverage authority; use GLO-30 only when every required one-degree cell exists, otherwise use complete GLO-90 or report incomplete coverage. Reproject source-footprint masks independently, crop only reprojection gaps, preserve source NoData, and enter the resulting metric raster plus `source_acquisition.json` through the local build engine.
-+- **Impact:** `build-global` shares local AOI/sampling/orientation/validation behavior, source product identity remains explicit, and the real Amazon tile-edge case is documented rather than filled.
-+
-+
-+## ADR-015 — Copernicus quality rasters remain source evidence, not elevation edits
-+
-+- **Date:** 2026-08-01
-+- **Context:** The public Copernicus AWS tile prefixes expose EDM, FLM, HEM, and WBM rasters, but filenames alone do not prove availability and categorical/error values must not be converted into fabricated terrain.
-+- **Decision:** Cache and parse the exact per-tile S3 ListObjectsV2 response. Download only listed ancillary objects through the normal content-addressed transport, require each source raster to match its DEM tile CRS/transform/shape, retain raw values, use nearest-neighbour reprojection, and crop with the exact DEM target window. Publish a composite only when every selected tile exposes the role; otherwise record `absent` or `incomplete`. Copy complete aligned rasters into build bundles as checksummed source-quality roles.
-+- **Impact:** Quality/editing/filling/water/error evidence becomes reproducible and self-contained while terrain elevations and geometry remain unchanged. The final Amazon DEM/STL/3MF/GLB/PNG are byte-identical to the pre-mask bundle.
-diff --git a/.agent/ISSUES.md b/.agent/ISSUES.md
-index 18daa29..3d9a271 100644
---- a/.agent/ISSUES.md
-+++ b/.agent/ISSUES.md
-@@ -33,12 +33,12 @@
- ## TF-004 — Global provider and geocoding path not implemented
- 
- - **Severity:** High
--- **Status:** Open
-+- **Status:** Partially resolved
- - **Reproduction:** `topoforge providers` shows global entries as `implemented: false`; `topoforge build` currently requires `--dem` or a local config.
- - **Expected behavior:** bbox/center/place inputs can select, fetch, cache, and build real global data.
--- **Actual behavior:** Official-source research and provider contract exist; fetch/selection/cache/AOI code is pending Phase 3.
-+- **Actual behavior:** The no-key Copernicus AWS path, cache, bounded transport, normalized AOI acquisition, `fetch-dem`, `build-global`, provenance, offline tests, and a real Amazon build/slice are complete. Candidate geocoding, additional providers, and explainable multi-provider fallback remain. Copernicus EDM/FLM/HEM/WBM preservation is complete.
- - **Owner:** Primary agent
--- **Resolution:** Planned Copernicus AWS no-key provider followed by USGS/OpenTopography options.
-+- **Resolution:** Copernicus AWS is now the implemented default global DSM route; continue with explainable provider selection/fallback, then Nominatim-compatible candidate handling.
- 
- ## TF-005 — Exhaustive self-intersection backend pending
- 
-@@ -56,7 +56,7 @@
- - **Status:** Open
- - **Reproduction:** Run the full suite with Rasterio 1.5.0 and NumPy 2.5.1.
- - **Expected behavior:** No upstream deprecation warnings.
--- **Actual behavior:** 33 warnings about masked-array shape assignment; 71 tests pass.
-+- **Actual behavior:** 33 warnings about masked-array shape assignment; 80 tests pass.
- - **Owner:** Primary agent
- - **Resolution:** Track upstream compatibility or constrain NumPy after benchmark/compatibility evidence; warnings are not hidden.
- 
-@@ -84,9 +84,79 @@
- ## TF-009 — Explicit local AOI crop not implemented
- 
- - **Severity:** High
--- **Status:** Open
-+- **Status:** Resolved
- - **Reproduction:** `topoforge build` accepts a full local DEM but has no bbox/polygon window option.
- - **Expected behavior:** Phase 1 supports a user AOI crop before reprojection and mesh construction.
- - **Actual behavior:** The engine processes the full raster and only crops reprojection-only rotated coverage gaps.
- - **Owner:** Primary agent
--- **Resolution:** Milestone 02 begins with AOI normalization and local bbox/polygon clipping before global-provider integration.
-+- **Resolution:** Added validated bbox/center-radius normalization, WGS84 antimeridian geometry, UTM/AEQD selection, explicit source-pixel crop, full/partial/empty/NoData handling, provenance, CLI inputs, and offline tests before provider integration.
-+
-+## TF-010 — Bambu leaf presets silently produced a generic platform
-+
-+- **Severity:** High
-+- **Status:** Resolved
-+- **Reproduction:** Pass the official P2S leaf machine/process JSON directly to Bambu Studio CLI and inspect the resolved platform/G-code.
-+- **Expected behavior:** P2S 0.4 resolves to a 256 x 256 x 256 mm machine and P2S firmware/process settings.
-+- **Actual behavior:** The command returned success but unresolved inheritance/include fragments produced a generic 200 x 200 mm platform.
-+- **Owner:** P2S validation workstream
-+- **Resolution:** Added deterministic preset flattening and a release gate that asserts actual platform, machine, process, filament, temperatures, shells, infill, support, and brim values.
-+
-+## TF-011 — Bambu project 3MF is not the interoperable Core source role
-+
-+- **Severity:** Medium
-+- **Status:** Resolved
-+- **Reproduction:** Open the Bambu-exported project 3MF through the existing lib3mf Core-only inspection path.
-+- **Expected behavior:** The portable geometry source remains strict-reader compatible.
-+- **Actual behavior:** Bambu vendor project parts trigger Could not create OPC Part in the Core-only path.
-+- **Owner:** P2S validation workstream
-+- **Resolution:** Preserve model.3mf as the interoperable lib3mf source and publish model.bambu-p2s.3mf as a separate embedded-settings project artifact.
-+
-+## TF-012 — Prusa zero-value settings broke the shared G-code parser
-+
-+- **Severity:** Medium
-+- **Status:** Resolved
-+- **Reproduction:** Run the real PrusaSlicer integration test after adding typed resolved settings; Prusa emits filament_density = 0 and filament_max_volumetric_speed = 0 sentinels.
-+- **Expected behavior:** Optional unset settings do not invalidate an otherwise successful diagnostic slice.
-+- **Actual behavior:** Pydantic rejected the zero sentinels for positive optional fields.
-+- **Owner:** Primary agent
-+- **Resolution:** Parse non-positive values for positive optional settings as unset and add a focused regression; the real Prusa test and full 80-test suite pass.
-+
-+## TF-013 — Fixed cell budget obscured terrain resolution loss
-+
-+- **Severity:** High
-+- **Status:** Resolved
-+- **Reproduction:** Build the real DSM with `max_grid_cells: 120000`; the 1008 x 1181 source becomes 341 x 350 at 88.8177 m while dataset provenance appears to describe that as dataset resolution.
-+- **Resolution:** Added explicit sampling modes and separate source/processed fields. The print-aware real rebuild is 439 x 451 at 68.9589 m, with exact physical spacing, triangle/memory estimates, 5.0415 m peak loss, and 24.5163 m peak shift.
-+
-+## TF-014 — Raster north edge mapped to y=0
-+
-+- **Severity:** High
-+- **Status:** Resolved
-+- **Reproduction:** Map a four-corner asymmetric north-up DEM directly into the previous heightfield constructor; row 0 appears at y=0 and +Y points south.
-+- **Resolution:** Flip rows once before mesh construction, record +X East/+Y North/+Z Up, add a preview north arrow, preserve positive winding/volume, and verify all four corners plus peak coordinates in STL/GLB/3MF.
-+
-+## TF-015 — Published summit elevation differs from source DSM peak
-+
-+- **Severity:** Medium
-+- **Status:** Accepted data limitation
-+- **Evidence:** The source DSM maximum is 7437.5244 m while the retained published nominal context is 7556.0 m, a 118.4756 m difference.
-+- **Resolution:** Record dataset type `dsm`, vertical datum `EGM2008`, the comparison, and `terrain_adjustment_applied=false`. No synthetic spike, sharpening, or peak-height correction is performed.
-+
-+
-+## TF-016 — Provider AOI at COG tile edge retained a reprojection-only gap
-+
-+- **Severity:** High
-+- **Status:** Resolved
-+- **Reproduction:** Acquire Amazon bbox `[-60.02, -3.13, -60.00, -3.11]`; the east boundary is exactly the source tile boundary and the first metric acquisition contained one 74-pixel NoData column.
-+- **Expected behavior:** Reprojection-only cells outside source footprints are distinguished from source NoData and excluded without interpolation or silent AOI expansion.
-+- **Actual behavior:** The v1 local build correctly stopped at the NoData edge-gap gate.
-+- **Resolution:** Reproject a separate all-source footprint mask, select the largest all-covered rectangle, update the transform, report the original/selected shapes and pixel window, and preserve genuine source NoData. The v2 real build and slice pass.
-+
-+
-+## TF-017 — Copernicus ancillary quality masks were not preserved
-+
-+- **Severity:** Medium
-+- **Status:** Resolved
-+- **Reproduction:** Acquire any Copernicus AWS tile before 0.2.0; only the DEM COG and tile catalog enter cache/provenance.
-+- **Expected behavior:** Preserve every exposed official EDM, FLM, HEM, and WBM source with exact identity and an AOI-aligned bundle role.
-+- **Resolution:** Cache the exact S3 tile-prefix listing, discover rather than guess ancillary keys, store each source by content SHA-256, require exact source-grid alignment with its DEM, apply nearest-neighbour reprojection and the identical DEM crop, and publish complete roles without remapping values or modifying elevations. Offline present/absent/misaligned/cache-corrupt/GLO-90 tests and a real Amazon build/slice pass.
-diff --git a/.agent/PLANS.md b/.agent/PLANS.md
-index 0facda6..1530f0d 100644
---- a/.agent/PLANS.md
-+++ b/.agent/PLANS.md
-@@ -1,15 +1,15 @@
- # Authoritative Plan
- 
--Updated: 2026-07-31
-+Updated: 2026-08-01
- 
- ## Roadmap
- 
- - [x] Phase 0 — repository, toolchain, official-source research, architecture, fixtures. Completed 2026-07-31.
- - [x] Milestone 01 — full-raster local GeoTIFF/synthetic manufacturing core, deterministic 3MF/provenance, validation, and real slicer evidence. Completed 2026-07-31.
--- [ ] Phase 1 closure — explicit local AOI bbox/polygon clipping and remaining GIS edge contracts.
-+- [x] Phase 1 closure — explicit local AOI bbox/center-radius clipping and GIS edge contracts. Completed 2026-07-31.
- - [ ] Phase 2 closure — revalidate deterministic export/provenance after Phase 1 AOI closure.
- - [ ] Phase 3 — global/high-resolution providers, AOI/geocoding, cache, selection/fallback.
--- [ ] Phase 4 — printer-aware sampling, build-volume/resource estimation, vertical-scaling refinements.
-+- [ ] Phase 4 — printer-aware sampling foundation is complete; remaining build-volume/resource UX and vertical-scaling refinements continue.
- - [ ] Phase 5 — tiling, assembly manifest/map, labels, and verified connectors.
- - [ ] Phase 6 — worker-backed FastAPI and React/MapLibre/Three.js Web application.
- - [ ] Phase 7 — provenance-aware GPX/road/river/contour/label/coast overlays.
-@@ -35,22 +35,44 @@ Updated: 2026-07-31
- - [x] Reproducibility, property, unit, GIS, geometry, CLI, provider-registry, integration, and slicer tests.
- - [x] Final gates: uv sync, Ruff check/format, Pyright, 71-test suite.
- 
-+## Completed cross-cutting P2S release hardening
-+
-+- [x] Make bambu-p2s-0.4 the default build profile while retaining an explicit generic FDM profile.
-+- [x] Make official Bambu Studio the production slice validator; keep OrcaSlicer/PrusaSlicer diagnostic-only.
-+- [x] Flatten official P2S machine/process/filament inheritance and include fragments.
-+- [x] Hard-check the 256 mm platform, nozzle, preset IDs, layer/shell/infill/support/brim/temperature settings, and slice warnings.
-+- [x] Preserve dual 3MF roles: interoperable lib3mf source plus Bambu project with embedded settings.
-+- [x] Reopen the Bambu project without external profiles and complete a second normative slice.
-+- [x] Publish the real Copernicus GLO-30 Gongga P2S reference bundle and verification record.
-+- [x] Add unit, CLI, adapter, parser, and manufacturing-gate regressions; final suite is 80 passed.
-+
-+## Completed fidelity/orientation hardening
-+
-+- [x] Add deterministic `print-aware`, `source-preserving`, and `custom` sampling modes.
-+- [x] Enforce cell/triangle/memory budgets and report source versus processed resolution.
-+- [x] Report raw/processed extrema, peak loss, peak shift, thresholds, decisions, and warnings.
-+- [x] Standardize manufacturing coordinates as +X East, +Y North, +Z Up.
-+- [x] Cross-check asymmetric corners and peak positions in STL, GLB, and strict-read 3MF.
-+- [x] Rebuild the existing real DSM without another download at 439 x 451 / 68.9589 m.
-+- [x] Actual PrusaSlicer diagnostic: exit 0, 149 layers, no floating/empty/out-of-bed/support warning.
-+- [x] Repeat real build: DEM/STL/3MF/GLB/PNG roles byte-identical.
-+
- ## Current milestone: Milestone 02 AOI and no-key global terrain
- 
- Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> windowed COG fetch -> provider selection/fallback -> real Gongga/Amazon builds -> provenance and slicer evidence.
- 
- - [x] Verify current official sources, access, licenses, attribution, and no-key route.
--- [ ] Implement bbox and center-radius `AreaOfInterest` normalization.
--- [ ] Apply explicit AOI window/polygon clipping to local rasters.
--- [ ] Implement antimeridian/high-latitude/cross-zone projection decisions and tests.
-+- [x] Implement bbox and center-radius `AreaOfInterest` normalization.
-+- [x] Apply explicit AOI pixel-window clipping to local rasters with coverage/NoData records.
-+- [x] Implement antimeridian/high-latitude/cross-zone projection decisions and tests.
- - [ ] Implement Nominatim-compatible geocoding with candidate handling and usage policy.
--- [ ] Implement content-addressed cache, timeout/retry/rate-limit boundaries.
--- [ ] Implement configurable `copernicus-aws` GLO-30/GLO-90 COG provider.
--- [ ] Preserve Copernicus quality/editing masks when assets expose them.
-+- [x] Implement content-addressed cache, timeout/retry/rate-limit boundaries.
-+- [x] Implement configurable `copernicus-aws` GLO-30/GLO-90 COG provider.
-+- [x] Preserve Copernicus quality/editing masks when assets expose them.
- - [ ] Implement explainable auto-selection and recorded fallback attempts.
--- [ ] Execute a real Gongga build from fetched DSM data.
--- [ ] Execute a real Amazon low-relief build with DSM semantics visible.
--- [ ] Slice at least one global-provider 3MF and publish milestone-02 evidence.
-+- [x] Execute a real Gongga build from fetched DSM data (reference bundle complete; integrated provider automation remains pending).
-+- [x] Execute a real Amazon low-relief build with DSM semantics visible; v2 provider/cache bundle and diagnostic slice completed 2026-07-31.
-+- [x] Slice at least one global-provider 3MF and publish milestone-02 evidence (official Bambu Studio P2S bundle).
- 
- ## Milestone 02 acceptance
- 
-@@ -65,3 +87,5 @@ Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> wi
- - The initial hand-written Core-only 3MF writer was replaced by official `lib3mf==2.5.0`; deterministic UUID and strict-reader tests cover the production path.
- - OrcaSlicer 2.4.2 on this Ubuntu 22.04 host was replaced operationally by OrcaSlicer 2.3.0/PrusaSlicer fallback after verified GLIBC/GLIBCXX incompatibility. The adapter still prefers a working Orca installation.
- - The ambiguous `copernicus` provider descriptor was split into the no-key `copernicus-aws` route and authenticated `copernicus-cdse` route.
-+- Direct loading of Bambu leaf preset JSON was replaced by deterministic inherits/include flattening after official Bambu Studio silently fell back to a generic 200 x 200 mm platform.
-+- Replacing the interoperable Core model.3mf with a Bambu vendor project was rejected; both 3MF roles are preserved because lib3mf does not reopen the vendor project parts as the Core source package.
-diff --git a/.agent/RUN_LOG.md b/.agent/RUN_LOG.md
-index c1c5ea8..3f9fc27 100644
---- a/.agent/RUN_LOG.md
-+++ b/.agent/RUN_LOG.md
-@@ -95,3 +95,112 @@ Result: exit 0; patch SHA-256 `a7e9be54c80ab7d9d9b6feb139f63af7b41c44ceca7db5a1f
- Command: run `scripts/rollback-milestone-01.sh --confirm-rollback` in `/tmp/topoforge-milestone01-rollback.tk9j5e` checked out at the source commit.
- 
- Result: exit 0; HEAD `10112b0a827bd27db6054d3ecf01a47d62b4aed5`, working tree clean.
-+
-+### Default P2S and official Bambu Studio release hardening
-+
-+Command: resolve official Bambu Lab P2S 0.4 machine, 0.20mm Standard process, and Bambu PLA Basic presets by recursively flattening inherits/include fragments.
-+
-+Result: official Bambu Studio leaf presets alone were shown to fall back to a generic 200 x 200 mm platform. The flattened profiles resolve 113 machine, 197 process, and 140 filament keys and hard-check a 256 x 256 x 256 mm P2S platform.
-+
-+Command: official Bambu Studio 02.07.01.62 normative export/slice of outputs/gongga-copernicus-glo30/model.3mf, followed by reopening outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf without external profiles and slicing again.
-+
-+Result: both invocations exited 0 with return_code 0, error_string Success, and empty warning_message. The Bambu project SHA-256 is 898610a7b3094ed51d5ff9bb8e1f5701eee93ecd666c1e1d9e0cf61556f8d27d; the independent G-code SHA-256 is 27b43eb59965ae93c0f0867ca3c63b38d19fc13f97a5aeba3486366b8a19654d. Reopened model dimensions are 180 x 175.359 x 45 mm with 477,396 triangles, 24,550.9707 s estimate, and 211.008 g filament. Embedded settings and G-code MD5 checks pass.
-+
-+Command: uv run ruff format . && uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest
-+
-+Result: 85 files unchanged by formatting, Ruff passed, Pyright reported 0 errors/0 warnings, and Pytest reported 80 passed with 33 tracked upstream warnings.
-+
-+Regression: the first full run reported 78 passed and one failure because PrusaSlicer 2.4.0 writes zero sentinels for optional filament density and maximum volumetric speed.
-+
-+Resolution: non-positive values for positive optional G-code settings now parse as unset. Focused real-Prusa/parser tests report 5 passed; the full suite reports 80 passed.
-+
-+### P2S source patch replay and rollback
-+
-+Command: create a detached worktree at HEAD a9f5f5d; run git apply --check, git apply --whitespace=error-all, git diff --check, Ruff check/format, Pyright with the project Python, and the full Pytest suite against the patched worktree.
-+
-+Result: forward check/apply exited 0; Ruff passed; Pyright reported 0 errors/0 warnings; Pytest reported 80 passed and 33 tracked warnings.
-+
-+Command: bash scripts/rollback-p2s-bambu-validation.sh --confirm-rollback --patch /root/autodl-tmp/bambu/TopoForge/artifacts/patches/p2s-bambu-validation.patch
-+
-+Result: exit 0; reverse check/apply passed, HEAD remained a9f5f5d, and git status --porcelain was empty.
-+
-+### Printer-aware sampling, orientation, AOI, and real fidelity rebuild
-+
-+Command: source DEM SHA-256 and local processing probe using `print-aware`, `max_grid_cells=600000`, `max_estimated_memory_mb=768`.
-+
-+Result: source SHA-256 `00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc`; source 1008 x 1181 at 28.8508136 m; processed 439 x 451 at 68.9588821 m; 0.4001816 mm physical spacing; 791,952 triangles; 60.4214 MiB estimate; 5.0415039 m peak loss; 24.5162760 m peak shift; fidelity thresholds passed.
-+
-+Command: `uv run topoforge build --config downloads/gongga-copernicus-glo30/build-config.fidelity-v2.yaml`.
-+
-+Result: exit 0; new output `/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-fidelity-v2`; 180 x 175.359116 x 45 mm; watertight/manifold/winding/positive volume/flat bottom true; +X East/+Y North/+Z Up; strict 3MF warning count 0.
-+
-+Command: strict `topoforge preview/inspect` for bundle, STL, GLB, 3MF plus JSON/YAML/GeoTIFF/PNG reload.
-+
-+Result: exit 0; STL/GLB 791,952 triangles and 639,175.1232 mm3; 3MF 395,978 vertices, 791,952 triangles, correct orientation metadata, peak 115.6 x 91.282832 x 45 mm, zero strict warnings.
-+
-+Command: `uv run topoforge slice outputs/gongga-copernicus-glo30-fidelity-v2/model.3mf --slicer prusa --output artifacts/slicer/gongga-fidelity-v2-prusa.gcode`.
-+
-+Result: exit 0; PrusaSlicer 2.4.0; 30,325,645-byte G-code; 149 layers; 15h14m17s estimate; 90,237.44 mm / 217.05 cm3 filament; support false; no floating region, empty layer, or out-of-bed warning. This is diagnostic evidence; the official P2S release gate is not claimed.
-+
-+Command: repeated real build to `outputs/gongga-copernicus-glo30-fidelity-v2-repeat` and SHA-256 comparison.
-+
-+Result: processed DEM, NoData mask, STL, 3MF, GLB, and PNG were byte-identical. Record: `artifacts/verification/gongga-fidelity-v2-determinism.txt`.
-+
-+Command: full quality gates.
-+
-+Result before fixture correction: Ruff and Pyright passed; Pytest 93 passed/5 failed because the legacy scaling fixture did not populate new required `RasterResult` evidence fields. The fixture was completed without changing assertions; focused scaling tests then reported 5 passed. Final post-documentation full gate follows.
-+
-+Command: final `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest` after fixture, CLI, documentation, and state updates.
-+
-+Result: exit 0; Ruff `All checks passed!`; format `92 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `100 passed, 40 warnings in 6.41s`. Warnings are the tracked Rasterio/NumPy deprecation issue.
-+
-+
-+### Fidelity/AOI patch replay and rollback
-+
-+Command: construct an isolated copy of the pre-fidelity/P2S-hardened source tree, run `git apply --check`, apply `artifacts/patches/fidelity-aoi.patch` with `--whitespace=error-all`, compare the resulting regular-file tree with the captured post-change tree, execute `scripts/rollback-fidelity-aoi.sh --confirm-rollback`, and compare the reversed regular-file tree with the captured baseline.
-+
-+Result: forward check/apply exited 0, the applied file tree matched the post-change tree, the rollback script exited 0, and the reversed file tree matched the baseline. Empty untracked directory shells are excluded because Git patches do not represent directories. The final patch hash, byte count, commands, and literal statuses are stored in `artifacts/verification/fidelity-aoi-patch-rollback-summary.txt`.
-+
-+
-+### Content-addressed cache, bounded HTTP, and Copernicus AWS provider
-+
-+Command: focused offline cache/transport/provider tests covering canonical request identity, content-SHA objects, atomic reopen, same-content corruption recovery, timeout propagation, bounded retries/backoff, minimum request spacing, download limits, authoritative catalog parsing, GLO-30/GLO-90 whole-product fallback, antimeridian cells, source-footprint edge crop, and provider acquisition through the full local build engine.
-+
-+Result: all focused tests passed; Pyright reported 0 errors/0 warnings. `topoforge providers` now reports `copernicus-aws` implemented, `topoforge cache status` emits object/request/temp counts, and `fetch-dem`/`build-global` accept bbox or center-radius AOIs.
-+
-+Command: live `build-global` for Amazon bbox `[-60.02, -3.13, -60.00, -3.11]` using public Copernicus AWS GLO-30, 30 s timeout, four attempts, 0.25 s request interval, 250,000-cell/256 MiB build budgets.
-+
-+Result v1: catalog and 44,747,048-byte COG downloaded and verified; the local NoData gate stopped on a 74-pixel east-edge reprojection gap. Source, manifest, cache, and failure log were retained. No zero fill or terrain invention was applied.
-+
-+Result v2 after coverage fix: catalog and COG were verified cache hits. The independent source-footprint mask selected 74 x 74 from the original 74 x 75 grid and documented 74 discarded reprojection-only cells. The source and processed grids remain 74 x 74 at 29.7638 m with zero peak loss/shift. The 80 x 80.6587 x 9.7146 mm / 21,900-triangle bundle is watertight, manifold, winding-consistent, positive-volume, flat-bottom, and strict-3MF clean.
-+
-+Command: `uv run topoforge slice outputs/amazon-copernicus-aws-v2/model.3mf --slicer prusa --output artifacts/slicer/amazon-copernicus-aws-v2-prusa.gcode`.
-+
-+Result: exit 0; 2,085,508-byte G-code, 32 layers, 2h10m52s estimate, 9,085.44 mm / 21.85 cm3 filament, support false, and no floating/empty/out-of-bed warning. This is diagnostic evidence.
-+
-+Command: final `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, Amazon bundle preview, strict 3MF inspect, and cache status after code/documentation updates.
-+
-+Result: exit 0; Ruff `All checks passed!`; format `98 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `113 passed, 45 warnings in 7.34s`; Amazon bundle required checks true; strict lib3mf warnings 0; cache 2 request entries/2 content objects/45,857,948 bytes/0 temporary files.
-+
-+
-+### Copernicus EDM/FLM/HEM/WBM preservation and 0.2.0
-+
-+Command: query the public GLO-30 and GLO-90 S3 ListObjectsV2 prefixes for the already cached Amazon tile and inspect its official XML metadata.
-+
-+Result: both products expose EDM (editing), FLM (ancillary filling), HEM (per-pixel height-error standard deviation), and WBM (modified water) GeoTIFFs under `AUXFILES`. Implementation now caches the exact prefix listing and listed mask objects instead of assuming filenames.
-+
-+Command: focused `uv run pytest -q tests/providers/test_copernicus_aws.py`, Ruff, and Pyright while adding present, absent, source-grid mismatch, cache hit/corruption recovery, GLO-30/GLO-90, and provider-to-build bundle tests.
-+
-+Result: 11 provider tests passed with 5 tracked warnings; Ruff passed after formatting; Pyright reported 0 errors/0 warnings. Present masks require exact DEM source CRS/transform/shape, use nearest-neighbour reprojection and the same DEM target crop, retain raw values, and become `source_quality_{edm,flm,hem,wbm}` build-manifest roles.
-+
-+Command: live `fetch-dem` for Amazon bbox `[-60.02, -3.13, -60.00, -3.11]` into a new evidence directory using the existing provider cache.
-+
-+Result: tile catalog and 44,747,048-byte DEM were verified cache hits; the new tile-prefix listing and four official ancillary sources were fetched once. Cache became 9 request entries/9 content objects/152,952,754 bytes/0 temporary files. All four AOI masks reopen on the exact 74 x 74 DEM grid.
-+
-+Command: bump `pyproject.toml`/`uv.lock` to 0.2.0, update the HTTP User-Agent, rebuild `outputs/amazon-copernicus-aws-quality-v2` from cached source evidence, strict-read the bundle, and run `uv run topoforge slice ... --slicer prusa`.
-+
-+Result: `topoforge doctor` reports 0.2.0. The 18-role post-slice bundle passes all required geometry checks, strict lib3mf warnings are 0, and PrusaSlicer exits 0 with 32 layers, 2,085,508-byte G-code, support false, and no floating/empty/out-of-bed warning. EDM/FLM/HEM/WBM are separate checksummed artifacts. DEM/STL/3MF/GLB/PNG remain byte-identical to the pre-mask Amazon v2 bundle. Verification: `artifacts/verification/amazon-copernicus-aws-quality-v2-verification.json`.
-+
-+Command: final `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, and `git diff --check` after version, documentation, quality-mask integration, and real verification updates.
-+
-+Result: exit 0; Ruff `All checks passed!`; format `99 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `118 passed, 45 warnings in 7.75s`; diff whitespace check passed. Log: `artifacts/logs/topoforge-0.2.0-quality-gates.log`.
-diff --git a/.agent/STATE.md b/.agent/STATE.md
-index f43e919..22c294b 100644
---- a/.agent/STATE.md
-+++ b/.agent/STATE.md
-@@ -1,12 +1,14 @@
- # Current State
- 
--- **Current milestone:** Milestone 02 — AOI normalization/local clipping followed by the no-key global provider.
--- **Current branch/worktree:** `main`, `/root/autodl-tmp/bambu/TopoForge`.
--- **Last completed task:** Committed Milestone 01, replayed its binary-safe patch from the empty baseline with tests/build/slice, and executed rollback to a clean baseline in a second worktree.
--- **Current implementation status:** Full-raster local GeoTIFF/synthetic builds emit and reopen STL, 3MF, GLB, processed DEM, original NoData mask, provenance, validation JSON/HTML, resolved YAML, checksum-verified manifest, and PNG. Explicit local AOI cropping, network provider fetching, and geocoding remain next.
--- **Known failing tests:** None. Latest full suite: 71 passed.
--- **Current blockers:** No blocking external dependency. OrcaSlicer 2.4.2 targets a newer system runtime; verified OrcaSlicer 2.3.0 and PrusaSlicer 2.4.0 paths are available.
--- **Known warnings:** 33 upstream Rasterio/NumPy masked-array deprecation warnings under NumPy 2.5.1; behavior tests pass.
--- **Next exact action:** Implement normalized bbox/center AOIs and explicit local raster clipping before connecting the configurable Copernicus AWS GLO-30/GLO-90 provider.
--- **Next exact command:** `uv run topoforge providers && uv run pytest tests/providers tests/integration -q`
--- **Important paths:** `src/topoforge/engine/build.py`, `src/topoforge/raster/processing.py`, `src/topoforge/scaling/policy.py`, `src/topoforge/exporters/three_mf.py`, `src/topoforge/validation/slicers/`, `docs/data-sources.md`, `outputs/milestone-01-synthetic/`, `artifacts/reports/milestone-01.md`.
-+- **Current milestone:** Milestone 02 — normalized local/global AOI, no-key Copernicus AWS provider/cache, and official ancillary quality-mask preservation are complete; explainable provider selection/fallback and candidate geocoding are next.
-+- **Current version/branch/worktree:** TopoForge `0.2.0`, branch `main`, `/root/autodl-tmp/bambu/TopoForge`; the milestone release commit is the next Git action.
-+- **Last completed task:** Discovered EDM/FLM/HEM/WBM from exact per-tile S3 prefix listings, cached every exposed source by SHA-256, required exact source-grid alignment with its DEM, applied nearest-neighbour reprojection plus the identical DEM crop, copied complete roles into build bundles, and verified a real Amazon rebuild/slice.
-+- **Provider implementation:** `copernicus-aws` is `implemented: true`. Complete GLO-30 is preferred; complete GLO-90 is a whole-AOI fallback only. Dataset ids are not blended. Catalog, DEM, tile-prefix inventory, and ancillary-mask URL/ETag/Last-Modified/bytes/SHA-256/attempt/cache evidence are retained. Raw mask values never alter elevation samples.
-+- **Real provider result:** `/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-quality-v2`; source/processed 74 x 74 at 29.7638 m, model 80 x 80.6587 x 9.7146 mm, 21,900 triangles, watertight/manifold/winding/positive-volume/flat-bottom/orientation true, strict 3MF warnings 0. EDM/FLM/HEM/WBM align exactly and are independent checksummed bundle roles. PrusaSlicer exit 0, 32 layers, support false, no floating/empty/out-of-bed warning.
-+- **Terrain invariance:** Final processed DEM, original NoData mask, STL, 3MF, GLB, and PNG are byte-identical to `/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-v2`; the change records source quality without changing terrain.
-+- **Cache state:** `/root/autodl-tmp/bambu/TopoForge/cache/providers`; 9 verified request entries/9 content objects, 152,952,754 bytes, 0 temporary files. The final build acquisition recorded catalog, DEM, tile-prefix listing, and all four masks as cache hits.
-+- **Existing mountain reference:** `/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-fidelity-v2` remains unchanged; its source DEM was not downloaded again.
-+- **Known failing tests:** None. Final gate: Ruff passed, format 99 files, Pyright 0 errors/0 warnings, Pytest 118 passed with 45 tracked warnings, `git diff --check` passed. Log: `artifacts/logs/topoforge-0.2.0-quality-gates.log`.
-+- **Known warnings:** Rasterio/NumPy masked-array deprecation remains TF-006. Exhaustive self-intersection remains TF-005. PrusaSlicer results are diagnostic rather than the official P2S release role.
-+- **Next exact action:** Implement explainable provider selection/fallback attempts, then Nominatim-compatible candidate geocoding.
-+- **Important paths:** `src/topoforge/providers/{cache,transport,copernicus_aws}.py`, `outputs/amazon-copernicus-aws-quality-v2`, `artifacts/verification/amazon-copernicus-aws-quality-v2-verification.json`, `downloads/amazon-copernicus-aws-quality-v1-build-source/copernicus-aws-aoi.tif.source_acquisition.json`.
 diff --git a/.gitignore b/.gitignore
 index 259fa38..3febe70 100644
 --- a/.gitignore
@@ -1432,6 +1024,45 @@ index 0000000..5bebce8
 +    exit 2
 +    ;;
 +esac
+diff --git a/scripts/rollback-topoforge-0.2.0.sh b/scripts/rollback-topoforge-0.2.0.sh
+new file mode 100755
+index 0000000..d033fc8
+--- /dev/null
++++ b/scripts/rollback-topoforge-0.2.0.sh
+@@ -0,0 +1,33 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++readonly BASELINE_COMMIT="a9f5f5da77ba231f23128fe76e21c6f93890b7ef"
++
++if [[ "${1:-}" != "--confirm-rollback" ]]; then
++  printf 'Usage: %s --confirm-rollback\n' "$0" >&2
++  exit 2
++fi
++
++repo_root="$(git rev-parse --show-toplevel)"
++cd "$repo_root"
++git cat-file -e "${BASELINE_COMMIT}^{commit}"
++if [[ -n "$(git status --porcelain)" ]]; then
++  printf 'Working tree must be clean before rollback.\n' >&2
++  exit 4
++fi
++
++before_head="$(git rev-parse HEAD)"
++git reset --hard "$BASELINE_COMMIT"
++after_head="$(git rev-parse HEAD)"
++if [[ "$after_head" != "$BASELINE_COMMIT" ]]; then
++  printf 'Rollback verification mismatch: expected %s, found %s\n' \
++    "$BASELINE_COMMIT" "$after_head" >&2
++  exit 5
++fi
++if [[ -n "$(git status --porcelain)" ]]; then
++  printf 'Rollback left tracked working-tree changes.\n' >&2
++  exit 6
++fi
++printf 'before_head=%s\n' "$before_head"
++printf 'rollback_head=%s\n' "$after_head"
++printf 'working_tree_clean=true\n'
 diff --git a/src/topoforge/cli/app.py b/src/topoforge/cli/app.py
 index 7a6a824..f99f234 100644
 --- a/src/topoforge/cli/app.py

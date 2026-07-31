@@ -209,10 +209,10 @@ Command: `git commit -m "feat: release global AOI terrain pipeline v0.2.0"`.
 
 Result: commit `d70e62497d97fdeafefad75f821874fc0637ff80` created with 97 audited files; version is 0.2.0.
 
-Command: clone the repository without hardlinks into `/tmp`, run `git revert --no-edit d70e624`, and compare the resulting tree with `d70e624^1`.
+Command: from a no-hardlink clone of the final evidence HEAD, run `scripts/rollback-topoforge-0.2.0.sh --confirm-rollback`. The script requires a clean worktree and resets tracked source to baseline `a9f5f5da77ba231f23128fe76e21c6f93890b7ef`.
 
-Result: revert exit 0; rollback tree `89de6c49d88002a169b80c2bb82c5e3555a0c2d7` exactly matched the release parent tree and the isolated working tree was clean. Record: `artifacts/verification/topoforge-0.2.0-git-rollback.txt`; runnable main-worktree script: `scripts/rollback-topoforge-0.2.0.sh --confirm-rollback`.
+Result: exit 0; rollback HEAD and tree exactly matched the baseline (`89de6c49d88002a169b80c2bb82c5e3555a0c2d7`) and the isolated worktree was clean. Record: `artifacts/verification/topoforge-0.2.0-git-rollback.txt`.
 
-Command: generate `artifacts/patches/topoforge-0.2.0-source.patch` from the release parent while excluding binary previews and prior verification/patch archives; in the reverted clone run forward check/apply, `git diff --check`, reverse check/apply.
+Command: generate `artifacts/patches/topoforge-0.2.0-source.patch` from the release baseline while excluding agent state, binary previews, and prior verification/patch archives; in the baseline clone run forward check/apply, `git diff --check`, reverse check/apply.
 
-Result: patch SHA-256 `084864af80303683ab9d980b82f2c206410def1b2157cd8854942ed9ab6341db`, 341,952 bytes; all five statuses were 0 and the clone was clean after reverse. Record: `artifacts/verification/topoforge-0.2.0-source-patch-verification.txt`.
+Result: all five statuses were 0 and the clone was clean after reverse. Exact final patch SHA-256/bytes are stored in `artifacts/verification/topoforge-0.2.0-source-patch-verification.txt`.
