@@ -1,0 +1,9 @@
+HEAD is now at 1284a17 chore: finalize v0.3.0 verification and rollback
+before_head=c9755601f121ec9d30ea76c01db53afaa016771d
+rollback_head=1284a1754e00976572150447853d910dcdd12b12
+working_tree_clean=true
+expected_baseline=1284a1754e00976572150447853d910dcdd12b12
+actual_head=1284a1754e00976572150447853d910dcdd12b12
+actual_tree=1b776f03ef87b61377c33c3edba3817fc952eb47
+baseline_tree=1b776f03ef87b61377c33c3edba3817fc952eb47
+working_tree_clean=true

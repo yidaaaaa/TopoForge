@@ -1,0 +1,1102 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 8a9bfb4..1868ac4 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -4,7 +4,7 @@
+ 
+ TopoForge turns real elevation rasters into dimensionally controlled, printable terrain artifacts. The core engine is CLI-first and is the sole source of business logic for future API and Web surfaces. Geospatial calculations use metres in an explicit projected CRS; manufacturing meshes use millimetres.
+ 
+-The current milestone is the local GeoTIFF/synthetic Phase 1 pipeline. Global providers, advanced tiling/connectors, API, and Web follow only after the local pipeline passes its quality gate.
++The validated core includes local and no-key global AOI acquisition, printer-aware sampling, orientation, resource preflight, deterministic manufacturing exports, provenance, and slicer evidence. The current milestone is Phase 5 deterministic tiling, assembly manifests/maps, seam contracts, and connectors. Worker API and Web follow only after tile/assembly contracts pass their quality gate.
+ 
+ ## Architecture
+ 
+diff --git a/README.md b/README.md
+index ec80d0e..2222c80 100644
+--- a/README.md
++++ b/README.md
+@@ -2,7 +2,7 @@
+ 
+ TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
+ 
+-**Implemented milestone (TopoForge 0.3.0):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Additional provider implementations, tiling/connectors, API, and Web remain on the authoritative roadmap in `.agent/PLANS.md`.
++**Implemented milestone (TopoForge 0.3.1):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, explicit adapt/strict cell-triangle-memory budgets, build-volume/vertical-scale preflight, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Phase 5 tiling/assembly/connectors is next; worker API and Web follow stable tile contracts.
+ 
+ ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
+ 
+@@ -47,7 +47,7 @@ This is a software-validated example, not a claim of a completed physical P2S pr
+ 
+ ## Printer-aware fidelity rebuild
+ 
+-The existing real source raster was reused without another download and rebuilt under `outputs/gongga-copernicus-glo30-fidelity-v2`:
++The existing real source raster was reused without another download. The fidelity baseline remains under `outputs/gongga-copernicus-glo30-fidelity-v2`; the 0.3.1 resource/preflight rebuild is under `outputs/gongga-copernicus-glo30-resource-v3`:
+ 
+ | Measurement | Source DEM | Processed DEM / model |
+ | --- | --- | --- |
+@@ -58,9 +58,10 @@ The existing real source raster was reused without another download and rebuilt
+ | Physical mesh sampling | — | `0.40018 mm` |
+ | Triangle count | — | `791,952` |
+ | Axes | source row 0 north | `+X East, +Y North, +Z Up` |
++| Resource preflight | — | `197,989` cells, `791,952 / 900,000` triangles, `60.421 / 768 MiB`, all hard gates passed |
+ | Diagnostic slice | — | PrusaSlicer exit `0`, `149` layers, no floating/empty/out-of-bed/support warning |
+ 
+-The source is a DSM. A previously confirmed published nominal summit elevation is recorded only as context; `terrain_adjustment_applied=false`, so no synthetic spike or elevation correction is introduced. Exact checksums are in `outputs/gongga-copernicus-glo30-fidelity-v2/checksums.sha256`.
++The source is a DSM. A previously confirmed published nominal summit elevation is recorded only as context; `terrain_adjustment_applied=false`, so no synthetic spike or elevation correction is introduced. `manufacturing_preflight.json` records printer fit, headroom, sampling/resource utilization, vertical-policy adjustment, warnings, and suggested actions. Exact checksums are bound by each bundle's `build_manifest.json`; the release verification record is under `artifacts/verification/`.
+ 
+ ## Verified no-key Amazon provider example
+ 
+@@ -104,7 +105,9 @@ uv run topoforge build \
+   --printer-profile bambu-p2s-0.4 \
+   --sampling-mode print-aware \
+   --max-grid-cells 600000 \
++  --max-estimated-triangles 900000 \
+   --max-estimated-memory-mb 768 \
++  --resource-budget-mode adapt \
+   --bbox 101.67 29.45 101.998 29.73 \
+   --dataset-type dtm \
+   --vertical-datum unknown \
+@@ -113,7 +116,21 @@ uv run topoforge build \
+   --output outputs/local-dem
+ ```
+ 
+-A depth of `0` preserves the raster aspect ratio. An explicit depth that conflicts with the geographic aspect ratio is rejected rather than applying hidden horizontal distortion. `--center LON LAT --radius-m METRES` is the center-radius AOI form. AOIs are normalized in WGS84, clipped to source pixels before metric reprojection, and recorded in provenance.
++A depth of `0` preserves the raster aspect ratio. An explicit depth that conflicts with the geographic aspect ratio is rejected rather than applying hidden horizontal distortion. `--resource-budget-mode adapt` deterministically coarsens a request when a cell, triangle, or memory limit is exceeded and records the limiting setting; `strict` rejects it with requested cells/triangles/memory and corrective actions. `--center LON LAT --radius-m METRES` is the center-radius AOI form. AOIs are normalized in WGS84, clipped to source pixels before metric reprojection, and recorded in provenance.
++
++Inspect resource and printer fit without publishing a model bundle:
++
++```bash
++uv run topoforge preflight \
++  --dem data/input.tif \
++  --size-mm 200 0 --max-height-mm 45 \
++  --sampling-mode print-aware \
++  --max-grid-cells 600000 \
++  --max-estimated-triangles 900000 \
++  --max-estimated-memory-mb 768
++```
++
++Preflight reuses the production raster and scaling path in a temporary directory and reports resolved dimensions, build-volume headroom/utilization, source/processed grids, exact triangle estimate, memory estimate, physical spacing, vertical exaggeration, hard-gate booleans, warnings, and suggested actions.
+ 
+ ## Fetch or build from the no-key global provider
+ 
+@@ -174,6 +191,7 @@ model.3mf
+ preview.glb
+ processed_dem.tif
+ original_nodata_mask.tif
++manufacturing_preflight.json
+ provenance.json
+ validation.json
+ validation.html
+@@ -211,6 +229,7 @@ Evidence is attached to `validation.json`, `provenance.json`, `build_manifest.js
+ ```text
+ topoforge build       local GeoTIFF to complete artifact bundle
+ topoforge build-global no-key Copernicus AWS AOI to complete artifact bundle
++topoforge preflight   printer fit, sampling, triangles, memory, and vertical-scale report
+ topoforge fetch-dem   cache and normalize a Copernicus AWS AOI GeoTIFF
+ topoforge synthetic   deterministic analytic GeoTIFF fixtures
+ topoforge inspect     raster/STL/GLB/3MF measurements
+@@ -225,7 +244,9 @@ topoforge doctor      Python/GDAL/PROJ/slicer versions
+ ## Correctness policy
+ 
+ - Geographic rasters are explicitly AOI-clipped, then reprojected to a north-up metric CRS before mesh construction.
+-- `print-aware`, `source-preserving`, and `custom` sampling modes combine source resolution, model size, nozzle/minimum-feature limits, cell count, triangle estimate, and memory estimate.
++- `print-aware`, `source-preserving`, and `custom` sampling modes combine source resolution, model size, nozzle/minimum-feature limits, cell count, exact triangle estimate, and memory estimate.
++- `adapt` resource mode deterministically reduces the requested grid and records the limiting budget; `strict` rejects rather than silently reducing it.
++- Every build publishes `manufacturing_preflight.json` and embeds the identical object in validation and provenance; bundle verification reopens and cross-checks all three copies.
+ - Source and processed resolution, grid shape, peak loss, peak shift, and sampling reasons are reported separately; processed data is never labeled with source resolution.
+ - Manufacturing axes are `+X East`, `+Y North`, `+Z Up`; source row 0 is flipped to the model north edge, and STL/GLB/3MF peak coordinates are cross-checked.
+ - Rotated raster corner gaps are cropped to the largest source-covered rectangle.
+@@ -247,7 +268,7 @@ uv run pyright
+ uv run pytest
+ ```
+ 
+-The 113-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run.
++The 141-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, adapt/strict manufacturing preflight and build-volume gates, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run.
+ 
+ ## Documentation
+ 
+diff --git a/docs/architecture.md b/docs/architecture.md
+index 2e2c5cf..a96332d 100644
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -13,17 +13,18 @@ BuildConfig (Pydantic)
+   -> north-up metric CRS selection/reprojection after clipping
+   -> source-coverage crop for rotated reprojection corners
+   -> deterministic print-aware/source-preserving/custom sampling
+-  -> cell/triangle/memory budget enforcement with average resampling
++  -> adapt/strict cell/triangle/memory budget enforcement with average resampling
+   -> conservative interior-hole NoData fill + preserved binary mask
+   -> processed_dem.tif
+   -> aspect-preserving horizontal scale
+   -> natural / fit-height / auto-perceptual / custom vertical scale
++  -> manufacturing preflight: printer fit/headroom, resource utilization, height policy
+   -> row flip from raster-north row 0 to manufacturing +Y North
+   -> explicit regular-grid top + perimeter walls + flat bottom
+   -> in-memory geometry invariants
+   -> STL + lib3mf 3MF + GLB
+   -> reopened STL validation + strict lib3mf reread + OPC/XML hardening
+-  -> preview.png + provenance/validation/config/manifest
++  -> preview.png + manufacturing_preflight/provenance/validation/config/manifest
+   -> official Bambu Studio P2S release gate + optional diagnostic slicers
+   -> separate interoperable model.3mf and embedded-settings model.bambu-p2s.3mf
+ ```
+@@ -40,7 +41,7 @@ Builds use a sibling staging directory. Every required file is written and reope
+ - `validation`: measured geometry, official Bambu Studio/P2S release checks, and optional OrcaSlicer/PrusaSlicer diagnostics.
+ - `rendering`: hillshade/color derived only from measured elevation samples.
+ - `provenance`: stable JSON and dependency-free HTML reports.
+-- `engine`: atomic orchestration and bundle verification.
++- `engine`: atomic orchestration, reusable local preflight, and bundle verification. `preflight_local_terrain()` runs the production raster/scaling path in a temporary directory without publishing a build.
+ - `cli`: Typer argument parsing and JSON presentation.
+ - `providers`: normalized-AOI provider contracts, explainable deterministic selection/fetch fallback, Copernicus AWS catalog/tile/ancillary-mask planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
+ - `geocoding`: cached Nominatim-compatible candidate search and explicit ambiguity resolution; selected candidates become ordinary recorded AOIs before provider selection.
+@@ -57,4 +58,4 @@ The interoperable 3MF path adds official lib3mf strict read with zero warnings,
+ 
+ ## Extension sequence
+ 
+-The local/resolved-place AOI, printer-aware sampling, content-addressed cache, configurable no-key Copernicus AWS GLO-30/GLO-90 provider, explainable provider-selection/fetch-fallback engine, Nominatim-compatible candidate handling, and quality-mask preservation are complete. Network acquisitions enter the existing local pipeline as a metric AOI raster plus `source_acquisition.json`; no download-first parallel geometry path exists. Next steps are additional production provider implementations, remaining manufacturing-resource UX, tiling, API, and Web.
++The local/resolved-place AOI, printer-aware sampling, adapt/strict resource budgets, manufacturing preflight, content-addressed cache, configurable no-key Copernicus AWS GLO-30/GLO-90 provider, explainable provider-selection/fetch-fallback engine, Nominatim-compatible candidate handling, and quality-mask preservation are complete. Network acquisitions enter the existing local pipeline as a metric AOI raster plus `source_acquisition.json`; no download-first parallel geometry path exists. Phase 5 now defines deterministic tile IDs, overlap/seam contracts, assembly manifests/maps, multi-tile mesh assembly, and connector tolerances. Worker API work begins after those contracts stabilize; Web follows the API contract.
+diff --git a/docs/provenance.md b/docs/provenance.md
+index fba3b02..0b97d31 100644
+--- a/docs/provenance.md
++++ b/docs/provenance.md
+@@ -2,10 +2,10 @@
+ 
+ Each build writes source checksums; dataset provider/name/version/type; distinct source and processed horizontal resolution/grid shape; vertical CRS/datum or `unknown`; acquisition period; license/attribution; source URLs; original NoData and interpolation percentages; projection/resampling pipeline; horizontal scale; baseline; robust elevation range; vertical exaggeration; geometry method; output format writer; validation; and slicer evidence. For the default P2S target, provenance also records the official Bambu Studio asset/version/hash, flattened machine/process/filament preset hashes, resolved print parameters, normative-check result, G-code metrics, Bambu project 3MF hash, reopen/reslice result, and the release-gate decision.
+ 
+-`build_manifest.json` binds artifacts to SHA-256 values. `build_config.resolved.yaml` records all defaults and CLI overrides. `original_nodata_mask.tif` preserves the pre-interpolation mask. Dataset rights are not replaced by the Apache-2.0 code license.
++`build_manifest.json` binds artifacts to SHA-256 values. `build_config.resolved.yaml` records all defaults and CLI overrides. `original_nodata_mask.tif` preserves the pre-interpolation mask. `manufacturing_preflight.json` records the resolved printer profile/volume, model dimensions and headroom, source/processed grid cells, hard cell/triangle/memory gates and utilization, physical sample spacing, requested/resolved vertical exaggeration, height-limit action, warnings, and suggested actions. The identical preflight object is embedded in `validation.json` and `provenance.json` and is cross-checked during bundle verification. Dataset rights are not replaced by the Apache-2.0 code license.
+ 
+ 
+-Sampling/fidelity fields include `source_horizontal_resolution_m`, `processed_horizontal_resolution_m`, `source_grid_shape`, `processed_grid_shape`, `downsampling_factor`, `physical_sample_spacing_mm`, `estimated_triangle_count`, raw/processed elevation extrema, raw/processed peak coordinates, peak loss/shift and thresholds, `sampling_decision_reasons`, warnings, and `terrain_fidelity_status`. Published summit elevations are contextual comparisons only and always record whether any terrain adjustment was applied.
++Sampling/fidelity fields include `resource_budget_mode`, `max_estimated_triangles`, and `source_horizontal_resolution_m`, `processed_horizontal_resolution_m`, `source_grid_shape`, `processed_grid_shape`, `downsampling_factor`, `physical_sample_spacing_mm`, `estimated_triangle_count`, raw/processed elevation extrema, raw/processed peak coordinates, peak loss/shift and thresholds, `sampling_decision_reasons`, warnings, and `terrain_fidelity_status`. Published summit elevations are contextual comparisons only and always record whether any terrain adjustment was applied.
+ 
+ AOI provenance stores the exact user bbox or center-radius input, normalized WGS84 bounds/geometry, antimeridian status, selected local metric CRS, source pixel window, full/selected grid shape, pixel bounds, and full/partial coverage status. Orientation provenance and 3MF metadata store `east_axis`, `north_axis`, `north_edge`, `source_bounds`, and `orientation_transform`.
+ 
+diff --git a/pyproject.toml b/pyproject.toml
+index 9d25af2..30c02b1 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
+ 
+ [project]
+ name = "topoforge"
+-version = "0.3.0"
++version = "0.3.1"
+ description = "Reproducible, provenance-aware terrain models for additive manufacturing"
+ readme = "README.md"
+ license = { text = "Apache-2.0" }
+diff --git a/src/topoforge/cli/app.py b/src/topoforge/cli/app.py
+index 7b1371d..af73660 100644
+--- a/src/topoforge/cli/app.py
++++ b/src/topoforge/cli/app.py
+@@ -18,7 +18,12 @@ from rasterio.errors import RasterioError
+ 
+ from topoforge import __version__
+ from topoforge.config import DEFAULT_PRINTER_PROFILE_ID, get_printer_profile, load_build_config
+-from topoforge.engine import build_local_terrain, record_slice_validation, verify_artifact_bundle
++from topoforge.engine import (
++    build_local_terrain,
++    preflight_local_terrain,
++    record_slice_validation,
++    verify_artifact_bundle,
++)
+ from topoforge.exceptions import TopoForgeError
+ from topoforge.exporters.three_mf import inspect_3mf
+ from topoforge.geocoding import (
+@@ -33,6 +38,7 @@ from topoforge.models import (
+     AreaOfInterestInput,
+     BuildConfig,
+     DatasetType,
++    ResourceBudgetMode,
+     SamplingMode,
+     TerrainMode,
+     VerticalScaleMode,
+@@ -220,6 +226,14 @@ def build(
+     max_grid_cells: Annotated[
+         int, typer.Option("--max-grid-cells", min=16, help="Hard processed-grid cell budget.")
+     ] = 1_500_000,
++    max_estimated_triangles: Annotated[
++        int | None,
++        typer.Option("--max-estimated-triangles", min=12, help="Hard triangle budget."),
++    ] = None,
++    resource_budget_mode: Annotated[
++        ResourceBudgetMode,
++        typer.Option("--resource-budget-mode", help="adapt or strict."),
++    ] = ResourceBudgetMode.ADAPT,
+     max_estimated_memory_mb: Annotated[
+         float,
+         typer.Option("--max-estimated-memory-mb", min=1.0, help="Estimated mesh memory budget."),
+@@ -268,6 +282,8 @@ def build(
+                 "sampling_mode": ("sampling_mode", sampling_mode),
+                 "mesh_sampling_mm": ("mesh_sampling_mm", mesh_sampling_mm),
+                 "max_grid_cells": ("max_grid_cells", max_grid_cells),
++                "max_estimated_triangles": ("max_estimated_triangles", max_estimated_triangles),
++                "resource_budget_mode": ("resource_budget_mode", resource_budget_mode),
+                 "max_estimated_memory_mb": (
+                     "max_estimated_memory_mb",
+                     max_estimated_memory_mb,
+@@ -314,7 +330,9 @@ def build(
+                 sampling_mode=sampling_mode,
+                 mesh_sampling_mm=mesh_sampling_mm,
+                 max_grid_cells=max_grid_cells,
++                max_estimated_triangles=max_estimated_triangles,
+                 max_estimated_memory_mb=max_estimated_memory_mb,
++                resource_budget_mode=resource_budget_mode,
+                 aoi=(
+                     AreaOfInterestInput(
+                         bbox_wgs84=bbox,
+@@ -359,6 +377,74 @@ def build(
+         _fail(exc)
+ 
+ 
++@app.command("preflight")
++def preflight(
++    dem: Annotated[Path | None, typer.Option("--dem")] = None,
++    config: Annotated[Path | None, typer.Option("--config")] = None,
++    size_mm: Annotated[tuple[float, float], typer.Option("--size-mm")] = (180.0, 0.0),
++    base_mm: Annotated[float, typer.Option("--base-mm", min=0.01)] = 3.0,
++    max_height_mm: Annotated[float, typer.Option("--max-height-mm", min=0.01)] = 45.0,
++    printer_profile: Annotated[str, typer.Option("--printer-profile")] = DEFAULT_PRINTER_PROFILE_ID,
++    vertical_scale: Annotated[
++        VerticalScaleMode, typer.Option("--vertical-scale")
++    ] = VerticalScaleMode.AUTO_PERCEPTUAL,
++    vertical_exaggeration: Annotated[
++        float, typer.Option("--vertical-exaggeration", min=0.01)
++    ] = 1.0,
++    sampling_mode: Annotated[
++        SamplingMode, typer.Option("--sampling-mode")
++    ] = SamplingMode.PRINT_AWARE,
++    mesh_sampling_mm: Annotated[float | None, typer.Option("--mesh-sampling-mm")] = None,
++    max_grid_cells: Annotated[int, typer.Option("--max-grid-cells", min=16)] = 1_500_000,
++    max_estimated_triangles: Annotated[
++        int | None, typer.Option("--max-estimated-triangles", min=12)
++    ] = None,
++    max_estimated_memory_mb: Annotated[
++        float, typer.Option("--max-estimated-memory-mb", min=1.0)
++    ] = 1024.0,
++    resource_budget_mode: Annotated[
++        ResourceBudgetMode, typer.Option("--resource-budget-mode")
++    ] = ResourceBudgetMode.ADAPT,
++    bbox: Annotated[tuple[float, float, float, float] | None, typer.Option("--bbox")] = None,
++    center: Annotated[tuple[float, float] | None, typer.Option("--center")] = None,
++    radius_m: Annotated[float | None, typer.Option("--radius-m", min=0.001)] = None,
++) -> None:
++    """Resolve printer fit, sampling, triangles, memory, and vertical scale without a build."""
++    try:
++        if config is not None:
++            if dem is not None:
++                raise ValueError("use either --config or --dem for preflight")
++            resolved = load_build_config(config)
++        else:
++            if dem is None:
++                raise ValueError("--dem is required unless --config is supplied")
++            resolved = BuildConfig(
++                dem_path=dem,
++                output_dir=Path("outputs/preflight-not-published"),
++                model_width_mm=size_mm[0],
++                model_depth_mm=size_mm[1] if size_mm[1] > 0 else None,
++                base_thickness_mm=base_mm,
++                max_height_mm=max_height_mm,
++                printer_profile=get_printer_profile(printer_profile),
++                vertical_scale_mode=vertical_scale,
++                vertical_exaggeration=vertical_exaggeration,
++                sampling_mode=sampling_mode,
++                mesh_sampling_mm=mesh_sampling_mm,
++                max_grid_cells=max_grid_cells,
++                max_estimated_triangles=max_estimated_triangles,
++                max_estimated_memory_mb=max_estimated_memory_mb,
++                resource_budget_mode=resource_budget_mode,
++                aoi=(
++                    AreaOfInterestInput(bbox_wgs84=bbox, center_wgs84=center, radius_m=radius_m)
++                    if bbox is not None or center is not None or radius_m is not None
++                    else None
++                ),
++            )
++        _emit(preflight_local_terrain(resolved).model_dump(mode="json"))
++    except (TopoForgeError, ValueError, OSError) as exc:
++        _fail(exc)
++
++
+ @app.command("synthetic")
+ def synthetic_command(
+     output: Annotated[Path, typer.Option("--output", "-o")] = Path(
+@@ -661,6 +747,12 @@ def build_global(
+     ),
+     mesh_sampling_mm: Annotated[float | None, typer.Option("--mesh-sampling-mm", min=0.001)] = None,
+     max_grid_cells: Annotated[int, typer.Option("--max-grid-cells", min=16)] = 1_500_000,
++    max_estimated_triangles: Annotated[
++        int | None, typer.Option("--max-estimated-triangles", min=12)
++    ] = None,
++    resource_budget_mode: Annotated[
++        ResourceBudgetMode, typer.Option("--resource-budget-mode")
++    ] = ResourceBudgetMode.ADAPT,
+     max_estimated_memory_mb: Annotated[
+         float, typer.Option("--max-estimated-memory-mb", min=1.0)
+     ] = 1024.0,
+@@ -730,7 +822,9 @@ def build_global(
+             sampling_mode=sampling_mode,
+             mesh_sampling_mm=mesh_sampling_mm,
+             max_grid_cells=max_grid_cells,
++            max_estimated_triangles=max_estimated_triangles,
+             max_estimated_memory_mb=max_estimated_memory_mb,
++            resource_budget_mode=resource_budget_mode,
+             aoi=request,
+             dataset_type=dataset.dataset_type,
+             dataset_name=dataset.dataset_name,
+diff --git a/src/topoforge/engine/__init__.py b/src/topoforge/engine/__init__.py
+index c80ecd3..e903f5b 100644
+--- a/src/topoforge/engine/__init__.py
++++ b/src/topoforge/engine/__init__.py
+@@ -6,10 +6,18 @@ from topoforge.engine.build import (
+     record_slice_validation,
+     verify_artifact_bundle,
+ )
++from topoforge.engine.preflight import (
++    ManufacturingPreflightReport,
++    evaluate_manufacturing_preflight,
++    preflight_local_terrain,
++)
+ 
+ __all__ = [
+     "BuildResult",
++    "ManufacturingPreflightReport",
+     "build_local_terrain",
++    "evaluate_manufacturing_preflight",
++    "preflight_local_terrain",
+     "record_slice_validation",
+     "verify_artifact_bundle",
+ ]
+diff --git a/src/topoforge/engine/build.py b/src/topoforge/engine/build.py
+index c5a089c..aa4ba27 100644
+--- a/src/topoforge/engine/build.py
++++ b/src/topoforge/engine/build.py
+@@ -19,6 +19,10 @@ from rasterio.crs import CRS as RasterioCRS
+ 
+ from topoforge import __version__
+ from topoforge.config import dump_resolved_config
++from topoforge.engine.preflight import (
++    ManufacturingPreflightReport,
++    evaluate_manufacturing_preflight,
++)
+ from topoforge.exceptions import ConfigurationError, MeshValidationError
+ from topoforge.exporters import export_glb, export_stl
+ from topoforge.exporters.three_mf import ThreeMFInspection, export_3mf, inspect_3mf
+@@ -146,6 +150,7 @@ def _artifact_map(stage: Path, formats: list[str]) -> dict[str, Path]:
+     artifacts: dict[str, Path] = {
+         "processed_dem": stage / "processed_dem.tif",
+         "original_nodata_mask": stage / "original_nodata_mask.tif",
++        "manufacturing_preflight": stage / "manufacturing_preflight.json",
+         "provenance": stage / "provenance.json",
+         "validation_json": stage / "validation.json",
+         "validation_html": stage / "validation.html",
+@@ -236,6 +241,13 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+             write_json(artifacts["source_acquisition"], source_acquisition)
+         processed = process_local_raster(stage_config)
+         scaling = resolve_scaling(processed.elevations_m, processed.report, resolved_config)
++        manufacturing_preflight = evaluate_manufacturing_preflight(
++            processed.report, scaling, resolved_config
++        )
++        write_json(
++            artifacts["manufacturing_preflight"],
++            manufacturing_preflight.model_dump(mode="json"),
++        )
+         top_z_mm = apply_vertical_scale(processed.elevations_m, scaling)
+         expected_peak_mm = _expected_model_peak_mm(
+             processed.elevations_m,
+@@ -304,10 +316,13 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+         )
+         validation["mesh_units"] = "millimetres by TopoForge coordinate contract"
+         validation["estimated_triangle_count"] = processed.report.estimated_triangle_count
+-        validation["triangle_budget"] = config.max_grid_cells * 4 - 4
++        validation["triangle_budget"] = config.max_estimated_triangles or (
++            config.max_grid_cells * 4 - 4
++        )
+         validation["triangle_budget_passed"] = int(validation["triangle_count"]) <= int(
+             validation["triangle_budget"]
+         )
++        validation["manufacturing_preflight"] = manufacturing_preflight.model_dump(mode="json")
+         validation["height_limit_mm"] = scaling.height_limit_mm
+         validation["height_limit_passed"] = (
+             float(validation["dimensions_mm"][2]) <= scaling.height_limit_mm + 0.05
+@@ -471,6 +486,7 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+             "source_acquisition": source_acquisition,
+             "dataset": processed.report.metadata.model_dump(mode="json"),
+             "source_file_checksums": processed.report.metadata.checksums,
++            "manufacturing_preflight": manufacturing_preflight.model_dump(mode="json"),
+             "elevation_reference_comparison": {
+                 "raw_dem_peak_elevation_m": processed.report.raw_elevation_max_m,
+                 "published_reference_peak_elevation_m": config.reference_peak_elevation_m,
+@@ -490,7 +506,10 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+                     "read metadata",
+                     "normalize to a north-up metric CRS when required",
+                     "resolve print-aware/source-preserving/custom sampling",
+-                    "enforce deterministic cell and memory budgets using average resampling",
++                    (
++                        "enforce deterministic cell, triangle, and memory budgets "
++                        "using average resampling"
++                    ),
+                     "preserve original NoData mask",
+                     "interpolate bounded interior holes from nearest valid cells",
+                     "write processed DEM",
+@@ -512,7 +531,9 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+                 "sampling_mode": config.sampling_mode.value,
+                 "mesh_sampling_mm": config.mesh_sampling_mm,
+                 "max_grid_cells": config.max_grid_cells,
++                "max_estimated_triangles": config.max_estimated_triangles,
+                 "max_estimated_memory_mb": config.max_estimated_memory_mb,
++                "resource_budget_mode": config.resource_budget_mode.value,
+                 "sampling_decision_reasons": processed.report.sampling_decision_reasons,
+                 "sampling_warnings": processed.report.sampling_warnings,
+                 "horizontal_resolution_m": (processed.report.processed_horizontal_resolution_m),
+@@ -635,6 +656,7 @@ def verify_artifact_bundle(
+     required = [
+         "processed_dem.tif",
+         "original_nodata_mask.tif",
++        "manufacturing_preflight.json",
+         "provenance.json",
+         "validation.json",
+         "validation.html",
+@@ -668,6 +690,16 @@ def verify_artifact_bundle(
+             raise MeshValidationError("Reopened original_nodata_mask.tif is not binary")
+     provenance = json.loads((output_dir / "provenance.json").read_text(encoding="utf-8"))
+     validation = json.loads((output_dir / "validation.json").read_text(encoding="utf-8"))
++    preflight = ManufacturingPreflightReport.model_validate_json(
++        (output_dir / "manufacturing_preflight.json").read_text(encoding="utf-8")
++    )
++    if preflight.status not in {"passed", "passed-with-warnings"}:
++        raise MeshValidationError("manufacturing_preflight.json did not pass")
++    preflight_payload = preflight.model_dump(mode="json")
++    if validation.get("manufacturing_preflight") != preflight_payload:
++        raise MeshValidationError("validation.json manufacturing preflight does not match artifact")
++    if provenance.get("manufacturing_preflight") != preflight_payload:
++        raise MeshValidationError("provenance.json manufacturing preflight does not match artifact")
+     manifest = json.loads((output_dir / "build_manifest.json").read_text(encoding="utf-8"))
+     manifest_artifacts = manifest.get("artifacts", {})
+     manifest_checksums = manifest.get("sha256", {})
+diff --git a/src/topoforge/engine/preflight.py b/src/topoforge/engine/preflight.py
+new file mode 100644
+index 0000000..41d7f1d
+--- /dev/null
++++ b/src/topoforge/engine/preflight.py
+@@ -0,0 +1,195 @@
++"""Deterministic manufacturing resource and build-volume preflight."""
++
++from __future__ import annotations
++
++import tempfile
++from pathlib import Path
++
++from pydantic import BaseModel, ConfigDict, Field
++
++from topoforge.exceptions import ConfigurationError
++from topoforge.models import BuildConfig, RasterResult, ScalingResult
++from topoforge.raster import process_local_raster
++from topoforge.scaling import resolve_scaling
++
++
++class ManufacturingPreflightReport(BaseModel):
++    """Resolved resource, scale, and printer-fit evidence before mesh export."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    status: str
++    printer_profile_id: str
++    printer_build_volume_mm: tuple[float, float, float]
++    resolved_model_dimensions_mm: tuple[float, float, float]
++    build_volume_passed: bool
++    build_volume_utilization: dict[str, float]
++    build_volume_headroom_mm: dict[str, float]
++    base_thickness_mm: float
++    terrain_height_budget_mm: float
++    source_grid_shape: tuple[int, int]
++    processed_grid_shape: tuple[int, int]
++    source_grid_cells: int = Field(gt=0)
++    processed_grid_cells: int = Field(gt=0)
++    max_grid_cells: int = Field(gt=0)
++    grid_cell_budget_passed: bool
++    grid_cell_budget_utilization: float = Field(ge=0)
++    estimated_triangle_count: int = Field(gt=0)
++    maximum_estimated_triangles: int = Field(gt=0)
++    triangle_budget_passed: bool
++    triangle_budget_utilization: float = Field(ge=0)
++    estimated_memory_mb: float = Field(gt=0)
++    maximum_estimated_memory_mb: float = Field(gt=0)
++    memory_budget_passed: bool
++    memory_budget_utilization: float = Field(ge=0)
++    physical_sample_spacing_xy_mm: tuple[float, float]
++    sampling_mode: str
++    resource_budget_mode: str
++    vertical_scale_mode: str
++    policy_vertical_exaggeration: float = Field(gt=0)
++    resolved_vertical_exaggeration: float = Field(gt=0)
++    height_limit_applied: bool
++    height_limit_passed: bool
++    decisions: list[str]
++    warnings: list[str]
++    suggested_actions: list[str]
++
++
++def evaluate_manufacturing_preflight(
++    raster: RasterResult,
++    scaling: ScalingResult,
++    config: BuildConfig,
++) -> ManufacturingPreflightReport:
++    """Measure resource usage and printer fit from the same resolved build state."""
++    build_x, build_y, build_z = config.printer_profile.build_volume_mm
++    resolved_dimensions = (
++        scaling.model_width_mm,
++        scaling.model_depth_mm,
++        scaling.predicted_max_z_mm,
++    )
++    utilization = {
++        "x": scaling.model_width_mm / build_x,
++        "y": scaling.model_depth_mm / build_y,
++        "z": scaling.predicted_max_z_mm / build_z,
++    }
++    headroom = {
++        "x": build_x - scaling.model_width_mm,
++        "y": build_y - scaling.model_depth_mm,
++        "z": build_z - scaling.predicted_max_z_mm,
++    }
++    processed_cells = raster.processed_grid_shape[0] * raster.processed_grid_shape[1]
++    source_cells = raster.source_grid_shape[0] * raster.source_grid_shape[1]
++    triangle_limit = config.max_estimated_triangles or (config.max_grid_cells * 4 - 4)
++    build_volume_passed = all(value <= 1.0 + 1e-9 for value in utilization.values())
++    grid_cell_budget_passed = processed_cells <= config.max_grid_cells
++    triangle_budget_passed = raster.estimated_triangle_count <= triangle_limit
++    memory_budget_passed = raster.estimated_memory_mb <= config.max_estimated_memory_mb + 1e-9
++    height_limit_passed = scaling.predicted_max_z_mm <= scaling.height_limit_mm + 0.05
++    failed_gates = [
++        name
++        for name, passed in (
++            ("printer build volume", build_volume_passed),
++            ("grid cell budget", grid_cell_budget_passed),
++            ("triangle budget", triangle_budget_passed),
++            ("memory budget", memory_budget_passed),
++            ("model height limit", height_limit_passed),
++        )
++        if not passed
++    ]
++    if failed_gates:
++        joined = ", ".join(failed_gates)
++        raise ConfigurationError(f"manufacturing preflight failed hard gates: {joined}")
++    warnings = list(raster.sampling_warnings)
++    actions: list[str] = []
++    for axis, value in utilization.items():
++        if value >= 0.9:
++            warnings.append(
++                f"model uses {value * 100:.1f}% of printer {axis.upper()} build dimension"
++            )
++            actions.append(
++                f"reduce model {axis.upper()} dimension or select a larger printer profile"
++            )
++    if raster.estimated_memory_mb / config.max_estimated_memory_mb >= 0.9:
++        warnings.append("estimated memory uses at least 90% of the configured budget")
++        actions.append("increase max_estimated_memory_mb or use coarser sampling")
++    if processed_cells / config.max_grid_cells >= 0.9:
++        warnings.append("processed grid uses at least 90% of max_grid_cells")
++        actions.append("increase max_grid_cells or use coarser sampling")
++    if raster.estimated_triangle_count / triangle_limit >= 0.9:
++        warnings.append("estimated mesh uses at least 90% of the triangle budget")
++        actions.append("increase max_estimated_triangles or use coarser sampling")
++    if scaling.height_limit_applied:
++        warnings.append("vertical exaggeration was reduced to satisfy the hard model-height limit")
++        actions.append(
++            "increase max_height_mm, lower minimum vertical exaggeration, or reduce model width"
++        )
++    decisions = [
++        *raster.sampling_decision_reasons,
++        (
++            f"resolved footprint is {scaling.model_width_mm:.6f} x "
++            f"{scaling.model_depth_mm:.6f} mm inside printer volume "
++            f"{build_x:.6f} x {build_y:.6f} x {build_z:.6f} mm"
++        ),
++        (
++            f"terrain height budget is "
++            f"{scaling.height_limit_mm - scaling.base_thickness_mm:.6f} mm above a "
++            f"{scaling.base_thickness_mm:.6f} mm base"
++        ),
++        (
++            f"vertical policy requested {scaling.policy_vertical_exaggeration:.9g}x and "
++            f"resolved {scaling.vertical_exaggeration:.9g}x"
++        ),
++        (
++            f"estimated resources are {processed_cells} cells, "
++            f"{raster.estimated_triangle_count} triangles, "
++            f"{raster.estimated_memory_mb:.6f} MiB"
++        ),
++    ]
++    return ManufacturingPreflightReport(
++        status="passed-with-warnings" if warnings else "passed",
++        printer_profile_id=config.printer_profile.profile_id,
++        printer_build_volume_mm=config.printer_profile.build_volume_mm,
++        resolved_model_dimensions_mm=resolved_dimensions,
++        build_volume_passed=build_volume_passed,
++        build_volume_utilization=utilization,
++        build_volume_headroom_mm=headroom,
++        base_thickness_mm=scaling.base_thickness_mm,
++        terrain_height_budget_mm=scaling.height_limit_mm - scaling.base_thickness_mm,
++        source_grid_shape=raster.source_grid_shape,
++        processed_grid_shape=raster.processed_grid_shape,
++        source_grid_cells=source_cells,
++        processed_grid_cells=processed_cells,
++        max_grid_cells=config.max_grid_cells,
++        grid_cell_budget_passed=grid_cell_budget_passed,
++        grid_cell_budget_utilization=processed_cells / config.max_grid_cells,
++        estimated_triangle_count=raster.estimated_triangle_count,
++        maximum_estimated_triangles=triangle_limit,
++        triangle_budget_passed=triangle_budget_passed,
++        triangle_budget_utilization=raster.estimated_triangle_count / triangle_limit,
++        estimated_memory_mb=raster.estimated_memory_mb,
++        maximum_estimated_memory_mb=config.max_estimated_memory_mb,
++        memory_budget_passed=memory_budget_passed,
++        memory_budget_utilization=raster.estimated_memory_mb / config.max_estimated_memory_mb,
++        physical_sample_spacing_xy_mm=raster.physical_sample_spacing_xy_mm,
++        sampling_mode=config.sampling_mode.value,
++        resource_budget_mode=config.resource_budget_mode.value,
++        vertical_scale_mode=config.vertical_scale_mode.value,
++        policy_vertical_exaggeration=scaling.policy_vertical_exaggeration,
++        resolved_vertical_exaggeration=scaling.vertical_exaggeration,
++        height_limit_applied=scaling.height_limit_applied,
++        height_limit_passed=height_limit_passed,
++        decisions=decisions,
++        warnings=warnings,
++        suggested_actions=list(dict.fromkeys(actions)),
++    )
++
++
++def preflight_local_terrain(config: BuildConfig) -> ManufacturingPreflightReport:
++    """Run raster/scaling preflight without publishing a build output directory."""
++    source = config.dem_path.expanduser().resolve()
++    with tempfile.TemporaryDirectory(prefix="topoforge-preflight-") as raw_directory:
++        temporary = Path(raw_directory)
++        temporary_config = config.model_copy(update={"dem_path": source, "output_dir": temporary})
++        processed = process_local_raster(temporary_config)
++        scaling = resolve_scaling(processed.elevations_m, processed.report, config)
++        return evaluate_manufacturing_preflight(processed.report, scaling, config)
+diff --git a/src/topoforge/models/__init__.py b/src/topoforge/models/__init__.py
+index 807831c..1259a65 100644
+--- a/src/topoforge/models/__init__.py
++++ b/src/topoforge/models/__init__.py
+@@ -10,6 +10,7 @@ from topoforge.models.domain import (
+     DatasetType,
+     PrinterProfile,
+     RasterResult,
++    ResourceBudgetMode,
+     SamplingMode,
+     ScalingResult,
+     TerrainMode,
+@@ -26,6 +27,7 @@ __all__ = [
+     "DatasetType",
+     "PrinterProfile",
+     "RasterResult",
++    "ResourceBudgetMode",
+     "SamplingMode",
+     "ScalingResult",
+     "TerrainMode",
+diff --git a/src/topoforge/models/domain.py b/src/topoforge/models/domain.py
+index 7bfd815..5c59562 100644
+--- a/src/topoforge/models/domain.py
++++ b/src/topoforge/models/domain.py
+@@ -54,6 +54,13 @@ class SamplingMode(StrEnum):
+     CUSTOM = "custom"
+ 
+ 
++class ResourceBudgetMode(StrEnum):
++    """Whether resource limits adapt sampling or reject the request."""
++
++    ADAPT = "adapt"
++    STRICT = "strict"
++
++
+ class AreaOfInterestInput(BaseModel):
+     """User-supplied WGS84 bbox or geodesic center-radius request."""
+ 
+@@ -194,7 +201,9 @@ class BuildConfig(BaseModel):
+     sampling_mode: SamplingMode = SamplingMode.PRINT_AWARE
+     mesh_sampling_mm: float | None = Field(default=None, gt=0)
+     max_grid_cells: int = Field(default=1_500_000, ge=16)
++    max_estimated_triangles: int | None = Field(default=None, ge=12)
+     max_estimated_memory_mb: float = Field(default=1024.0, gt=0)
++    resource_budget_mode: ResourceBudgetMode = ResourceBudgetMode.ADAPT
+     aoi: AreaOfInterestInput | None = None
+     printer_profile: PrinterProfile = Field(default_factory=PrinterProfile)
+     output_formats: list[str] = Field(default_factory=lambda: ["stl", "3mf", "glb"])
+@@ -218,9 +227,15 @@ class BuildConfig(BaseModel):
+                 f"{self.printer_profile.profile_id}"
+             )
+             raise ValueError(msg)
+-        if self.max_height_mm > self.printer_profile.build_volume_mm[2]:
+-            msg = "max_height_mm exceeds the printer build height"
+-            raise ValueError(msg)
++        build_x, build_y, build_z = self.printer_profile.build_volume_mm
++        if self.model_width_mm > build_x:
++            raise ValueError("model_width_mm exceeds the printer build width")
++        if self.model_depth_mm is not None and self.model_depth_mm > build_y:
++            raise ValueError("model_depth_mm exceeds the printer build depth")
++        if self.max_height_mm > build_z:
++            raise ValueError("max_height_mm exceeds the printer build height")
++        if self.max_height_mm <= self.base_thickness_mm:
++            raise ValueError("max_height_mm must exceed base_thickness_mm")
+         if self.sampling_mode is not SamplingMode.CUSTOM and self.mesh_sampling_mm is not None:
+             msg = "mesh_sampling_mm is only valid when sampling_mode is custom"
+             raise ValueError(msg)
+diff --git a/src/topoforge/raster/sampling.py b/src/topoforge/raster/sampling.py
+index d7b78d2..91bf31a 100644
+--- a/src/topoforge/raster/sampling.py
++++ b/src/topoforge/raster/sampling.py
+@@ -5,7 +5,8 @@ from __future__ import annotations
+ import math
+ from dataclasses import dataclass
+ 
+-from topoforge.models import BuildConfig, SamplingMode
++from topoforge.exceptions import ConfigurationError
++from topoforge.models import BuildConfig, ResourceBudgetMode, SamplingMode
+ 
+ _ESTIMATED_BYTES_PER_GRID_CELL = 320
+ _MEBIBYTE = 1024 * 1024
+@@ -74,9 +75,9 @@ def resolve_sampling_decision(
+     source_spacing_x_mm = config.model_width_mm / max(source_columns - 1, 1)
+     source_spacing_y_mm = model_depth_mm / max(source_rows - 1, 1)
+     reasons = [
+-        f"source grid is {source_rows} x {source_columns}",
++        f"normalized metric grid before sampling is {source_rows} x {source_columns}",
+         (
+-            "source samples map to "
++            "normalized metric samples map to "
+             f"{source_spacing_x_mm:.6f} x {source_spacing_y_mm:.6f} mm on the model"
+         ),
+     ]
+@@ -103,7 +104,10 @@ def resolve_sampling_decision(
+                     f"feature ({config.printer_profile.minimum_feature_mm:.6f} mm)"
+                 ),
+                 f"resolved printer-aware target spacing is {printer_spacing_mm:.6f} mm",
+-                "target shape is capped at the source grid so no terrain detail is invented",
++                (
++                    "target shape is capped at the normalized metric grid so no terrain "
++                    "detail is invented"
++                ),
+             )
+         )
+     elif config.sampling_mode is SamplingMode.SOURCE_PRESERVING:
+@@ -120,7 +124,10 @@ def resolve_sampling_decision(
+             reasons.extend(
+                 (
+                     f"custom mode requested {config.mesh_sampling_mm:.6f} mm mesh spacing",
+-                    "custom spacing is capped at the source grid so no terrain detail is invented",
++                    (
++                        "custom spacing is capped at the normalized metric grid so no terrain "
++                        "detail is invented"
++                    ),
+                 )
+             )
+         else:
+@@ -131,25 +138,46 @@ def resolve_sampling_decision(
+         16,
+         int(config.max_estimated_memory_mb * _MEBIBYTE // _ESTIMATED_BYTES_PER_GRID_CELL),
+     )
+-    effective_cell_limit = min(config.max_grid_cells, memory_cell_limit)
++    triangle_cell_limit = (
++        max(4, (config.max_estimated_triangles + 4) // 4)
++        if config.max_estimated_triangles is not None
++        else config.max_grid_cells
++    )
++    effective_cell_limit = min(config.max_grid_cells, memory_cell_limit, triangle_cell_limit)
+     target_shape = _fit_shape_to_budget(requested_shape, effective_cell_limit)
+     if target_shape != requested_shape:
+         reasons.append(
+             f"resource budget reduced {requested_shape[0]} x {requested_shape[1]} to "
+             f"{target_shape[0]} x {target_shape[1]}"
+         )
+-        limiting_budget = (
+-            "max_grid_cells"
+-            if config.max_grid_cells <= memory_cell_limit
+-            else "max_estimated_memory_mb"
+-        )
+-        warnings.append(
++        limits = {
++            "max_grid_cells": config.max_grid_cells,
++            "max_estimated_memory_mb": memory_cell_limit,
++            "max_estimated_triangles": triangle_cell_limit,
++        }
++        limiting_budget = min(limits, key=lambda name: limits[name])
++        message = (
+             f"{config.sampling_mode.value} request was limited by {limiting_budget}; "
+             "the processed grid does not retain every requested sample"
+         )
++        if config.resource_budget_mode is ResourceBudgetMode.STRICT:
++            requested_cells = requested_shape[0] * requested_shape[1]
++            requested_triangles = triangle_count_for_shape(requested_shape)
++            requested_memory_mb = requested_cells * _ESTIMATED_BYTES_PER_GRID_CELL / _MEBIBYTE
++            raise ConfigurationError(
++                f"strict resource budget rejected requested grid "
++                f"{requested_shape[0]} x {requested_shape[1]} "
++                f"({requested_cells} cells, {requested_triangles} triangles, "
++                f"{requested_memory_mb:.3f} MiB); limiting setting is "
++                f"{limiting_budget}. Increase the corresponding budget or use "
++                "resource_budget_mode=adapt."
++            )
++        warnings.append(message)
+     reasons.append(
+         f"effective cell limit is {effective_cell_limit} from max_grid_cells="
+-        f"{config.max_grid_cells} and max_estimated_memory_mb={config.max_estimated_memory_mb:.3f}"
++        f"{config.max_grid_cells}, max_estimated_triangles="
++        f"{config.max_estimated_triangles}, and "
++        f"max_estimated_memory_mb={config.max_estimated_memory_mb:.3f}"
+     )
+ 
+     rows, columns = target_shape
+diff --git a/tests/cli/test_build_config_overrides.py b/tests/cli/test_build_config_overrides.py
+index 5f1c033..13c7571 100644
+--- a/tests/cli/test_build_config_overrides.py
++++ b/tests/cli/test_build_config_overrides.py
+@@ -8,7 +8,7 @@ from typing import Any
+ import yaml
+ from typer.testing import CliRunner
+ 
+-from topoforge.models import BuildConfig, DatasetType, VerticalScaleMode
++from topoforge.models import BuildConfig, DatasetType, ResourceBudgetMode, VerticalScaleMode
+ 
+ cli_module = importlib.import_module("topoforge.cli.app")
+ runner = CliRunner()
+@@ -45,6 +45,8 @@ def _write_config(path: Path) -> None:
+         "max_height_mm": 39.0,
+         "vertical_scale_mode": "natural",
+         "vertical_exaggeration": 2.5,
++        "max_estimated_triangles": 123456,
++        "resource_budget_mode": "strict",
+         "dataset_type": "dsm",
+         "dataset_name": "YAML dataset",
+         "dataset_version": "v-yaml",
+@@ -86,6 +88,8 @@ def test_config_defaults_are_not_overwritten_by_cli_defaults(
+     assert resolved.base_thickness_mm == 4.0
+     assert resolved.max_height_mm == 39.0
+     assert resolved.vertical_scale_mode is VerticalScaleMode.NATURAL
++    assert resolved.max_estimated_triangles == 123_456
++    assert resolved.resource_budget_mode is ResourceBudgetMode.STRICT
+     assert resolved.dataset_type is DatasetType.DSM
+     assert resolved.dataset_version == "v-yaml"
+     assert resolved.source_urls == ["https://example.test/yaml"]
+@@ -117,6 +121,10 @@ def test_explicit_cli_options_override_all_corresponding_yaml_fields(
+         "custom",
+         "--vertical-exaggeration",
+         "3.5",
++        "--max-estimated-triangles",
++        "200000",
++        "--resource-budget-mode",
++        "adapt",
+         "--printer-profile",
+         "bambu-p2s-0.4",
+         "--dataset-type",
+@@ -153,6 +161,8 @@ def test_explicit_cli_options_override_all_corresponding_yaml_fields(
+     assert resolved.max_height_mm == 44.0
+     assert resolved.vertical_scale_mode is VerticalScaleMode.CUSTOM
+     assert resolved.vertical_exaggeration == 3.5
++    assert resolved.max_estimated_triangles == 200_000
++    assert resolved.resource_budget_mode is ResourceBudgetMode.ADAPT
+     assert resolved.printer_profile.profile_id == "bambu-p2s-0.4"
+     assert resolved.dataset_type is DatasetType.DTM
+     assert resolved.dataset_name == "CLI dataset"
+@@ -189,6 +199,10 @@ def test_cli_custom_sampling_and_bbox_are_resolved(monkeypatch: Any) -> None:
+             "0.75",
+             "--max-grid-cells",
+             "50000",
++            "--max-estimated-triangles",
++            "120000",
++            "--resource-budget-mode",
++            "strict",
+             "--max-estimated-memory-mb",
+             "256",
+             "--bbox",
+@@ -204,6 +218,8 @@ def test_cli_custom_sampling_and_bbox_are_resolved(monkeypatch: Any) -> None:
+     assert resolved.sampling_mode.value == "custom"
+     assert resolved.mesh_sampling_mm == 0.75
+     assert resolved.max_grid_cells == 50_000
++    assert resolved.max_estimated_triangles == 120_000
++    assert resolved.resource_budget_mode is ResourceBudgetMode.STRICT
+     assert resolved.max_estimated_memory_mb == 256.0
+     assert resolved.aoi is not None
+     assert resolved.aoi.bbox_wgs84 == (170.0, -10.0, -170.0, 10.0)
+diff --git a/tests/integration/test_local_build.py b/tests/integration/test_local_build.py
+index d59c602..caee0fb 100644
+--- a/tests/integration/test_local_build.py
++++ b/tests/integration/test_local_build.py
+@@ -41,6 +41,7 @@ def test_synthetic_geotiff_to_complete_validated_bundle(tmp_path: Path) -> None:
+         "preview.glb",
+         "processed_dem.tif",
+         "original_nodata_mask.tif",
++        "manufacturing_preflight.json",
+         "provenance.json",
+         "validation.json",
+         "validation.html",
+diff --git a/tests/integration/test_manufacturing_preflight.py b/tests/integration/test_manufacturing_preflight.py
+new file mode 100644
+index 0000000..5e95925
+--- /dev/null
++++ b/tests/integration/test_manufacturing_preflight.py
+@@ -0,0 +1,112 @@
++from pathlib import Path
++
++import pytest
++
++from topoforge.engine import build_local_terrain, preflight_local_terrain
++from topoforge.models import BuildConfig, ResourceBudgetMode, SamplingMode, VerticalScaleMode
++from topoforge.raster import SyntheticTerrain, create_synthetic_geotiff
++
++
++def test_preflight_resolves_resources_without_publishing_output(tmp_path: Path) -> None:
++    source = create_synthetic_geotiff(
++        tmp_path / "source.tif",
++        SyntheticTerrain.GAUSSIAN_HILL,
++        rows=80,
++        columns=100,
++        pixel_size_m=10.0,
++    )
++    output = tmp_path / "not-created"
++    report = preflight_local_terrain(
++        BuildConfig(
++            dem_path=source,
++            output_dir=output,
++            model_width_mm=120.0,
++            max_height_mm=35.0,
++            vertical_scale_mode=VerticalScaleMode.FIT_HEIGHT,
++            max_grid_cells=50_000,
++            max_estimated_triangles=150_000,
++            max_estimated_memory_mb=64.0,
++        )
++    )
++
++    assert report.status in {"passed", "passed-with-warnings"}
++    assert report.estimated_triangle_count <= 150_000
++    assert report.estimated_memory_mb <= 64.0
++    assert report.resolved_model_dimensions_mm[0] == pytest.approx(120.0)
++    assert report.build_volume_headroom_mm["x"] > 0
++    assert report.build_volume_passed is True
++    assert report.grid_cell_budget_passed is True
++    assert report.triangle_budget_passed is True
++    assert report.memory_budget_passed is True
++    assert report.height_limit_passed is True
++    assert not output.exists()
++
++
++def test_build_publishes_the_exact_preflight_as_a_manifest_role(tmp_path: Path) -> None:
++    import json
++
++    source = create_synthetic_geotiff(
++        tmp_path / "source.tif",
++        SyntheticTerrain.SADDLE,
++        rows=24,
++        columns=30,
++        pixel_size_m=20.0,
++    )
++    result = build_local_terrain(
++        BuildConfig(
++            dem_path=source,
++            output_dir=tmp_path / "bundle",
++            model_width_mm=80.0,
++            max_height_mm=30.0,
++            max_grid_cells=20_000,
++        )
++    )
++
++    artifact = result.artifacts["manufacturing_preflight"]
++    preflight = json.loads(artifact.read_text(encoding="utf-8"))
++    manifest = json.loads(result.artifacts["manifest"].read_text(encoding="utf-8"))
++    assert preflight == result.validation["manufacturing_preflight"]
++    assert preflight == result.provenance["manufacturing_preflight"]
++    assert manifest["artifacts"]["manufacturing_preflight"] == ("manufacturing_preflight.json")
++
++
++def test_strict_preflight_leaves_no_partial_output(tmp_path: Path) -> None:
++    from topoforge.exceptions import ConfigurationError
++
++    source = create_synthetic_geotiff(
++        tmp_path / "source.tif",
++        SyntheticTerrain.GAUSSIAN_HILL,
++        rows=200,
++        columns=240,
++        pixel_size_m=10.0,
++    )
++    output = tmp_path / "strict-output"
++    with pytest.raises(ConfigurationError, match="strict resource budget rejected"):
++        preflight_local_terrain(
++            BuildConfig(
++                dem_path=source,
++                output_dir=output,
++                sampling_mode=SamplingMode.SOURCE_PRESERVING,
++                resource_budget_mode=ResourceBudgetMode.STRICT,
++                max_grid_cells=1_000,
++            )
++        )
++    assert not output.exists()
++
++
++def test_config_rejects_impossible_printer_dimensions_before_raster_work(
++    tmp_path: Path,
++) -> None:
++    with pytest.raises(ValueError, match="build width"):
++        BuildConfig(
++            dem_path=tmp_path / "missing.tif",
++            output_dir=tmp_path / "out",
++            model_width_mm=300.0,
++        )
++    with pytest.raises(ValueError, match="must exceed base"):
++        BuildConfig(
++            dem_path=tmp_path / "missing.tif",
++            output_dir=tmp_path / "out",
++            base_thickness_mm=3.0,
++            max_height_mm=3.0,
++        )
+diff --git a/tests/unit/test_sampling.py b/tests/unit/test_sampling.py
+index 3b3758f..8d5cf56 100644
+--- a/tests/unit/test_sampling.py
++++ b/tests/unit/test_sampling.py
+@@ -103,3 +103,36 @@ def test_memory_budget_can_be_the_limiting_resource() -> None:
+     assert decision.estimated_memory_mb <= 2.0
+     assert decision.warnings
+     assert "max_estimated_memory_mb" in decision.warnings[0]
++
++
++def test_explicit_triangle_budget_limits_the_processed_grid() -> None:
++    decision = resolve_sampling_decision(
++        (500, 600),
++        ground_width_m=18_000.0,
++        ground_depth_m=15_000.0,
++        config=_config(
++            sampling_mode=SamplingMode.SOURCE_PRESERVING,
++            max_estimated_triangles=40_000,
++        ),
++    )
++
++    assert decision.estimated_triangle_count <= 40_000
++    assert decision.warnings
++    assert "max_estimated_triangles" in decision.warnings[0]
++
++
++def test_strict_resource_mode_rejects_instead_of_downsampling() -> None:
++    from topoforge.exceptions import ConfigurationError
++    from topoforge.models import ResourceBudgetMode
++
++    with pytest.raises(ConfigurationError, match="strict resource budget rejected"):
++        resolve_sampling_decision(
++            (500, 600),
++            ground_width_m=18_000.0,
++            ground_depth_m=15_000.0,
++            config=_config(
++                sampling_mode=SamplingMode.SOURCE_PRESERVING,
++                max_grid_cells=10_000,
++                resource_budget_mode=ResourceBudgetMode.STRICT,
++            ),
++        )
+diff --git a/uv.lock b/uv.lock
+index 9253e32..4d6f27c 100644
+--- a/uv.lock
++++ b/uv.lock
+@@ -860,7 +860,7 @@ wheels = [
+ 
+ [[package]]
+ name = "topoforge"
+-version = "0.3.0"
++version = "0.3.1"
+ source = { editable = "." }
+ dependencies = [
+     { name = "lib3mf" },

@@ -1,0 +1,69 @@
+{
+  "baseline_commit": "1284a1754e00976572150447853d910dcdd12b12",
+  "quality_commands": [
+    {
+      "command": "uv run ruff check .",
+      "exit_status": 0,
+      "literal_result": "All checks passed!"
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "exit_status": 0,
+      "literal_result": "106 files already formatted"
+    },
+    {
+      "command": "uv run pyright",
+      "exit_status": 0,
+      "literal_result": "0 errors, 0 warnings, 0 informations"
+    },
+    {
+      "command": "uv run pytest",
+      "exit_status": 0,
+      "literal_result": "141 passed, 50 warnings in 9.28s"
+    },
+    {
+      "command": "git diff --check",
+      "exit_status": 0,
+      "literal_result": ""
+    }
+  ],
+  "quality_log": "/root/autodl-tmp/bambu/TopoForge/artifacts/logs/topoforge-0.3.1-quality-gates.log",
+  "real_gongga_evidence": {
+    "deterministic_roles_match": true,
+    "network_downloads": 0,
+    "output_bundle": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3",
+    "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.3.1-gongga-resource-v3.json",
+    "repeat_bundle": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-repeat",
+    "sha256": "4a243b1de8de333d9f30b6f6abe8d4df24d8009c287f442df5efca0ef9f5db0b",
+    "slice_exit_status": 0,
+    "source_sha256": "00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc",
+    "strict_3mf_warning_count": 0
+  },
+  "release": "0.3.1",
+  "release_implementation_commit": "c9755601f121ec9d30ea76c01db53afaa016771d",
+  "rollback": {
+    "command": "bash scripts/rollback-topoforge-0.3.1.sh --confirm-rollback",
+    "exit_status": 0,
+    "rollback_head": "1284a1754e00976572150447853d910dcdd12b12",
+    "script": "/root/autodl-tmp/bambu/TopoForge/scripts/rollback-topoforge-0.3.1.sh",
+    "script_sha256": "2c61aac14018af141a811ff3525d0c0396b04f37090bb9f60343613529afcf14",
+    "tree_matches_baseline": true,
+    "verification_path": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.3.1-git-rollback.txt",
+    "verification_sha256": "21eb138f09bb1c8b91a4a32734039a641ab18e14a689d43172afe602fc146977",
+    "working_tree_clean": true
+  },
+  "source_patch": {
+    "bytes": 59219,
+    "clean_after_reverse": true,
+    "diff_check_exit": 0,
+    "forward_apply_exit": 0,
+    "forward_check_exit": 0,
+    "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/patches/topoforge-0.3.1-source.patch",
+    "reverse_apply_exit": 0,
+    "reverse_check_exit": 0,
+    "sha256": "2c1e4b2c092c0c0700df34662d8245b9eb77328ff2144186bb4a7bfc6d6e1949",
+    "verification_path": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.3.1-source-patch-verification.txt",
+    "verification_sha256": "f0238006b05ca16944d01784412e15568a289a3820b96c7205e6225da3d11583"
+  },
+  "tag": "v0.3.1"
+}

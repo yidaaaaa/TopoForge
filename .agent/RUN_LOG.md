@@ -274,3 +274,21 @@ Result: Pyright, 141 tests, and diff whitespace passed, but Ruff found three new
 Command: corrected final `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, and `git diff --check`.
 
 Result: exit 0; Ruff `All checks passed!`; format `106 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `141 passed, 50 warnings in 9.28s`; diff whitespace passed. Final log: `artifacts/logs/topoforge-0.3.1-quality-gates.log`.
+
+### 0.3.1 implementation commit, source patch, and rollback
+
+Command: `git commit -m "feat: add manufacturing resource preflight v0.3.1"`.
+
+Result: implementation commit `c9755601f121ec9d30ea76c01db53afaa016771d` from baseline `1284a1754e00976572150447853d910dcdd12b12`.
+
+Command: generate `artifacts/patches/topoforge-0.3.1-source.patch`; in an isolated no-hardlink clone run forward check/apply, `git diff --check`, reverse check/apply; run `scripts/rollback-topoforge-0.3.1.sh --confirm-rollback` in a separate release clone.
+
+Result: all patch statuses are 0 and the patch clone is clean after reverse. Patch SHA-256 `2c1e4b2c092c0c0700df34662d8245b9eb77328ff2144186bb4a7bfc6d6e1949`, 59,219 bytes. Rollback exits 0 at baseline `1284a1754e00976572150447853d910dcdd12b12`, exact tree `1b776f03ef87b61377c33c3edba3817fc952eb47`, clean worktree.
+
+Command: inspect the first evidence commit with `git show --check`.
+
+Result: Git treated standard unified-diff context markers inside the committed `.patch` artifact as trailing whitespace. Added `.gitattributes` with `artifacts/patches/*.patch -whitespace`; source files and the verified patch bytes are unchanged.
+
+Command: amend the final evidence commit with scoped `.patch` whitespace attributes and create annotated tag `v0.3.1`.
+
+Result: `git show --check` is clean, the working tree is clean, and `v0.3.1` points to the final rollback/evidence commit.
