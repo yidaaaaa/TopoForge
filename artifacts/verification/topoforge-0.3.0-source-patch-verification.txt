@@ -1,0 +1,10 @@
+baseline_commit=434eb7e663d251ad6fcef70ab8d7daf8afe6856a
+release_commit=b44b518
+forward_check_exit=0
+forward_apply_exit=0
+diff_check_exit=0
+reverse_check_exit=0
+reverse_apply_exit=0
+clean_after_reverse=true
+patch_bytes=105051
+patch_sha256=b4914d0f69900e9bb75b2ab4f29f8ee19a98fc8dd25803566edfa07cb9fd3de6

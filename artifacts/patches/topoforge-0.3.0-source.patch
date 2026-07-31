@@ -1,0 +1,2529 @@
+diff --git a/README.md b/README.md
+index 705e9fc..ec80d0e 100644
+--- a/README.md
++++ b/README.md
+@@ -2,7 +2,7 @@
+ 
+ TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
+ 
+-**Implemented milestone (TopoForge 0.2.0):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, bbox/center-radius AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, and real slicing. Geocoding, additional providers/fallback, tiling/connectors, API, and Web remain on the authoritative roadmap in `.agent/PLANS.md`.
++**Implemented milestone (TopoForge 0.3.0):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Additional provider implementations, tiling/connectors, API, and Web remain on the authoritative roadmap in `.agent/PLANS.md`.
+ 
+ ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
+ 
+@@ -118,21 +118,30 @@ A depth of `0` preserves the raster aspect ratio. An explicit depth that conflic
+ ## Fetch or build from the no-key global provider
+ 
+ ```bash
++# Ambiguous names return candidates; copy one candidate_id explicitly.
++uv run topoforge geocode "PLACE NAME" --cache-dir cache/providers
++
+ uv run topoforge fetch-dem \
+   --bbox -60.02 -3.13 -60.00 -3.11 \
++  --provider auto --terrain-mode dsm \
+   --output downloads/amazon/source.tif \
+   --cache-dir cache/providers
+ 
+ uv run topoforge build-global \
+-  --bbox -60.02 -3.13 -60.00 -3.11 \
+-  --output outputs/amazon \
+-  --source-dir downloads/amazon \
++  --place "PLACE NAME" --place-candidate-id CANDIDATE_ID \
++  --provider auto --terrain-mode dsm \
++  --output outputs/place-terrain \
++  --source-dir downloads/place-terrain \
+   --cache-dir cache/providers \
+   --size-mm 80 0
+ 
+ uv run topoforge cache status --cache-dir cache/providers
+ ```
+ 
++`--provider auto` evaluates every registered network provider and records unimplemented, unavailable, rejected, probe-failed, fetch-failed, and selected candidates. Terrain semantics, licence suitability, complete coverage, credentials, vertical datum/resource limits, resolution, operational risk, preferences, and deterministic registry tie breaks are explicit; resolution alone never decides. A failed provider is tried only when it left no destination evidence.
++
++`geocode` uses a cached Nominatim-compatible JSONv2 search. The public endpoint path enforces at least one second between requests, performs no autocomplete, preserves OpenStreetMap attribution, and returns every bounded candidate. An ambiguous name never becomes an AOI until `--place-candidate-id` identifies one returned candidate. The query, selected id/display name, candidate bbox, request/cache evidence, and normalized AOI are retained in source acquisition provenance.
++
+ `build-global` always uses the normalized AOI contract, authoritative product tile lists, one complete GLO-30 product or whole-AOI GLO-90 fallback, bounded HTTP attempts, and the same local raster/mesh/validation engine. It preserves ETag, Last-Modified, byte count, SHA-256, retry history, licence notices, coverage crop, and cache-hit state in `source_acquisition.json`. Exact S3 tile-prefix listings discover EDM, FLM, HEM, and WBM assets; exposed masks are cached, verified against the source DEM grid, nearest-neighbour reprojected with the DEM transform/window, copied into the final build, and never converted into invented elevation values.
+ 
+ ## Reproduce the synthetic milestone
+diff --git a/docs/architecture.md b/docs/architecture.md
+index d76bb46..2e2c5cf 100644
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -42,7 +42,8 @@ Builds use a sibling staging directory. Every required file is written and reope
+ - `provenance`: stable JSON and dependency-free HTML reports.
+ - `engine`: atomic orchestration and bundle verification.
+ - `cli`: Typer argument parsing and JSON presentation.
+-- `providers`: normalized-AOI provider contracts, Copernicus AWS catalog/tile/ancillary-mask planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
++- `providers`: normalized-AOI provider contracts, explainable deterministic selection/fetch fallback, Copernicus AWS catalog/tile/ancillary-mask planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
++- `geocoding`: cached Nominatim-compatible candidate search and explicit ambiguity resolution; selected candidates become ordinary recorded AOIs before provider selection.
+ 
+ ## Geometry topology
+ 
+@@ -56,4 +57,4 @@ The interoperable 3MF path adds official lib3mf strict read with zero warnings,
+ 
+ ## Extension sequence
+ 
+-The local AOI, printer-aware sampling, content-addressed cache, and configurable no-key Copernicus AWS GLO-30/GLO-90 provider are complete. Network acquisitions enter the existing local pipeline as a metric AOI raster plus `source_acquisition.json`; no download-first parallel geometry path exists. Quality-mask preservation is complete. Next steps are explainable multi-provider fallback, Nominatim-compatible candidate geocoding, tiling, API, and Web.
++The local/resolved-place AOI, printer-aware sampling, content-addressed cache, configurable no-key Copernicus AWS GLO-30/GLO-90 provider, explainable provider-selection/fetch-fallback engine, Nominatim-compatible candidate handling, and quality-mask preservation are complete. Network acquisitions enter the existing local pipeline as a metric AOI raster plus `source_acquisition.json`; no download-first parallel geometry path exists. Next steps are additional production provider implementations, remaining manufacturing-resource UX, tiling, API, and Web.
+diff --git a/docs/data-sources.md b/docs/data-sources.md
+index 405b450..bd1b515 100644
+--- a/docs/data-sources.md
++++ b/docs/data-sources.md
+@@ -576,3 +576,15 @@ HTTP 200; bundled license is CC BY-NC-SA 4.0; tile index has 19,011 features.
+ - FABDEM's conflicting repository license field and upstream Copernicus notice.
+ - Actual provider integration tests for one land, coastal, antimeridian, and
+   high-latitude AOI; online tests must remain opt-in.
++
++## Nominatim-compatible place search policy
++
++TopoForge uses place search only to propose explicit WGS84 candidate bounding boxes; it is not an elevation source. The default public endpoint is OpenStreetMap Nominatim JSONv2 search. Public-service requests use a descriptive TopoForge User-Agent, a minimum one-second interval, bounded result counts, no autocomplete, and content-addressed caching. Output and acquisition provenance retain `Geocoding © OpenStreetMap contributors`.
++
++Ambiguous names are never resolved by first result, importance score, or string similarity. The CLI returns the candidate ids, display names, coordinates, feature types, and bounding boxes, then requires `--place-candidate-id`. Private Nominatim-compatible endpoints remain configurable, but their operator policy and attribution must be reviewed separately.
++
++Sources:
++
++- [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/)
++- [Nominatim Search API](https://nominatim.org/release-docs/latest/api/Search/)
++- [OpenStreetMap copyright and attribution](https://www.openstreetmap.org/copyright)
+diff --git a/docs/provenance.md b/docs/provenance.md
+index 553fe41..fba3b02 100644
+--- a/docs/provenance.md
++++ b/docs/provenance.md
+@@ -13,3 +13,8 @@ Network builds add `source_acquisition.json` as a checksummed bundle role. It re
+ 
+ 
+ Copernicus AWS acquisitions also record an exact per-tile S3 object listing and an inventory for EDM (editing), FLM (ancillary filling), HEM (height-error standard deviation), and WBM (modified water) rasters. Every exposed source object retains URL, ETag, Last-Modified, byte count, content SHA-256, and cache status. A quality raster is published only when every selected DEM tile exposes the role and its source CRS, transform, width, and height align exactly with the corresponding DEM. Values are not remapped: the aligned AOI raster uses nearest-neighbour reprojection and the identical DEM coverage-crop window. Complete masks are copied into build bundles as `source_quality_edm`, `source_quality_flm`, `source_quality_hem`, and `source_quality_wbm` manifest roles; absent or incomplete roles remain explicit inventory decisions.
++
++
++Provider-selection provenance stores the complete policy, candidate evaluations, deterministic rank tuples/order, fetch attempts, exact error types/messages, retained-evidence decisions, selected provider/dataset, and selection reasons. The exact same object is present in `source_acquisition.json` and `provenance.json`; build orchestration does not replace it with a simplified success record.
++
++Resolved-place acquisitions additionally store the normalized query, candidate status/list, explicit candidate id/display name, WGS84 candidate bbox, canonical request URL, response SHA-256/bytes/ETag/Last-Modified, cache state, bounded attempts, OpenStreetMap attribution, and usage-policy decisions. Ambiguous searches are emitted as candidates and do not create a raster until one id is explicitly selected.
+diff --git a/docs/provider-development.md b/docs/provider-development.md
+index 8abe122..14b8387 100644
+--- a/docs/provider-development.md
++++ b/docs/provider-development.md
+@@ -2,6 +2,16 @@
+ 
+ A provider exposes an identifier, coverage probe, dataset metadata, and fetch operation. Selection weighs semantic match (DTM/DSM/bathymetry), coverage completeness, actual resolution, license mode, credentials, expected bytes, vertical datum compatibility, recency, and observed reliability; resolution alone never decides.
+ 
++## Explainable selection and fetch fallback
++
++`ProviderSelectionPolicy` defines requested terrain semantics, complete-coverage requirements, authenticated-provider/credential availability, explicit semantic fallback, optional resolution/download/vertical-datum/licence limits, and deterministic preferences. `evaluate_providers` records every registry candidate, including unimplemented, unavailable, metadata-failed, probe-failed, and hard-filter rejections. Eligible candidates are ranked by semantics, completeness, horizontal resolution, credential penalty, operational risk, user preference, registry order, and provider id.
++
++`fetch_with_provider_selection` attempts ranked candidates in order. Each error type/message is retained. Fallback continues only when the failed provider published no destination evidence; otherwise selection stops so partial evidence is not overwritten. Success writes the complete `ProviderSelectionTrace` into `source_acquisition.json`, and the build engine copies that exact object into `provenance.json` rather than synthesizing a successful single-provider history. Offline fake-provider tests exercise successful and exhausted fallback even while only `copernicus-aws` is a production network implementation.
++
++## Nominatim-compatible candidate geocoding
++
++Place search is separate from elevation-provider selection. Canonical JSONv2 search URLs enter the same content-addressed cache. The public Nominatim endpoint requires a descriptive application User-Agent, no autocomplete, no more than one request per second, bounded results, local caching, and OpenStreetMap attribution. Zero, unique, and ambiguous results are distinct states. Ambiguous results require an explicit candidate id; TopoForge never chooses by response order, importance, or name similarity. The selected candidate bbox becomes a network-free resolved-place `AreaOfInterestInput`, preserving the query, candidate id, display name, and exact WGS84 bbox.
++
+ ## Implemented Copernicus AWS boundary
+ 
+ `copernicus-aws` is implemented with configurable GLO-30/GLO-90 endpoints. It downloads and caches authoritative `tileList.txt` records, selects GLO-30 only when every AOI cell is present, falls back to a complete GLO-90 plan rather than blending dataset identities, stores immutable bytes by content SHA-256, and indexes canonical provider/dataset/version/URL requests atomically. The HTTP client enforces timeout, bounded attempts, exponential backoff, minimum request interval, declared/streamed byte limits, and a descriptive User-Agent.
+diff --git a/pyproject.toml b/pyproject.toml
+index ce61650..9d25af2 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
+ 
+ [project]
+ name = "topoforge"
+-version = "0.2.0"
++version = "0.3.0"
+ description = "Reproducible, provenance-aware terrain models for additive manufacturing"
+ readme = "README.md"
+ license = { text = "Apache-2.0" }
+diff --git a/scripts/rollback-topoforge-0.3.0.sh b/scripts/rollback-topoforge-0.3.0.sh
+new file mode 100755
+index 0000000..03dc026
+--- /dev/null
++++ b/scripts/rollback-topoforge-0.3.0.sh
+@@ -0,0 +1,33 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++readonly BASELINE_COMMIT="434eb7e663d251ad6fcef70ab8d7daf8afe6856a"
++
++if [[ "${1:-}" != "--confirm-rollback" ]]; then
++  printf 'Usage: %s --confirm-rollback\n' "$0" >&2
++  exit 2
++fi
++
++repo_root="$(git rev-parse --show-toplevel)"
++cd "$repo_root"
++git cat-file -e "${BASELINE_COMMIT}^{commit}"
++if [[ -n "$(git status --porcelain)" ]]; then
++  printf 'Working tree must be clean before rollback.\n' >&2
++  exit 4
++fi
++
++before_head="$(git rev-parse HEAD)"
++git reset --hard "$BASELINE_COMMIT"
++after_head="$(git rev-parse HEAD)"
++if [[ "$after_head" != "$BASELINE_COMMIT" ]]; then
++  printf 'Rollback verification mismatch: expected %s, found %s\n' \
++    "$BASELINE_COMMIT" "$after_head" >&2
++  exit 5
++fi
++if [[ -n "$(git status --porcelain)" ]]; then
++  printf 'Rollback left tracked working-tree changes.\n' >&2
++  exit 6
++fi
++printf 'before_head=%s\n' "$before_head"
++printf 'rollback_head=%s\n' "$after_head"
++printf 'working_tree_clean=true\n'
+diff --git a/src/topoforge/cli/app.py b/src/topoforge/cli/app.py
+index f99f234..7b1371d 100644
+--- a/src/topoforge/cli/app.py
++++ b/src/topoforge/cli/app.py
+@@ -21,11 +21,20 @@ from topoforge.config import DEFAULT_PRINTER_PROFILE_ID, get_printer_profile, lo
+ from topoforge.engine import build_local_terrain, record_slice_validation, verify_artifact_bundle
+ from topoforge.exceptions import TopoForgeError
+ from topoforge.exporters.three_mf import inspect_3mf
++from topoforge.geocoding import (
++    NominatimConfig,
++    NominatimGeocoder,
++    PlaceCandidateSelectionError,
++    PlaceSearchResult,
++    place_candidate_aoi_input,
++    select_place_candidate,
++)
+ from topoforge.models import (
+     AreaOfInterestInput,
+     BuildConfig,
+     DatasetType,
+     SamplingMode,
++    TerrainMode,
+     VerticalScaleMode,
+ )
+ from topoforge.providers import (
+@@ -33,6 +42,10 @@ from topoforge.providers import (
+     ContentAddressedCache,
+     CopernicusAwsProvider,
+     HttpTransportConfig,
++    ProviderAcquisition,
++    ProviderSelectionError,
++    ProviderSelectionPolicy,
++    fetch_with_provider_selection,
+     list_provider_descriptors,
+ )
+ from topoforge.raster import SyntheticTerrain, create_synthetic_geotiff
+@@ -56,6 +69,110 @@ def _fail(exc: Exception) -> None:
+     raise typer.Exit(code=2) from exc
+ 
+ 
++def _fail_provider_selection(exc: ProviderSelectionError) -> None:
++    typer.echo(
++        json.dumps(
++            {
++                "status": "failed",
++                "error": str(exc),
++                "provider_selection": exc.trace.model_dump(mode="json"),
++            },
++            indent=2,
++            ensure_ascii=False,
++        ),
++        err=True,
++    )
++    raise typer.Exit(code=2) from exc
++
++
++def _global_provider_descriptors() -> list[Any]:
++    return [item for item in list_provider_descriptors() if item.provider_id != "local"]
++
++
++def _global_provider_instances(client: CachingHttpClient) -> dict[str, Any]:
++    return {"copernicus-aws": CopernicusAwsProvider(client)}
++
++
++def _fail_place_candidates(exc: PlaceCandidateSelectionError) -> None:
++    typer.echo(
++        json.dumps(
++            {
++                "status": "candidate-selection-required",
++                "error": str(exc),
++                "place_search": exc.result.model_dump(mode="json"),
++            },
++            indent=2,
++            ensure_ascii=False,
++        ),
++        err=True,
++    )
++    raise typer.Exit(code=2) from exc
++
++
++def _resolve_global_aoi(
++    *,
++    bbox: tuple[float, float, float, float] | None,
++    center: tuple[float, float] | None,
++    radius_m: float | None,
++    place: str | None,
++    place_candidate_id: str | None,
++    geocoder_url: str,
++    cache_store: ContentAddressedCache,
++    timeout_seconds: float,
++    max_attempts: int,
++) -> tuple[AreaOfInterestInput, Any, PlaceSearchResult | None]:
++    from topoforge.raster import normalize_area_of_interest
++
++    if place is None and place_candidate_id is not None:
++        raise ValueError("--place-candidate-id requires --place")
++    if place is not None:
++        if bbox is not None or center is not None or radius_m is not None:
++            raise ValueError("--place cannot be combined with --bbox or --center/--radius-m")
++        geocoder_client = CachingHttpClient(
++            cache_store,
++            HttpTransportConfig(
++                timeout_seconds=timeout_seconds,
++                max_attempts=max_attempts,
++                min_request_interval_seconds=1.0,
++            ),
++        )
++        search = NominatimGeocoder(
++            geocoder_client,
++            NominatimConfig(base_url=geocoder_url),
++        ).search(place)
++        selected = select_place_candidate(search, candidate_id=place_candidate_id)
++        request = place_candidate_aoi_input(search, selected)
++        return request, normalize_area_of_interest(request), search
++    request = AreaOfInterestInput(
++        bbox_wgs84=bbox,
++        center_wgs84=center,
++        radius_m=radius_m,
++    )
++    return request, normalize_area_of_interest(request), None
++
++
++def _record_geocoding_manifest(
++    acquisition: ProviderAcquisition, search: PlaceSearchResult | None
++) -> None:
++    if search is None:
++        return
++    path = acquisition.acquisition_manifest_path.resolve()
++    payload = json.loads(path.read_text(encoding="utf-8"))
++    if not isinstance(payload, dict):
++        raise ValueError("source acquisition manifest root is not an object")
++    payload["geocoding"] = search.model_dump(mode="json")
++    temporary = path.with_name(f".{path.name}.geocoding.tmp")
++    try:
++        temporary.write_text(
++            json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
++            encoding="utf-8",
++        )
++        json.loads(temporary.read_text(encoding="utf-8"))
++        temporary.replace(path)
++    finally:
++        temporary.unlink(missing_ok=True)
++
++
+ def _was_provided(ctx: typer.Context, parameter_name: str) -> bool:
+     """Return whether Click received a value explicitly on the command line."""
+     source = ctx.get_parameter_source(parameter_name)
+@@ -339,6 +456,47 @@ def preview(
+         _fail(exc)
+ 
+ 
++@app.command()
++def geocode(
++    query: Annotated[str, typer.Argument(help="Place name to search without autocomplete.")],
++    candidate_id: Annotated[str | None, typer.Option("--candidate-id")] = None,
++    cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path("cache/providers"),
++    geocoder_url: Annotated[str, typer.Option("--geocoder-url")] = (
++        "https://nominatim.openstreetmap.org"
++    ),
++    timeout_seconds: Annotated[float, typer.Option("--timeout-seconds", min=0.1)] = 30.0,
++    max_attempts: Annotated[int, typer.Option("--max-attempts", min=1, max=10)] = 4,
++) -> None:
++    """Return Nominatim-compatible candidates; ambiguous names require an explicit id."""
++    try:
++        cache_store = ContentAddressedCache(cache_dir)
++        client = CachingHttpClient(
++            cache_store,
++            HttpTransportConfig(
++                timeout_seconds=timeout_seconds,
++                max_attempts=max_attempts,
++                min_request_interval_seconds=1.0,
++            ),
++        )
++        result = NominatimGeocoder(
++            client,
++            NominatimConfig(base_url=geocoder_url),
++        ).search(query)
++        payload = result.model_dump(mode="json")
++        if candidate_id is not None or result.candidate_status == "unique":
++            selected = select_place_candidate(result, candidate_id=candidate_id)
++            request = place_candidate_aoi_input(result, selected)
++            from topoforge.raster import normalize_area_of_interest
++
++            payload["selected_candidate"] = selected.model_dump(mode="json")
++            payload["normalized_aoi"] = normalize_area_of_interest(request).model_dump(mode="json")
++        _emit(payload)
++    except PlaceCandidateSelectionError as exc:
++        _fail_place_candidates(exc)
++    except (TopoForgeError, ValueError, OSError) as exc:
++        _fail(exc)
++
++
+ @app.command()
+ def providers() -> None:
+     """List provider semantics, key requirements, and implementation state."""
+@@ -359,7 +517,26 @@ def fetch_dem(
+     radius_m: Annotated[
+         float | None, typer.Option("--radius-m", min=0.001, help="Geodesic AOI radius.")
+     ] = None,
+-    provider: Annotated[str, typer.Option("--provider")] = "copernicus-aws",
++    place: Annotated[str | None, typer.Option("--place")] = None,
++    place_candidate_id: Annotated[str | None, typer.Option("--place-candidate-id")] = None,
++    geocoder_url: Annotated[str, typer.Option("--geocoder-url")] = (
++        "https://nominatim.openstreetmap.org"
++    ),
++    provider: Annotated[str, typer.Option("--provider")] = "auto",
++    terrain_mode: Annotated[TerrainMode, typer.Option("--terrain-mode")] = (
++        TerrainMode.BEST_AVAILABLE
++    ),
++    allow_semantic_fallback: Annotated[
++        bool,
++        typer.Option(
++            "--allow-semantic-fallback",
++            help="Permit an explicitly recorded DTM/DSM/mixed semantic downgrade.",
++        ),
++    ] = False,
++    preferred_provider: Annotated[
++        list[str] | None,
++        typer.Option("--preferred-provider", help="Repeat in deterministic preference order."),
++    ] = None,
+     cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path("cache/providers"),
+     timeout_seconds: Annotated[float, typer.Option("--timeout-seconds", min=0.1)] = 30.0,
+     max_attempts: Annotated[int, typer.Option("--max-attempts", min=1, max=10)] = 4,
+@@ -369,17 +546,18 @@ def fetch_dem(
+ ) -> None:
+     """Fetch, cache, verify, and AOI-crop a no-key global DEM."""
+     try:
+-        if provider != "copernicus-aws":
+-            raise ValueError("--provider currently supports copernicus-aws")
+-        request = AreaOfInterestInput(
+-            bbox_wgs84=bbox,
+-            center_wgs84=center,
++        cache_store = ContentAddressedCache(cache_dir)
++        _request, normalized, place_search = _resolve_global_aoi(
++            bbox=bbox,
++            center=center,
+             radius_m=radius_m,
++            place=place,
++            place_candidate_id=place_candidate_id,
++            geocoder_url=geocoder_url,
++            cache_store=cache_store,
++            timeout_seconds=timeout_seconds,
++            max_attempts=max_attempts,
+         )
+-        from topoforge.raster import normalize_area_of_interest
+-
+-        normalized = normalize_area_of_interest(request)
+-        cache_store = ContentAddressedCache(cache_dir)
+         client = CachingHttpClient(
+             cache_store,
+             HttpTransportConfig(
+@@ -388,11 +566,30 @@ def fetch_dem(
+                 min_request_interval_seconds=min_request_interval_seconds,
+             ),
+         )
+-        acquisition = CopernicusAwsProvider(client).acquire(normalized, output)
++        selection = fetch_with_provider_selection(
++            aoi=normalized,
++            destination=output,
++            providers=_global_provider_instances(client),
++            descriptors=_global_provider_descriptors(),
++            policy=ProviderSelectionPolicy(
++                requested_provider_id=provider,
++                requested_terrain_mode=terrain_mode,
++                allow_semantic_fallback=allow_semantic_fallback,
++                preferred_provider_ids=preferred_provider or [],
++            ),
++        )
++        if not isinstance(selection.acquisition, ProviderAcquisition):
++            raise ValueError("selected provider returned an unsupported acquisition result")
++        acquisition = selection.acquisition
++        _record_geocoding_manifest(acquisition, place_search)
+         _emit(
+             {
+                 "status": "completed",
+                 "provider": acquisition.provider_id,
++                "provider_selection": selection.trace.model_dump(mode="json"),
++                "geocoding": (
++                    place_search.model_dump(mode="json") if place_search is not None else None
++                ),
+                 "dataset": acquisition.dataset.model_dump(mode="json"),
+                 "aoi": acquisition.aoi,
+                 "plan": acquisition.plan.model_dump(mode="json"),
+@@ -401,6 +598,10 @@ def fetch_dem(
+                 "cache": cache_store.summary().model_dump(mode="json"),
+             }
+         )
++    except PlaceCandidateSelectionError as exc:
++        _fail_place_candidates(exc)
++    except ProviderSelectionError as exc:
++        _fail_provider_selection(exc)
+     except (TopoForgeError, ValueError, OSError) as exc:
+         _fail(exc)
+ 
+@@ -421,6 +622,26 @@ def build_global(
+     radius_m: Annotated[
+         float | None, typer.Option("--radius-m", min=0.001, help="Geodesic AOI radius.")
+     ] = None,
++    place: Annotated[str | None, typer.Option("--place")] = None,
++    place_candidate_id: Annotated[str | None, typer.Option("--place-candidate-id")] = None,
++    geocoder_url: Annotated[str, typer.Option("--geocoder-url")] = (
++        "https://nominatim.openstreetmap.org"
++    ),
++    provider: Annotated[str, typer.Option("--provider")] = "auto",
++    terrain_mode: Annotated[TerrainMode, typer.Option("--terrain-mode")] = (
++        TerrainMode.BEST_AVAILABLE
++    ),
++    allow_semantic_fallback: Annotated[
++        bool,
++        typer.Option(
++            "--allow-semantic-fallback",
++            help="Permit an explicitly recorded DTM/DSM/mixed semantic downgrade.",
++        ),
++    ] = False,
++    preferred_provider: Annotated[
++        list[str] | None,
++        typer.Option("--preferred-provider", help="Repeat in deterministic preference order."),
++    ] = None,
+     source_dir: Annotated[
+         Path | None,
+         typer.Option("--source-dir", help="New directory for acquired source evidence."),
+@@ -453,14 +674,18 @@ def build_global(
+     try:
+         if output.exists():
+             raise ValueError(f"output already exists; preserve it and choose a new path: {output}")
+-        request = AreaOfInterestInput(
+-            bbox_wgs84=bbox,
+-            center_wgs84=center,
++        cache_store = ContentAddressedCache(cache_dir)
++        request, normalized, place_search = _resolve_global_aoi(
++            bbox=bbox,
++            center=center,
+             radius_m=radius_m,
++            place=place,
++            place_candidate_id=place_candidate_id,
++            geocoder_url=geocoder_url,
++            cache_store=cache_store,
++            timeout_seconds=timeout_seconds,
++            max_attempts=max_attempts,
+         )
+-        from topoforge.raster import normalize_area_of_interest
+-
+-        normalized = normalize_area_of_interest(request)
+         source_root = (
+             source_dir if source_dir is not None else output.parent / f"{output.name}-source"
+         ).resolve()
+@@ -468,8 +693,7 @@ def build_global(
+             raise ValueError(
+                 f"source evidence directory already exists; choose a new path: {source_root}"
+             )
+-        source_raster = source_root / "copernicus-aws-aoi.tif"
+-        cache_store = ContentAddressedCache(cache_dir)
++        source_raster = source_root / "global-aoi.tif"
+         client = CachingHttpClient(
+             cache_store,
+             HttpTransportConfig(
+@@ -478,7 +702,22 @@ def build_global(
+                 min_request_interval_seconds=min_request_interval_seconds,
+             ),
+         )
+-        acquisition = CopernicusAwsProvider(client).acquire(normalized, source_raster)
++        selection = fetch_with_provider_selection(
++            aoi=normalized,
++            destination=source_raster,
++            providers=_global_provider_instances(client),
++            descriptors=_global_provider_descriptors(),
++            policy=ProviderSelectionPolicy(
++                requested_provider_id=provider,
++                requested_terrain_mode=terrain_mode,
++                allow_semantic_fallback=allow_semantic_fallback,
++                preferred_provider_ids=preferred_provider or [],
++            ),
++        )
++        if not isinstance(selection.acquisition, ProviderAcquisition):
++            raise ValueError("selected provider returned an unsupported acquisition result")
++        acquisition = selection.acquisition
++        _record_geocoding_manifest(acquisition, place_search)
+         dataset = acquisition.dataset
+         resolved = BuildConfig(
+             dem_path=acquisition.raster_path,
+@@ -512,6 +751,10 @@ def build_global(
+             {
+                 "status": "completed",
+                 "provider": dataset.provider,
++                "provider_selection": selection.trace.model_dump(mode="json"),
++                "geocoding": (
++                    place_search.model_dump(mode="json") if place_search is not None else None
++                ),
+                 "dataset": dataset.model_dump(mode="json"),
+                 "source_raster": str(acquisition.raster_path),
+                 "source_acquisition": str(acquisition.acquisition_manifest_path),
+@@ -522,6 +765,10 @@ def build_global(
+                 "cache": cache_store.summary().model_dump(mode="json"),
+             }
+         )
++    except PlaceCandidateSelectionError as exc:
++        _fail_place_candidates(exc)
++    except ProviderSelectionError as exc:
++        _fail_provider_selection(exc)
+     except (TopoForgeError, ValueError, OSError) as exc:
+         _fail(exc)
+ 
+diff --git a/src/topoforge/engine/build.py b/src/topoforge/engine/build.py
+index 99431dc..c5a089c 100644
+--- a/src/topoforge/engine/build.py
++++ b/src/topoforge/engine/build.py
+@@ -429,10 +429,13 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+         )
+         dump_resolved_config(resolved_config, artifacts["resolved_config"])
+         generated_at = datetime.now(UTC).isoformat()
+-        provenance: dict[str, Any] = {
+-            "topoforge_version": __version__,
+-            "generated_at": generated_at,
+-            "provider_selection": {
++        recorded_provider_selection = (
++            (source_acquisition or {}).get("provider_selection")
++            if source_acquisition is not None
++            else None
++        )
++        if not isinstance(recorded_provider_selection, dict):
++            recorded_provider_selection = {
+                 "selected": processed.report.metadata.provider,
+                 "reason": (
+                     [
+@@ -460,7 +463,11 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+                 "source_acquisition_artifact": (
+                     "source_acquisition.json" if source_acquisition is not None else None
+                 ),
+-            },
++            }
++        provenance: dict[str, Any] = {
++            "topoforge_version": __version__,
++            "generated_at": generated_at,
++            "provider_selection": recorded_provider_selection,
+             "source_acquisition": source_acquisition,
+             "dataset": processed.report.metadata.model_dump(mode="json"),
+             "source_file_checksums": processed.report.metadata.checksums,
+diff --git a/src/topoforge/geocoding/__init__.py b/src/topoforge/geocoding/__init__.py
+new file mode 100644
+index 0000000..8a9f23d
+--- /dev/null
++++ b/src/topoforge/geocoding/__init__.py
+@@ -0,0 +1,21 @@
++"""Place geocoding with explicit ambiguity handling."""
++
++from topoforge.geocoding.nominatim import (
++    NominatimConfig,
++    NominatimGeocoder,
++    PlaceCandidate,
++    PlaceCandidateSelectionError,
++    PlaceSearchResult,
++    place_candidate_aoi_input,
++    select_place_candidate,
++)
++
++__all__ = [
++    "NominatimConfig",
++    "NominatimGeocoder",
++    "PlaceCandidate",
++    "PlaceCandidateSelectionError",
++    "PlaceSearchResult",
++    "place_candidate_aoi_input",
++    "select_place_candidate",
++]
+diff --git a/src/topoforge/geocoding/nominatim.py b/src/topoforge/geocoding/nominatim.py
+new file mode 100644
+index 0000000..d5fc3bf
+--- /dev/null
++++ b/src/topoforge/geocoding/nominatim.py
+@@ -0,0 +1,260 @@
++"""Nominatim-compatible place search with explicit candidate selection."""
++
++from __future__ import annotations
++
++import json
++import math
++from typing import Any
++from urllib.parse import urlencode, urlparse
++
++from pydantic import BaseModel, ConfigDict, Field, field_validator
++
++from topoforge.exceptions import ProviderFetchError
++from topoforge.models import AreaOfInterestInput
++from topoforge.providers.cache import CacheIdentity
++from topoforge.providers.transport import CachingHttpClient
++
++
++class NominatimConfig(BaseModel):
++    """Endpoint and public-service usage-policy limits."""
++
++    model_config = ConfigDict(extra="forbid", frozen=True)
++
++    base_url: str = "https://nominatim.openstreetmap.org"
++    maximum_candidates: int = Field(default=10, ge=1, le=10)
++    enforce_public_usage_policy: bool = True
++
++    @field_validator("base_url")
++    @classmethod
++    def validate_base_url(cls, value: str) -> str:
++        parsed = urlparse(value)
++        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
++            raise ValueError("Nominatim base_url must be an absolute HTTP(S) URL")
++        return value.rstrip("/")
++
++
++class PlaceCandidate(BaseModel):
++    """One candidate returned by a Nominatim-compatible search endpoint."""
++
++    model_config = ConfigDict(extra="forbid", frozen=True)
++
++    candidate_id: str
++    display_name: str
++    latitude: float = Field(ge=-90, le=90)
++    longitude: float = Field(ge=-180, le=180)
++    bounding_box_wgs84: tuple[float, float, float, float]
++    category: str | None = None
++    feature_type: str | None = None
++    importance: float | None = None
++    osm_type: str | None = None
++    osm_id: str | None = None
++
++    @field_validator("bounding_box_wgs84")
++    @classmethod
++    def validate_bbox(
++        cls, value: tuple[float, float, float, float]
++    ) -> tuple[float, float, float, float]:
++        west, south, east, north = value
++        if not all(math.isfinite(item) for item in value):
++            raise ValueError("candidate bounding box values must be finite")
++        if not (-180 <= west <= 180 and -180 <= east <= 180):
++            raise ValueError("candidate bounding box longitudes must be within WGS84 bounds")
++        if not (-90 <= south <= 90 and -90 <= north <= 90):
++            raise ValueError("candidate bounding box latitudes must be within WGS84 bounds")
++        if south >= north or west == east:
++            raise ValueError("candidate bounding box must have non-zero width and height")
++        return value
++
++
++class PlaceSearchResult(BaseModel):
++    """Stable candidate list plus cache/network and usage-policy evidence."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    query: str
++    candidates: list[PlaceCandidate]
++    candidate_status: str
++    request_url: str
++    cache_status: str
++    cache_lookup_reason: str
++    response_sha256: str
++    response_bytes: int
++    etag: str | None = None
++    last_modified: str | None = None
++    attempts: list[dict[str, Any]] = Field(default_factory=list)
++    attribution: str
++    usage_policy: list[str]
++
++
++class PlaceCandidateSelectionError(ValueError):
++    """A place query requires an explicit candidate decision."""
++
++    def __init__(self, message: str, result: PlaceSearchResult) -> None:
++        super().__init__(message)
++        self.result = result
++
++
++def _candidate_from_payload(item: object) -> PlaceCandidate:
++    if not isinstance(item, dict):
++        raise ProviderFetchError("Nominatim response candidate is not a JSON object")
++    raw_bbox = item.get("boundingbox")
++    if not isinstance(raw_bbox, list) or len(raw_bbox) != 4:
++        raise ProviderFetchError("Nominatim candidate is missing a four-value boundingbox")
++    try:
++        south, north, west, east = (float(value) for value in raw_bbox)
++        latitude = float(item["lat"])
++        longitude = float(item["lon"])
++    except (KeyError, TypeError, ValueError) as exc:
++        raise ProviderFetchError("Nominatim candidate coordinates are invalid") from exc
++    candidate_id = item.get("place_id")
++    display_name = item.get("display_name")
++    if candidate_id is None or not isinstance(display_name, str) or not display_name.strip():
++        raise ProviderFetchError("Nominatim candidate is missing place_id or display_name")
++    raw_importance = item.get("importance")
++    try:
++        importance = float(raw_importance) if raw_importance is not None else None
++    except (TypeError, ValueError):
++        importance = None
++    return PlaceCandidate(
++        candidate_id=str(candidate_id),
++        display_name=display_name,
++        latitude=latitude,
++        longitude=longitude,
++        bounding_box_wgs84=(west, south, east, north),
++        category=str(item["category"]) if item.get("category") is not None else None,
++        feature_type=str(item["type"]) if item.get("type") is not None else None,
++        importance=importance,
++        osm_type=str(item["osm_type"]) if item.get("osm_type") is not None else None,
++        osm_id=str(item["osm_id"]) if item.get("osm_id") is not None else None,
++    )
++
++
++class NominatimGeocoder:
++    """Cache and parse bounded Nominatim-compatible candidate searches."""
++
++    provider_id = "nominatim"
++
++    def __init__(
++        self,
++        client: CachingHttpClient,
++        config: NominatimConfig | None = None,
++    ) -> None:
++        self.client = client
++        self.config = config or NominatimConfig()
++        public_host = urlparse(self.config.base_url).hostname == "nominatim.openstreetmap.org"
++        if (
++            self.config.enforce_public_usage_policy
++            and public_host
++            and self.client.config.min_request_interval_seconds < 1.0
++        ):
++            raise ValueError("public Nominatim usage requires min_request_interval_seconds >= 1.0")
++
++    def search(
++        self,
++        query: str,
++        *,
++        limit: int | None = None,
++        country_codes: list[str] | None = None,
++        accept_language: str | None = None,
++    ) -> PlaceSearchResult:
++        """Return candidates; ambiguity is retained rather than silently resolved."""
++        normalized_query = " ".join(query.split())
++        if not normalized_query:
++            raise ValueError("place query must contain non-whitespace characters")
++        resolved_limit = limit or self.config.maximum_candidates
++        if resolved_limit < 1 or resolved_limit > self.config.maximum_candidates:
++            raise ValueError(
++                f"candidate limit must be between 1 and {self.config.maximum_candidates}"
++            )
++        normalized_countries = sorted(
++            {value.strip().lower() for value in (country_codes or []) if value.strip()}
++        )
++        parameters: list[tuple[str, str]] = [
++            ("q", normalized_query),
++            ("format", "jsonv2"),
++            ("limit", str(resolved_limit)),
++            ("addressdetails", "1"),
++            ("dedupe", "1"),
++            ("polygon_geojson", "0"),
++        ]
++        if normalized_countries:
++            parameters.append(("countrycodes", ",".join(normalized_countries)))
++        if accept_language is not None and accept_language.strip():
++            parameters.append(("accept-language", accept_language.strip()))
++        url = f"{self.config.base_url}/search?{urlencode(parameters)}"
++        result = self.client.download(
++            CacheIdentity(
++                provider_id=self.provider_id,
++                dataset_id="nominatim-search",
++                dataset_version="jsonv2",
++                url=url,
++            )
++        )
++        try:
++            payload = json.loads(result.path.read_text(encoding="utf-8"))
++        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
++            raise ProviderFetchError("Nominatim response is not valid UTF-8 JSON") from exc
++        if not isinstance(payload, list):
++            raise ProviderFetchError("Nominatim search response root is not a JSON list")
++        candidates = [_candidate_from_payload(item) for item in payload]
++        status = "none" if not candidates else "unique" if len(candidates) == 1 else "ambiguous"
++        return PlaceSearchResult(
++            query=normalized_query,
++            candidates=candidates,
++            candidate_status=status,
++            request_url=url,
++            cache_status=result.cache_status.value,
++            cache_lookup_reason=result.cache_lookup_reason,
++            response_sha256=result.cache_entry.object_sha256,
++            response_bytes=result.cache_entry.object_size_bytes,
++            etag=result.cache_entry.etag,
++            last_modified=result.cache_entry.last_modified,
++            attempts=[item.model_dump(mode="json") for item in result.attempts],
++            attribution="Geocoding © OpenStreetMap contributors",
++            usage_policy=[
++                "candidate search only; no client-side autocomplete",
++                "queries are cached by canonical request URL",
++                "public endpoint requests are limited to at most one per second",
++                "ambiguous results require an explicit candidate id",
++            ],
++        )
++
++
++def select_place_candidate(
++    result: PlaceSearchResult,
++    *,
++    candidate_id: str | None = None,
++) -> PlaceCandidate:
++    """Select a unique result or require an explicit id for ambiguous candidates."""
++    if not result.candidates:
++        raise PlaceCandidateSelectionError(
++            f"place query {result.query!r} returned no candidates",
++            result,
++        )
++    if candidate_id is not None:
++        matches = [item for item in result.candidates if item.candidate_id == candidate_id]
++        if len(matches) != 1:
++            raise PlaceCandidateSelectionError(
++                f"candidate id {candidate_id!r} is not present in the returned candidates",
++                result,
++            )
++        return matches[0]
++    if len(result.candidates) != 1:
++        raise PlaceCandidateSelectionError(
++            f"place query {result.query!r} is ambiguous; choose a candidate id",
++            result,
++        )
++    return result.candidates[0]
++
++
++def place_candidate_aoi_input(
++    result: PlaceSearchResult,
++    candidate: PlaceCandidate,
++) -> AreaOfInterestInput:
++    """Create a network-free resolved place AOI that preserves the candidate decision."""
++    return AreaOfInterestInput(
++        place_query=result.query,
++        place_candidate_id=candidate.candidate_id,
++        place_display_name=candidate.display_name,
++        resolved_place_bbox_wgs84=candidate.bounding_box_wgs84,
++    )
+diff --git a/src/topoforge/models/domain.py b/src/topoforge/models/domain.py
+index 7e1b991..7bfd815 100644
+--- a/src/topoforge/models/domain.py
++++ b/src/topoforge/models/domain.py
+@@ -62,16 +62,44 @@ class AreaOfInterestInput(BaseModel):
+     bbox_wgs84: tuple[float, float, float, float] | None = None
+     center_wgs84: tuple[float, float] | None = None
+     radius_m: float | None = Field(default=None, gt=0)
++    place_query: str | None = None
++    place_candidate_id: str | None = None
++    place_display_name: str | None = None
++    resolved_place_bbox_wgs84: tuple[float, float, float, float] | None = None
+ 
+     @model_validator(mode="after")
+     def validate_shape(self) -> AreaOfInterestInput:
+         """Require exactly one complete AOI input form."""
+         has_bbox = self.bbox_wgs84 is not None
+         has_center = self.center_wgs84 is not None or self.radius_m is not None
+-        if has_bbox == has_center:
+-            raise ValueError("AOI requires exactly one of bbox_wgs84 or center_wgs84 + radius_m")
++        has_place = any(
++            value is not None
++            for value in (
++                self.place_query,
++                self.place_candidate_id,
++                self.place_display_name,
++                self.resolved_place_bbox_wgs84,
++            )
++        )
++        if sum((has_bbox, has_center, has_place)) != 1:
++            raise ValueError(
++                "AOI requires exactly one of bbox_wgs84, center_wgs84 + radius_m, "
++                "or a resolved place candidate"
++            )
+         if has_center and (self.center_wgs84 is None or self.radius_m is None):
+             raise ValueError("center_wgs84 and radius_m must be supplied together")
++        if has_place and any(
++            value is None
++            for value in (
++                self.place_query,
++                self.place_candidate_id,
++                self.place_display_name,
++                self.resolved_place_bbox_wgs84,
++            )
++        ):
++            raise ValueError(
++                "resolved place AOI requires query, candidate id, display name, and bbox"
++            )
+         return self
+ 
+ 
+diff --git a/src/topoforge/providers/__init__.py b/src/topoforge/providers/__init__.py
+index 1ed2b0d..dc1078e 100644
+--- a/src/topoforge/providers/__init__.py
++++ b/src/topoforge/providers/__init__.py
+@@ -23,6 +23,16 @@ from topoforge.providers.copernicus_aws import (
+ )
+ from topoforge.providers.protocol import CoverageInfo, ElevationProvider, ProviderDescriptor
+ from topoforge.providers.registry import list_provider_descriptors
++from topoforge.providers.selection import (
++    ProviderEvaluation,
++    ProviderFetchAttempt,
++    ProviderFetchSelection,
++    ProviderSelectionError,
++    ProviderSelectionPolicy,
++    ProviderSelectionTrace,
++    evaluate_providers,
++    fetch_with_provider_selection,
++)
+ from topoforge.providers.transport import (
+     CachingHttpClient,
+     DownloadResult,
+@@ -51,6 +61,14 @@ __all__ = [
+     "NetworkAttempt",
+     "ProviderAcquisition",
+     "ProviderDescriptor",
++    "ProviderEvaluation",
++    "ProviderFetchAttempt",
++    "ProviderFetchSelection",
++    "ProviderSelectionError",
++    "ProviderSelectionPolicy",
++    "ProviderSelectionTrace",
++    "evaluate_providers",
++    "fetch_with_provider_selection",
+     "list_provider_descriptors",
+     "parse_s3_object_listing",
+     "parse_tile_list",
+diff --git a/src/topoforge/providers/selection.py b/src/topoforge/providers/selection.py
+new file mode 100644
+index 0000000..1bff4a1
+--- /dev/null
++++ b/src/topoforge/providers/selection.py
+@@ -0,0 +1,628 @@
++"""Deterministic, explainable provider evaluation and fetch fallback."""
++
++from __future__ import annotations
++
++import json
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any
++
++from pydantic import BaseModel, ConfigDict, Field, model_validator
++
++from topoforge.exceptions import ProviderFetchError
++from topoforge.models import AreaOfInterest, DatasetMetadata, DatasetType, TerrainMode
++from topoforge.providers.protocol import ElevationProvider, ProviderDescriptor
++
++
++class ProviderSelectionPolicy(BaseModel):
++    """User-visible hard filters and deterministic ranking preferences."""
++
++    model_config = ConfigDict(extra="forbid", frozen=True)
++
++    requested_provider_id: str = "auto"
++    requested_terrain_mode: TerrainMode = TerrainMode.BEST_AVAILABLE
++    require_complete_coverage: bool = True
++    allow_authenticated_providers: bool = False
++    available_credentials: list[str] = Field(default_factory=list)
++    allow_semantic_fallback: bool = False
++    maximum_horizontal_resolution_m: float | None = Field(default=None, gt=0)
++    maximum_download_bytes: int | None = Field(default=None, gt=0)
++    required_vertical_datum: str | None = None
++    preferred_provider_ids: list[str] = Field(default_factory=list)
++    allowed_license_ids: list[str] | None = None
++
++    @model_validator(mode="after")
++    def validate_identifiers(self) -> ProviderSelectionPolicy:
++        """Reject ambiguous duplicate preference and credential declarations."""
++        if not self.requested_provider_id.strip():
++            raise ValueError("requested_provider_id must be 'auto' or a non-empty provider id")
++        for name, values in (
++            ("available_credentials", self.available_credentials),
++            ("preferred_provider_ids", self.preferred_provider_ids),
++        ):
++            if len(values) != len(set(values)):
++                raise ValueError(f"{name} must not contain duplicate provider ids")
++        return self
++
++
++class ProviderEvaluation(BaseModel):
++    """One registry candidate's probe result, hard-filter decision, and rank."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    provider_id: str
++    provider_name: str
++    registry_order: int = Field(ge=0)
++    status: str
++    reasons: list[str]
++    dataset: dict[str, Any] | None = None
++    coverage: dict[str, Any] | None = None
++    semantic_status: str | None = None
++    rank: tuple[int, int, float, int, int, int, int, str] | None = None
++
++
++class ProviderFetchAttempt(BaseModel):
++    """One literal provider fetch attempt after deterministic ranking."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    provider_id: str
++    rank_order: int = Field(ge=1)
++    status: str
++    error_type: str | None = None
++    error_message: str | None = None
++    retained_destination_artifacts: list[str] = Field(default_factory=list)
++
++
++class ProviderSelectionTrace(BaseModel):
++    """Complete, deterministic selection and fallback history."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    policy: ProviderSelectionPolicy
++    evaluations: list[ProviderEvaluation]
++    ranked_provider_ids: list[str]
++    fetch_attempts: list[ProviderFetchAttempt]
++    selected_provider: str | None = None
++    selected_dataset: str | None = None
++    outcome: str
++    selection_reasons: list[str] = Field(default_factory=list)
++
++
++@dataclass(frozen=True, slots=True)
++class ProviderFetchSelection:
++    """Successful provider result paired with its recorded trace."""
++
++    acquisition: object
++    trace: ProviderSelectionTrace
++
++
++class ProviderSelectionError(ProviderFetchError):
++    """Aggregated selection/fetch failure with a machine-readable trace."""
++
++    def __init__(self, message: str, trace: ProviderSelectionTrace) -> None:
++        super().__init__(message)
++        self.trace = trace
++
++
++def _semantic_rank(
++    requested: TerrainMode,
++    actual: DatasetType,
++    *,
++    allow_fallback: bool,
++) -> tuple[int | None, str, str]:
++    if requested is TerrainMode.BEST_AVAILABLE:
++        ranking = {
++            DatasetType.DTM: 0,
++            DatasetType.DSM: 1,
++            DatasetType.MIXED: 2,
++            DatasetType.BATHYMETRY: 3,
++            DatasetType.UNKNOWN: 4,
++        }
++        return (
++            ranking[actual],
++            "best-available",
++            f"{actual.value} is eligible for best-available terrain mode",
++        )
++    requested_type = DatasetType(requested.value)
++    if actual is requested_type:
++        return 0, "exact", f"dataset semantics exactly match requested {requested.value}"
++    fallback_order: dict[TerrainMode, tuple[DatasetType, ...]] = {
++        TerrainMode.DTM: (DatasetType.DSM, DatasetType.MIXED, DatasetType.UNKNOWN),
++        TerrainMode.DSM: (DatasetType.DTM, DatasetType.MIXED, DatasetType.UNKNOWN),
++        TerrainMode.BATHYMETRY: (DatasetType.MIXED, DatasetType.UNKNOWN),
++        TerrainMode.BEST_AVAILABLE: (),
++    }
++    candidates = fallback_order[requested]
++    if allow_fallback and actual in candidates:
++        return (
++            candidates.index(actual) + 1,
++            "fallback",
++            f"explicit semantic fallback permits {requested.value} to {actual.value} downgrade",
++        )
++    return (
++        None,
++        "incompatible",
++        f"dataset semantics {actual.value} do not match requested {requested.value}; "
++        "semantic fallback is disabled",
++    )
++
++
++def _risk_rank(value: str) -> int:
++    normalized = value.strip().lower()
++    if normalized in {"low", "unlikely"}:
++        return 0
++    if normalized in {"medium", "moderate"}:
++        return 1
++    if normalized in {"high", "likely"}:
++        return 2
++    return 3
++
++
++def _license_rejection(metadata: DatasetMetadata, policy: ProviderSelectionPolicy) -> str | None:
++    license_id = metadata.license.strip()
++    if license_id.lower() in {"", "unknown", "unverified", "none"}:
++        return "dataset license is missing or unverified"
++    if policy.allowed_license_ids is not None and license_id not in policy.allowed_license_ids:
++        return f"dataset license {license_id!r} is not in allowed_license_ids"
++    return None
++
++
++def _evaluation(
++    descriptor: ProviderDescriptor,
++    order: int,
++    *,
++    status: str,
++    reasons: list[str],
++    metadata: DatasetMetadata | None = None,
++    coverage: Any | None = None,
++    semantic_status: str | None = None,
++    rank: tuple[int, int, float, int, int, int, int, str] | None = None,
++) -> ProviderEvaluation:
++    return ProviderEvaluation(
++        provider_id=descriptor.provider_id,
++        provider_name=descriptor.name,
++        registry_order=order,
++        status=status,
++        reasons=reasons,
++        dataset=metadata.model_dump(mode="json") if metadata is not None else None,
++        coverage=(
++            coverage.model_dump(mode="json")
++            if coverage is not None and hasattr(coverage, "model_dump")
++            else None
++        ),
++        semantic_status=semantic_status,
++        rank=rank,
++    )
++
++
++def evaluate_providers(
++    *,
++    aoi: AreaOfInterest,
++    providers: dict[str, ElevationProvider],
++    descriptors: list[ProviderDescriptor],
++    policy: ProviderSelectionPolicy,
++) -> tuple[list[ProviderEvaluation], list[str]]:
++    """Evaluate and rank registry candidates without fetching destination artifacts."""
++    descriptor_ids = [item.provider_id for item in descriptors]
++    if len(descriptor_ids) != len(set(descriptor_ids)):
++        raise ValueError("provider descriptors must have unique provider ids")
++    if (
++        policy.requested_provider_id != "auto"
++        and policy.requested_provider_id not in descriptor_ids
++    ):
++        raise ValueError(f"unknown provider id: {policy.requested_provider_id}")
++
++    evaluations: list[ProviderEvaluation] = []
++    eligible: list[ProviderEvaluation] = []
++    preference_default = len(policy.preferred_provider_ids)
++    for order, descriptor in enumerate(descriptors):
++        if policy.requested_provider_id != "auto" and (
++            descriptor.provider_id != policy.requested_provider_id
++        ):
++            continue
++        if not descriptor.implemented:
++            evaluations.append(
++                _evaluation(
++                    descriptor,
++                    order,
++                    status="rejected",
++                    reasons=["provider is registered but not implemented"],
++                )
++            )
++            continue
++        provider = providers.get(descriptor.provider_id)
++        if provider is None:
++            evaluations.append(
++                _evaluation(
++                    descriptor,
++                    order,
++                    status="unavailable",
++                    reasons=["implemented provider instance is not available in this command"],
++                )
++            )
++            continue
++        if descriptor.requires_api_key and not policy.allow_authenticated_providers:
++            evaluations.append(
++                _evaluation(
++                    descriptor,
++                    order,
++                    status="rejected",
++                    reasons=["authenticated providers are disabled by selection policy"],
++                )
++            )
++            continue
++        if (
++            descriptor.requires_api_key
++            and descriptor.provider_id not in policy.available_credentials
++        ):
++            evaluations.append(
++                _evaluation(
++                    descriptor,
++                    order,
++                    status="rejected",
++                    reasons=["required provider credential is not available"],
++                )
++            )
++            continue
++        try:
++            metadata = provider.metadata()
++        except Exception as exc:
++            evaluations.append(
++                _evaluation(
++                    descriptor,
++                    order,
++                    status="metadata-failed",
++                    reasons=[f"metadata failed with {type(exc).__name__}: {exc}"],
++                )
++            )
++            continue
++        license_rejection = _license_rejection(metadata, policy)
++        if license_rejection is not None:
++            evaluations.append(
++                _evaluation(
++                    descriptor,
++                    order,
++                    status="rejected",
++                    reasons=[license_rejection],
++                    metadata=metadata,
++                )
++            )
++            continue
++        if (
++            policy.required_vertical_datum is not None
++            and metadata.vertical_datum != policy.required_vertical_datum
++        ):
++            evaluations.append(
++                _evaluation(
++                    descriptor,
++                    order,
++                    status="rejected",
++                    reasons=[
++                        f"vertical datum {metadata.vertical_datum!r} does not match required "
++                        f"{policy.required_vertical_datum!r}"
++                    ],
++                    metadata=metadata,
++                )
++            )
++            continue
++        try:
++            coverage = provider.probe(aoi)
++        except Exception as exc:
++            evaluations.append(
++                _evaluation(
++                    descriptor,
++                    order,
++                    status="probe-failed",
++                    reasons=[f"coverage probe failed with {type(exc).__name__}: {exc}"],
++                    metadata=metadata,
++                )
++            )
++            continue
++        if not coverage.covered:
++            evaluations.append(
++                _evaluation(
++                    descriptor,
++                    order,
++                    status="rejected",
++                    reasons=["provider does not cover the normalized AOI", *coverage.reason],
++                    metadata=metadata,
++                    coverage=coverage,
++                )
++            )
++            continue
++        if policy.require_complete_coverage and not coverage.complete:
++            evaluations.append(
++                _evaluation(
++                    descriptor,
++                    order,
++                    status="rejected",
++                    reasons=["complete AOI coverage is required", *coverage.reason],
++                    metadata=metadata,
++                    coverage=coverage,
++                )
++            )
++            continue
++        semantic_rank, semantic_status, semantic_reason = _semantic_rank(
++            policy.requested_terrain_mode,
++            coverage.dataset_type,
++            allow_fallback=policy.allow_semantic_fallback,
++        )
++        if semantic_rank is None:
++            evaluations.append(
++                _evaluation(
++                    descriptor,
++                    order,
++                    status="rejected",
++                    reasons=[semantic_reason],
++                    metadata=metadata,
++                    coverage=coverage,
++                    semantic_status=semantic_status,
++                )
++            )
++            continue
++        resolution = coverage.horizontal_resolution_m or metadata.horizontal_resolution_m
++        if policy.maximum_horizontal_resolution_m is not None and (
++            resolution is None or resolution > policy.maximum_horizontal_resolution_m
++        ):
++            value = "unknown" if resolution is None else f"{resolution:g} m"
++            evaluations.append(
++                _evaluation(
++                    descriptor,
++                    order,
++                    status="rejected",
++                    reasons=[
++                        f"horizontal resolution {value} exceeds required maximum "
++                        f"{policy.maximum_horizontal_resolution_m:g} m"
++                    ],
++                    metadata=metadata,
++                    coverage=coverage,
++                    semantic_status=semantic_status,
++                )
++            )
++            continue
++        if policy.maximum_download_bytes is not None and (
++            coverage.estimated_download_bytes is None
++            or coverage.estimated_download_bytes > policy.maximum_download_bytes
++        ):
++            value = (
++                "unknown"
++                if coverage.estimated_download_bytes is None
++                else str(coverage.estimated_download_bytes)
++            )
++            evaluations.append(
++                _evaluation(
++                    descriptor,
++                    order,
++                    status="rejected",
++                    reasons=[
++                        f"estimated download bytes {value} exceed or cannot satisfy maximum "
++                        f"{policy.maximum_download_bytes}"
++                    ],
++                    metadata=metadata,
++                    coverage=coverage,
++                    semantic_status=semantic_status,
++                )
++            )
++            continue
++        preference_rank = (
++            policy.preferred_provider_ids.index(descriptor.provider_id)
++            if descriptor.provider_id in policy.preferred_provider_ids
++            else preference_default
++        )
++        rank = (
++            semantic_rank,
++            0 if coverage.complete else 1,
++            float(resolution) if resolution is not None else 1.0e100,
++            1 if descriptor.requires_api_key else 0,
++            _risk_rank(coverage.failure_probability),
++            preference_rank,
++            order,
++            descriptor.provider_id,
++        )
++        reasons = [
++            semantic_reason,
++            "coverage is complete" if coverage.complete else "coverage is partial but allowed",
++            (
++                f"horizontal resolution is {resolution:g} m"
++                if resolution is not None
++                else "horizontal resolution is unknown"
++            ),
++            *coverage.reason,
++        ]
++        item = _evaluation(
++            descriptor,
++            order,
++            status="eligible",
++            reasons=reasons,
++            metadata=metadata,
++            coverage=coverage,
++            semantic_status=semantic_status,
++            rank=rank,
++        )
++        evaluations.append(item)
++        eligible.append(item)
++
++    eligible.sort(key=lambda item: item.rank or (999, 999, float("inf"), 9, 9, 9, 9, ""))
++    return evaluations, [item.provider_id for item in eligible]
++
++
++def _destination_artifacts(destination: Path) -> set[Path]:
++    parent = destination.parent
++    if not parent.exists():
++        return set()
++    prefixes = (destination.name, destination.stem + ".", destination.stem + "-")
++    return {
++        path.resolve()
++        for path in parent.iterdir()
++        if path.is_file() and any(path.name.startswith(prefix) for prefix in prefixes)
++    }
++
++
++def _write_trace_to_manifest(acquisition: object, trace: ProviderSelectionTrace) -> None:
++    raw_path = getattr(acquisition, "acquisition_manifest_path", None)
++    if raw_path is None:
++        return
++    path = Path(raw_path).expanduser().resolve()
++    if not path.is_file():
++        raise ProviderFetchError(f"selected provider acquisition manifest is missing: {path}")
++    try:
++        payload = json.loads(path.read_text(encoding="utf-8"))
++    except (OSError, json.JSONDecodeError) as exc:
++        raise ProviderFetchError(
++            f"selected provider acquisition manifest is not valid JSON: {path}"
++        ) from exc
++    if not isinstance(payload, dict):
++        raise ProviderFetchError("selected provider acquisition manifest root is not an object")
++    payload["provider_selection"] = trace.model_dump(mode="json")
++    temporary = path.with_name(f".{path.name}.provider-selection.tmp")
++    try:
++        temporary.write_text(
++            json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
++            encoding="utf-8",
++        )
++        json.loads(temporary.read_text(encoding="utf-8"))
++        temporary.replace(path)
++    finally:
++        temporary.unlink(missing_ok=True)
++
++
++def fetch_with_provider_selection(
++    *,
++    aoi: AreaOfInterest,
++    destination: Path,
++    providers: dict[str, ElevationProvider],
++    descriptors: list[ProviderDescriptor],
++    policy: ProviderSelectionPolicy,
++) -> ProviderFetchSelection:
++    """Rank providers, attempt eligible fetches, and persist the exact fallback trace."""
++    destination = destination.expanduser().resolve()
++    evaluations, ranked_ids = evaluate_providers(
++        aoi=aoi,
++        providers=providers,
++        descriptors=descriptors,
++        policy=policy,
++    )
++    attempts: list[ProviderFetchAttempt] = []
++    if not ranked_ids:
++        trace = ProviderSelectionTrace(
++            policy=policy,
++            evaluations=evaluations,
++            ranked_provider_ids=[],
++            fetch_attempts=[],
++            outcome="no-eligible-provider",
++            selection_reasons=["every registered candidate failed a hard selection requirement"],
++        )
++        raise ProviderSelectionError("no provider satisfied the selection policy", trace)
++
++    evaluation_by_id = {item.provider_id: item for item in evaluations}
++    for rank_order, provider_id in enumerate(ranked_ids, start=1):
++        before = _destination_artifacts(destination)
++        try:
++            acquisition = providers[provider_id].fetch(aoi, destination)
++        except Exception as exc:
++            retained = sorted(str(path) for path in (_destination_artifacts(destination) - before))
++            attempts.append(
++                ProviderFetchAttempt(
++                    provider_id=provider_id,
++                    rank_order=rank_order,
++                    status="fetch-failed-artifacts-retained" if retained else "fetch-failed",
++                    error_type=type(exc).__name__,
++                    error_message=str(exc),
++                    retained_destination_artifacts=retained,
++                )
++            )
++            if retained:
++                trace = ProviderSelectionTrace(
++                    policy=policy,
++                    evaluations=evaluations,
++                    ranked_provider_ids=ranked_ids,
++                    fetch_attempts=attempts,
++                    outcome="failed-with-retained-evidence",
++                    selection_reasons=[
++                        f"{provider_id} left destination evidence after failure; fallback stopped "
++                        "to avoid overwriting it"
++                    ],
++                )
++                raise ProviderSelectionError(
++                    f"provider {provider_id} failed and left destination evidence", trace
++                ) from exc
++            continue
++
++        evaluation = evaluation_by_id[provider_id]
++        dataset_name = None
++        acquired_dataset = getattr(acquisition, "dataset", None)
++        if isinstance(acquired_dataset, DatasetMetadata):
++            dataset_name = acquired_dataset.dataset_name
++        elif evaluation.dataset is not None:
++            raw_name = evaluation.dataset.get("dataset_name")
++            dataset_name = str(raw_name) if raw_name is not None else None
++        attempts.append(
++            ProviderFetchAttempt(
++                provider_id=provider_id,
++                rank_order=rank_order,
++                status="selected",
++            )
++        )
++        reasons = [
++            f"{provider_id} ranked {rank_order} after semantic, coverage, resolution, credential, "
++            "operational-risk, preference, and stable registry tie-break rules",
++            *evaluation.reasons,
++        ]
++        if any(item.status == "fetch-failed" for item in attempts[:-1]):
++            reasons.append(
++                "higher-ranked provider fetches failed without leaving destination evidence; "
++                "fallback continued"
++            )
++        trace = ProviderSelectionTrace(
++            policy=policy,
++            evaluations=evaluations,
++            ranked_provider_ids=ranked_ids,
++            fetch_attempts=attempts,
++            selected_provider=provider_id,
++            selected_dataset=dataset_name,
++            outcome="selected",
++            selection_reasons=reasons,
++        )
++        try:
++            _write_trace_to_manifest(acquisition, trace)
++        except Exception as exc:
++            retained = sorted(str(path) for path in _destination_artifacts(destination))
++            attempts[-1] = ProviderFetchAttempt(
++                provider_id=provider_id,
++                rank_order=rank_order,
++                status="manifest-recording-failed",
++                error_type=type(exc).__name__,
++                error_message=str(exc),
++                retained_destination_artifacts=retained,
++            )
++            failed_trace = trace.model_copy(
++                update={
++                    "fetch_attempts": attempts,
++                    "selected_provider": None,
++                    "selected_dataset": None,
++                    "outcome": "failed-with-retained-evidence",
++                    "selection_reasons": [
++                        "provider fetch succeeded but the complete selection trace was not "
++                        "recorded; retained evidence was not overwritten"
++                    ],
++                }
++            )
++            raise ProviderSelectionError(
++                "provider selection trace could not be recorded in source acquisition evidence",
++                failed_trace,
++            ) from exc
++        return ProviderFetchSelection(acquisition=acquisition, trace=trace)
++
++    trace = ProviderSelectionTrace(
++        policy=policy,
++        evaluations=evaluations,
++        ranked_provider_ids=ranked_ids,
++        fetch_attempts=attempts,
++        outcome="all-fetches-failed",
++        selection_reasons=["all eligible providers failed before publishing destination evidence"],
++    )
++    summary = "; ".join(
++        f"{item.provider_id}: {item.error_type}: {item.error_message}" for item in attempts
++    )
++    raise ProviderSelectionError(f"all provider fetches failed ({summary})", trace)
+diff --git a/src/topoforge/providers/transport.py b/src/topoforge/providers/transport.py
+index 95515c0..cddf983 100644
+--- a/src/topoforge/providers/transport.py
++++ b/src/topoforge/providers/transport.py
+@@ -38,7 +38,7 @@ class HttpTransportConfig(BaseModel):
+     min_request_interval_seconds: float = Field(default=0.2, ge=0)
+     max_download_bytes: int = Field(default=2_000_000_000, gt=0)
+     chunk_size_bytes: int = Field(default=1024 * 1024, ge=4096)
+-    user_agent: str = "TopoForge/0.2 (+https://github.com/topoforge/topoforge)"
++    user_agent: str = "TopoForge/0.3 (+https://github.com/topoforge/topoforge)"
+ 
+ 
+ class NetworkAttempt(BaseModel):
+diff --git a/src/topoforge/raster/aoi.py b/src/topoforge/raster/aoi.py
+index b1f4a6b..9526808 100644
+--- a/src/topoforge/raster/aoi.py
++++ b/src/topoforge/raster/aoi.py
+@@ -87,8 +87,14 @@ def _minimal_longitude_bounds(longitudes: list[float]) -> tuple[float, float, bo
+ 
+ def normalize_area_of_interest(request: AreaOfInterestInput) -> AreaOfInterest:
+     """Normalize a bbox or center-radius request into explicit WGS84 bounds/geometry."""
+-    if request.bbox_wgs84 is not None:
+-        west, south, east, north = request.bbox_wgs84
++    if request.bbox_wgs84 is not None or request.resolved_place_bbox_wgs84 is not None:
++        raw_bounds = (
++            request.bbox_wgs84
++            if request.bbox_wgs84 is not None
++            else request.resolved_place_bbox_wgs84
++        )
++        assert raw_bounds is not None
++        west, south, east, north = raw_bounds
+         west = _validated_longitude(west, "bbox west")
+         east = _validated_longitude(east, "bbox east")
+         south = _validated_latitude(south, "bbox south")
+@@ -99,9 +105,22 @@ def normalize_area_of_interest(request: AreaOfInterestInput) -> AreaOfInterest:
+             raise ValueError("bbox south must be below bbox north")
+         geometry, crosses = _geometry_for_bounds(west, south, east, north)
+         bounds = (west, south, east, north)
+-        kind = "bbox"
+-        user_input: dict[str, object] = {"bbox_wgs84": list(request.bbox_wgs84)}
+-        method = "validated WGS84 bbox; antimeridian split when west > east"
++        if request.bbox_wgs84 is not None:
++            kind = "bbox"
++            user_input: dict[str, object] = {"bbox_wgs84": list(request.bbox_wgs84)}
++            method = "validated WGS84 bbox; antimeridian split when west > east"
++        else:
++            kind = "place"
++            assert request.resolved_place_bbox_wgs84 is not None
++            user_input = {
++                "place_query": str(request.place_query),
++                "place_candidate_id": str(request.place_candidate_id),
++                "place_display_name": str(request.place_display_name),
++                "resolved_place_bbox_wgs84": list(request.resolved_place_bbox_wgs84),
++            }
++            method = (
++                "explicit Nominatim-compatible candidate bbox; antimeridian split when west > east"
++            )
+     else:
+         assert request.center_wgs84 is not None and request.radius_m is not None
+         longitude = _validated_longitude(request.center_wgs84[0], "center longitude")
+diff --git a/tests/cli/test_build_config_overrides.py b/tests/cli/test_build_config_overrides.py
+index 142e9ab..5f1c033 100644
+--- a/tests/cli/test_build_config_overrides.py
++++ b/tests/cli/test_build_config_overrides.py
+@@ -231,3 +231,106 @@ def test_cli_center_radius_aoi_is_resolved(monkeypatch: Any) -> None:
+     assert resolved.aoi is not None
+     assert resolved.aoi.center_wgs84 == (101.8, 29.6)
+     assert resolved.aoi.radius_m == 10_000.0
++
++
++def test_fetch_dem_defaults_to_auto_and_records_selection_policy(
++    tmp_path: Path, monkeypatch: Any
++) -> None:
++    from topoforge.models import DatasetMetadata
++
++    captured: list[Any] = []
++
++    class FakeAcquisition:
++        def __init__(self) -> None:
++            self.provider_id = "copernicus-aws"
++            self.dataset = DatasetMetadata(
++                provider="copernicus-aws",
++                dataset_name="fixture DSM",
++                dataset_type=DatasetType.DSM,
++                horizontal_crs="EPSG:4326",
++                license="TEST-LICENSE",
++                attribution="fixture",
++            )
++            self.aoi = {"kind": "bbox"}
++            self.plan = SimpleNamespace(model_dump=lambda mode: {"product": "fixture"})
++            self.raster_path = tmp_path / "source.tif"
++            self.acquisition_manifest_path = tmp_path / "source.json"
++
++    def fake_selection(**kwargs: Any) -> SimpleNamespace:
++        captured.append(kwargs["policy"])
++        return SimpleNamespace(
++            acquisition=FakeAcquisition(),
++            trace=SimpleNamespace(model_dump=lambda mode: {"selected_provider": "copernicus-aws"}),
++        )
++
++    monkeypatch.setattr(cli_module, "ProviderAcquisition", FakeAcquisition)
++    monkeypatch.setattr(cli_module, "fetch_with_provider_selection", fake_selection)
++
++    result = runner.invoke(
++        cli_module.app,
++        [
++            "fetch-dem",
++            "--output",
++            str(tmp_path / "requested.tif"),
++            "--bbox",
++            "101.2",
++            "29.2",
++            "101.3",
++            "29.3",
++            "--terrain-mode",
++            "dtm",
++            "--allow-semantic-fallback",
++            "--preferred-provider",
++            "copernicus-aws",
++        ],
++    )
++
++    assert result.exit_code == 0, result.output
++    policy = captured.pop()
++    assert policy.requested_provider_id == "auto"
++    assert policy.requested_terrain_mode.value == "dtm"
++    assert policy.allow_semantic_fallback is True
++    assert policy.preferred_provider_ids == ["copernicus-aws"]
++    assert '"selected_provider": "copernicus-aws"' in result.output
++
++
++def test_fetch_dem_retains_explicit_provider_mode(tmp_path: Path, monkeypatch: Any) -> None:
++    captured: list[Any] = []
++
++    class FakeAcquisition:
++        def __init__(self) -> None:
++            self.provider_id = "copernicus-aws"
++            self.dataset = SimpleNamespace(model_dump=lambda mode: {})
++            self.aoi: dict[str, Any] = {}
++            self.plan = SimpleNamespace(model_dump=lambda mode: {})
++            self.raster_path = tmp_path / "source.tif"
++            self.acquisition_manifest_path = tmp_path / "source.json"
++
++    def fake_selection(**kwargs: Any) -> SimpleNamespace:
++        captured.append(kwargs["policy"])
++        return SimpleNamespace(
++            acquisition=FakeAcquisition(),
++            trace=SimpleNamespace(model_dump=lambda mode: {}),
++        )
++
++    monkeypatch.setattr(cli_module, "ProviderAcquisition", FakeAcquisition)
++    monkeypatch.setattr(cli_module, "fetch_with_provider_selection", fake_selection)
++
++    result = runner.invoke(
++        cli_module.app,
++        [
++            "fetch-dem",
++            "--output",
++            str(tmp_path / "requested.tif"),
++            "--bbox",
++            "101.2",
++            "29.2",
++            "101.3",
++            "29.3",
++            "--provider",
++            "copernicus-aws",
++        ],
++    )
++
++    assert result.exit_code == 0, result.output
++    assert captured.pop().requested_provider_id == "copernicus-aws"
+diff --git a/tests/providers/test_copernicus_aws.py b/tests/providers/test_copernicus_aws.py
+index 9c30e7e..38828e9 100644
+--- a/tests/providers/test_copernicus_aws.py
++++ b/tests/providers/test_copernicus_aws.py
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ 
++import json
+ from email.message import Message
+ from io import BytesIO
+ from pathlib import Path
+@@ -12,7 +13,7 @@ from rasterio.io import MemoryFile
+ from rasterio.transform import from_bounds
+ 
+ from topoforge.exceptions import ProviderFetchError
+-from topoforge.models import AreaOfInterestInput
++from topoforge.models import AreaOfInterestInput, TerrainMode
+ from topoforge.providers.cache import ContentAddressedCache
+ from topoforge.providers.copernicus_aws import (
+     CopernicusAwsConfig,
+@@ -22,6 +23,8 @@ from topoforge.providers.copernicus_aws import (
+     required_tile_coordinates,
+     tile_id,
+ )
++from topoforge.providers.protocol import ProviderDescriptor
++from topoforge.providers.selection import ProviderSelectionPolicy, fetch_with_provider_selection
+ from topoforge.providers.transport import CachingHttpClient, HttpTransportConfig
+ from topoforge.raster import normalize_area_of_interest
+ 
+@@ -215,7 +218,26 @@ def test_provider_acquisition_reuses_local_build_and_enters_provenance(tmp_path:
+     instance = provider(tmp_path, responses)
+     request = AreaOfInterestInput(bbox_wgs84=(101.2, 29.2, 101.21, 29.21))
+     aoi = normalize_area_of_interest(request)
+-    acquisition = instance.acquire(aoi, tmp_path / "source" / "dem.tif")
++    selection = fetch_with_provider_selection(
++        aoi=aoi,
++        destination=tmp_path / "source" / "dem.tif",
++        providers={"copernicus-aws": instance},
++        descriptors=[
++            ProviderDescriptor(
++                provider_id="copernicus-aws",
++                name="Copernicus fixture",
++                implemented=True,
++                requires_api_key=False,
++                dataset_types=[instance.metadata().dataset_type],
++                notes="offline fixture",
++            )
++        ],
++        policy=ProviderSelectionPolicy(
++            requested_terrain_mode=TerrainMode.DSM,
++        ),
++    )
++    acquisition = selection.acquisition
++    assert hasattr(acquisition, "dataset")
+     dataset = acquisition.dataset
+ 
+     result = build_local_terrain(
+@@ -243,7 +265,12 @@ def test_provider_acquisition_reuses_local_build_and_enters_provenance(tmp_path:
+     )
+ 
+     assert result.validation["required_checks_passed"] is True
+-    assert result.provenance["provider_selection"]["selected"] == "copernicus-aws"
++    acquisition_manifest = json.loads(
++        acquisition.acquisition_manifest_path.read_text(encoding="utf-8")
++    )
++    assert result.provenance["provider_selection"] == selection.trace.model_dump(mode="json")
++    assert result.provenance["provider_selection"] == acquisition_manifest["provider_selection"]
++    assert result.provenance["provider_selection"]["selected_provider"] == "copernicus-aws"
+     assert result.provenance["source_acquisition"]["plan"]["dataset_id"] == (
+         "copernicus-dem-glo-30-aws-2021"
+     )
+@@ -269,8 +296,6 @@ def test_acquire_crops_reprojection_only_gap_at_source_tile_edge(tmp_path: Path)
+ 
+     with rasterio.open(result.raster_path) as dataset:
+         assert np.all(np.isfinite(dataset.read(1)))
+-    import json
+-
+     manifest = json.loads(result.acquisition_manifest_path.read_text(encoding="utf-8"))
+     assert manifest["coverage_crop"]["discarded_reprojection_gap_cells"] > 0
+     assert manifest["output_source_nodata_pixels"] == 0
+diff --git a/tests/providers/test_nominatim.py b/tests/providers/test_nominatim.py
+new file mode 100644
+index 0000000..fa1414d
+--- /dev/null
++++ b/tests/providers/test_nominatim.py
+@@ -0,0 +1,186 @@
++from __future__ import annotations
++
++import json
++from email.message import Message
++from io import BytesIO
++from typing import Any
++
++import pytest
++
++from topoforge.geocoding import (
++    NominatimConfig,
++    NominatimGeocoder,
++    PlaceCandidateSelectionError,
++    place_candidate_aoi_input,
++    select_place_candidate,
++)
++from topoforge.providers import CachingHttpClient, ContentAddressedCache, HttpTransportConfig
++from topoforge.raster import normalize_area_of_interest
++
++
++class FakeResponse:
++    def __init__(self, payload: bytes) -> None:
++        self.status = 200
++        self._stream = BytesIO(payload)
++        self.headers = Message()
++        self.headers["Content-Length"] = str(len(payload))
++        self.headers["Content-Type"] = "application/json"
++        self.headers["ETag"] = '"geocode-fixture"'
++
++    def read(self, amount: int = -1) -> bytes:
++        return self._stream.read(amount)
++
++    def close(self) -> None:
++        pass
++
++
++def candidate(
++    place_id: int,
++    display_name: str,
++    *,
++    south: float,
++    north: float,
++    west: float,
++    east: float,
++) -> dict[str, Any]:
++    return {
++        "place_id": place_id,
++        "display_name": display_name,
++        "lat": str((south + north) / 2),
++        "lon": str((west + east) / 2),
++        "boundingbox": [str(south), str(north), str(west), str(east)],
++        "category": "natural",
++        "type": "peak",
++        "importance": 0.75,
++        "osm_type": "node",
++        "osm_id": 1000 + place_id,
++    }
++
++
++def geocoder(
++    tmp_path: Any,
++    payload: object,
++    *,
++    base_url: str = "https://nominatim.openstreetmap.org",
++    interval: float = 1.0,
++) -> tuple[NominatimGeocoder, list[str]]:
++    calls: list[str] = []
++
++    def opener(request: object, _timeout: float) -> FakeResponse:
++        calls.append(request.full_url)  # type: ignore[attr-defined]
++        return FakeResponse(json.dumps(payload).encode())
++
++    client = CachingHttpClient(
++        ContentAddressedCache(tmp_path / "cache"),
++        HttpTransportConfig(
++            timeout_seconds=1,
++            max_attempts=1,
++            backoff_base_seconds=0,
++            max_backoff_seconds=0,
++            min_request_interval_seconds=interval,
++            max_download_bytes=100_000,
++        ),
++        open_url=opener,  # type: ignore[arg-type]
++    )
++    return (
++        NominatimGeocoder(
++            client,
++            NominatimConfig(base_url=base_url),
++        ),
++        calls,
++    )
++
++
++def test_search_returns_ambiguous_candidates_without_silent_selection(tmp_path: Any) -> None:
++    instance, calls = geocoder(
++        tmp_path,
++        [
++            candidate(11, "Peak, Region A", south=29.1, north=29.2, west=101.1, east=101.2),
++            candidate(22, "Peak, Region B", south=30.1, north=30.2, west=102.1, east=102.2),
++        ],
++    )
++
++    result = instance.search(
++        "  Peak   Name ",
++        limit=5,
++        country_codes=["CN", "cn"],
++        accept_language="en",
++    )
++
++    assert result.query == "Peak Name"
++    assert result.candidate_status == "ambiguous"
++    assert [item.candidate_id for item in result.candidates] == ["11", "22"]
++    assert len(calls) == 1
++    assert "countrycodes=cn" in result.request_url
++    assert "accept-language=en" in result.request_url
++    with pytest.raises(PlaceCandidateSelectionError, match="ambiguous") as caught:
++        select_place_candidate(result)
++    assert caught.value.result == result
++    assert select_place_candidate(result, candidate_id="22").display_name == "Peak, Region B"
++
++
++def test_unique_candidate_resolves_to_recorded_place_aoi(tmp_path: Any) -> None:
++    instance, _ = geocoder(
++        tmp_path,
++        [candidate(42, "Unique Peak", south=-3.2, north=-3.1, west=-60.2, east=-60.1)],
++    )
++
++    result = instance.search("Unique Peak")
++    selected = select_place_candidate(result)
++    request = place_candidate_aoi_input(result, selected)
++    normalized = normalize_area_of_interest(request)
++
++    assert result.candidate_status == "unique"
++    assert normalized.kind == "place"
++    assert normalized.bounds_wgs84 == (-60.2, -3.2, -60.1, -3.1)
++    assert normalized.user_input == {
++        "place_query": "Unique Peak",
++        "place_candidate_id": "42",
++        "place_display_name": "Unique Peak",
++        "resolved_place_bbox_wgs84": [-60.2, -3.2, -60.1, -3.1],
++    }
++
++
++def test_no_candidates_and_unknown_id_return_the_candidate_record(tmp_path: Any) -> None:
++    empty, _ = geocoder(tmp_path / "empty", [])
++    empty_result = empty.search("Missing")
++    with pytest.raises(PlaceCandidateSelectionError, match="no candidates"):
++        select_place_candidate(empty_result)
++
++    one, _ = geocoder(
++        tmp_path / "one",
++        [candidate(1, "Found", south=10, north=11, west=20, east=21)],
++    )
++    one_result = one.search("Found")
++    with pytest.raises(PlaceCandidateSelectionError, match="not present") as caught:
++        select_place_candidate(one_result, candidate_id="999")
++    assert caught.value.result.candidates[0].candidate_id == "1"
++
++
++def test_repeated_search_uses_content_addressed_cache(tmp_path: Any) -> None:
++    instance, calls = geocoder(
++        tmp_path,
++        [candidate(7, "Cached", south=1, north=2, west=3, east=4)],
++    )
++
++    first = instance.search("Cached")
++    second = instance.search("Cached")
++
++    assert len(calls) == 1
++    assert first.cache_status == "miss"
++    assert second.cache_status == "hit"
++    assert first.response_sha256 == second.response_sha256
++    assert first.candidates == second.candidates
++
++
++def test_public_endpoint_enforces_one_request_per_second_policy(tmp_path: Any) -> None:
++    with pytest.raises(ValueError, match=r"1\.0"):
++        geocoder(tmp_path, [], interval=0.2)
++
++    private, _ = geocoder(
++        tmp_path / "private",
++        [],
++        base_url="https://geocoder.fixture.test",
++        interval=0.0,
++    )
++    assert private.search("No result").candidate_status == "none"
+diff --git a/tests/providers/test_selection.py b/tests/providers/test_selection.py
+new file mode 100644
+index 0000000..c288d7c
+--- /dev/null
++++ b/tests/providers/test_selection.py
+@@ -0,0 +1,443 @@
++from __future__ import annotations
++
++import json
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any
++
++import pytest
++
++from topoforge.exceptions import ProviderFetchError
++from topoforge.models import (
++    AreaOfInterestInput,
++    DatasetMetadata,
++    DatasetType,
++    TerrainMode,
++)
++from topoforge.providers import (
++    CoverageInfo,
++    ProviderDescriptor,
++    ProviderSelectionError,
++    ProviderSelectionPolicy,
++    evaluate_providers,
++    fetch_with_provider_selection,
++)
++from topoforge.raster import normalize_area_of_interest
++
++
++@dataclass(frozen=True)
++class FakeAcquisition:
++    acquisition_manifest_path: Path
++
++
++class FakeProvider:
++    def __init__(
++        self,
++        provider_id: str,
++        *,
++        dataset_type: DatasetType,
++        resolution_m: float,
++        complete: bool = True,
++        covered: bool = True,
++        requires_api_key: bool = False,
++        failure_probability: str = "low",
++        estimated_download_bytes: int | None = 1000,
++        license_id: str = "TEST-LICENSE",
++        vertical_datum: str = "TEST-DATUM",
++        fetch_error: Exception | None = None,
++        leave_artifact_on_failure: bool = False,
++    ) -> None:
++        self.provider_id = provider_id
++        self.dataset_type = dataset_type
++        self.resolution_m = resolution_m
++        self.complete = complete
++        self.covered = covered
++        self.requires_api_key = requires_api_key
++        self.failure_probability = failure_probability
++        self.estimated_download_bytes = estimated_download_bytes
++        self.license_id = license_id
++        self.vertical_datum = vertical_datum
++        self.fetch_error = fetch_error
++        self.leave_artifact_on_failure = leave_artifact_on_failure
++        self.fetch_count = 0
++
++    def probe(self, _aoi: Any) -> CoverageInfo:
++        return CoverageInfo(
++            covered=self.covered,
++            complete=self.complete,
++            dataset_type=self.dataset_type,
++            horizontal_resolution_m=self.resolution_m,
++            requires_api_key=self.requires_api_key,
++            estimated_download_bytes=self.estimated_download_bytes,
++            failure_probability=self.failure_probability,
++            reason=[f"{self.provider_id} fixture probe"],
++        )
++
++    def metadata(self) -> DatasetMetadata:
++        return DatasetMetadata(
++            provider=self.provider_id,
++            dataset_name=f"{self.provider_id} dataset",
++            dataset_version="fixture-v1",
++            dataset_type=self.dataset_type,
++            horizontal_resolution_m=self.resolution_m,
++            horizontal_crs="EPSG:4326",
++            vertical_datum=self.vertical_datum,
++            license=self.license_id,
++            attribution="fixture",
++        )
++
++    def fetch(self, _aoi: Any, destination: Path) -> FakeAcquisition:
++        self.fetch_count += 1
++        if self.fetch_error is not None:
++            if self.leave_artifact_on_failure:
++                destination.parent.mkdir(parents=True, exist_ok=True)
++                destination.write_bytes(b"retained evidence")
++            raise self.fetch_error
++        destination.parent.mkdir(parents=True, exist_ok=True)
++        destination.write_bytes(self.provider_id.encode())
++        manifest = destination.with_suffix(destination.suffix + ".source_acquisition.json")
++        manifest.write_text(
++            json.dumps({"provider_id": self.provider_id}) + "\n",
++            encoding="utf-8",
++        )
++        return FakeAcquisition(acquisition_manifest_path=manifest)
++
++
++def descriptor(
++    provider_id: str,
++    dataset_type: DatasetType,
++    *,
++    implemented: bool = True,
++    requires_api_key: bool = False,
++) -> ProviderDescriptor:
++    return ProviderDescriptor(
++        provider_id=provider_id,
++        name=f"{provider_id} fixture",
++        implemented=implemented,
++        requires_api_key=requires_api_key,
++        dataset_types=[dataset_type],
++        notes="offline selection fixture",
++    )
++
++
++@pytest.fixture
++def aoi() -> Any:
++    return normalize_area_of_interest(AreaOfInterestInput(bbox_wgs84=(101.2, 29.2, 101.3, 29.3)))
++
++
++def test_semantic_match_outranks_nominal_resolution(aoi: Any) -> None:
++    exact = FakeProvider("exact-dtm", dataset_type=DatasetType.DTM, resolution_m=90)
++    fast_dsm = FakeProvider("fast-dsm", dataset_type=DatasetType.DSM, resolution_m=10)
++
++    evaluations, ranked = evaluate_providers(
++        aoi=aoi,
++        providers={"exact-dtm": exact, "fast-dsm": fast_dsm},
++        descriptors=[
++            descriptor("fast-dsm", DatasetType.DSM),
++            descriptor("exact-dtm", DatasetType.DTM),
++        ],
++        policy=ProviderSelectionPolicy(
++            requested_terrain_mode=TerrainMode.DTM,
++            allow_semantic_fallback=True,
++        ),
++    )
++
++    assert ranked == ["exact-dtm", "fast-dsm"]
++    assert {item.provider_id: item.semantic_status for item in evaluations} == {
++        "fast-dsm": "fallback",
++        "exact-dtm": "exact",
++    }
++
++
++def test_dtm_to_dsm_is_rejected_until_semantic_fallback_is_explicit(aoi: Any) -> None:
++    provider = FakeProvider("dsm", dataset_type=DatasetType.DSM, resolution_m=30)
++    descriptions = [descriptor("dsm", DatasetType.DSM)]
++
++    evaluations, ranked = evaluate_providers(
++        aoi=aoi,
++        providers={"dsm": provider},
++        descriptors=descriptions,
++        policy=ProviderSelectionPolicy(requested_terrain_mode=TerrainMode.DTM),
++    )
++    assert ranked == []
++    assert evaluations[0].status == "rejected"
++    assert "semantic fallback is disabled" in evaluations[0].reasons[0]
++
++    evaluations, ranked = evaluate_providers(
++        aoi=aoi,
++        providers={"dsm": provider},
++        descriptors=descriptions,
++        policy=ProviderSelectionPolicy(
++            requested_terrain_mode=TerrainMode.DTM,
++            allow_semantic_fallback=True,
++        ),
++    )
++    assert ranked == ["dsm"]
++    assert evaluations[0].semantic_status == "fallback"
++    assert "explicit semantic fallback" in evaluations[0].reasons[0]
++
++
++def test_incomplete_coverage_is_a_hard_rejection(aoi: Any) -> None:
++    provider = FakeProvider(
++        "partial",
++        dataset_type=DatasetType.DTM,
++        resolution_m=5,
++        complete=False,
++    )
++
++    evaluations, ranked = evaluate_providers(
++        aoi=aoi,
++        providers={"partial": provider},
++        descriptors=[descriptor("partial", DatasetType.DTM)],
++        policy=ProviderSelectionPolicy(requested_terrain_mode=TerrainMode.DTM),
++    )
++
++    assert ranked == []
++    assert evaluations[0].reasons[0] == "complete AOI coverage is required"
++
++
++def test_missing_credential_and_unimplemented_candidates_are_recorded(aoi: Any) -> None:
++    authenticated = FakeProvider(
++        "auth",
++        dataset_type=DatasetType.DTM,
++        resolution_m=5,
++        requires_api_key=True,
++    )
++
++    evaluations, ranked = evaluate_providers(
++        aoi=aoi,
++        providers={"auth": authenticated},
++        descriptors=[
++            descriptor("auth", DatasetType.DTM, requires_api_key=True),
++            descriptor("planned", DatasetType.DTM, implemented=False),
++        ],
++        policy=ProviderSelectionPolicy(
++            requested_terrain_mode=TerrainMode.DTM,
++            allow_authenticated_providers=True,
++        ),
++    )
++
++    assert ranked == []
++    assert [(item.provider_id, item.status) for item in evaluations] == [
++        ("auth", "rejected"),
++        ("planned", "rejected"),
++    ]
++    assert evaluations[0].reasons == ["required provider credential is not available"]
++    assert evaluations[1].reasons == ["provider is registered but not implemented"]
++
++
++def test_license_vertical_datum_and_download_budget_are_hard_filters(aoi: Any) -> None:
++    provider = FakeProvider(
++        "filtered",
++        dataset_type=DatasetType.DTM,
++        resolution_m=10,
++        license_id="TEST-LICENSE",
++        vertical_datum="VDATUM-A",
++        estimated_download_bytes=5000,
++    )
++    descriptions = [descriptor("filtered", DatasetType.DTM)]
++
++    evaluations, ranked = evaluate_providers(
++        aoi=aoi,
++        providers={"filtered": provider},
++        descriptors=descriptions,
++        policy=ProviderSelectionPolicy(
++            requested_terrain_mode=TerrainMode.DTM,
++            allowed_license_ids=["OTHER-LICENSE"],
++        ),
++    )
++    assert ranked == []
++    assert "allowed_license_ids" in evaluations[0].reasons[0]
++
++    evaluations, ranked = evaluate_providers(
++        aoi=aoi,
++        providers={"filtered": provider},
++        descriptors=descriptions,
++        policy=ProviderSelectionPolicy(
++            requested_terrain_mode=TerrainMode.DTM,
++            required_vertical_datum="VDATUM-B",
++        ),
++    )
++    assert ranked == []
++    assert "does not match required" in evaluations[0].reasons[0]
++
++    evaluations, ranked = evaluate_providers(
++        aoi=aoi,
++        providers={"filtered": provider},
++        descriptors=descriptions,
++        policy=ProviderSelectionPolicy(
++            requested_terrain_mode=TerrainMode.DTM,
++            maximum_download_bytes=4999,
++        ),
++    )
++    assert ranked == []
++    assert "estimated download bytes" in evaluations[0].reasons[0]
++
++
++def test_deterministic_tie_order_and_repeated_trace(aoi: Any, tmp_path: Path) -> None:
++    descriptions = [
++        descriptor("provider-b", DatasetType.DSM),
++        descriptor("provider-a", DatasetType.DSM),
++    ]
++    policy = ProviderSelectionPolicy(requested_terrain_mode=TerrainMode.DSM)
++
++    traces: list[dict[str, Any]] = []
++    for index in range(2):
++        providers = {
++            "provider-a": FakeProvider(
++                "provider-a",
++                dataset_type=DatasetType.DSM,
++                resolution_m=30,
++            ),
++            "provider-b": FakeProvider(
++                "provider-b",
++                dataset_type=DatasetType.DSM,
++                resolution_m=30,
++            ),
++        }
++        result = fetch_with_provider_selection(
++            aoi=aoi,
++            destination=tmp_path / f"run-{index}" / "aoi.tif",
++            providers=providers,
++            descriptors=descriptions,
++            policy=policy,
++        )
++        traces.append(result.trace.model_dump(mode="json"))
++
++    assert traces[0]["ranked_provider_ids"] == ["provider-b", "provider-a"]
++    normalized = [
++        {
++            **trace,
++            "fetch_attempts": [
++                {**attempt, "retained_destination_artifacts": []}
++                for attempt in trace["fetch_attempts"]
++            ],
++        }
++        for trace in traces
++    ]
++    assert normalized[0] == normalized[1]
++
++
++def test_fetch_failure_falls_back_and_writes_complete_manifest_trace(
++    aoi: Any, tmp_path: Path
++) -> None:
++    first = FakeProvider(
++        "first",
++        dataset_type=DatasetType.DSM,
++        resolution_m=10,
++        fetch_error=ProviderFetchError("fixture outage"),
++    )
++    second = FakeProvider("second", dataset_type=DatasetType.DSM, resolution_m=30)
++    destination = tmp_path / "aoi.tif"
++
++    result = fetch_with_provider_selection(
++        aoi=aoi,
++        destination=destination,
++        providers={"first": first, "second": second},
++        descriptors=[
++            descriptor("first", DatasetType.DSM),
++            descriptor("second", DatasetType.DSM),
++        ],
++        policy=ProviderSelectionPolicy(requested_terrain_mode=TerrainMode.DSM),
++    )
++
++    assert result.trace.selected_provider == "second"
++    assert [item.status for item in result.trace.fetch_attempts] == [
++        "fetch-failed",
++        "selected",
++    ]
++    manifest = json.loads(
++        destination.with_suffix(".tif.source_acquisition.json").read_text(encoding="utf-8")
++    )
++    assert manifest["provider_selection"] == result.trace.model_dump(mode="json")
++    assert manifest["provider_selection"]["fetch_attempts"][0]["error_type"] == (
++        "ProviderFetchError"
++    )
++
++
++def test_all_fetch_failures_are_aggregated(aoi: Any, tmp_path: Path) -> None:
++    providers = {
++        "one": FakeProvider(
++            "one",
++            dataset_type=DatasetType.DSM,
++            resolution_m=10,
++            fetch_error=ProviderFetchError("one failed"),
++        ),
++        "two": FakeProvider(
++            "two",
++            dataset_type=DatasetType.DSM,
++            resolution_m=20,
++            fetch_error=OSError("two failed"),
++        ),
++    }
++
++    with pytest.raises(ProviderSelectionError, match="all provider fetches failed") as caught:
++        fetch_with_provider_selection(
++            aoi=aoi,
++            destination=tmp_path / "aoi.tif",
++            providers=providers,
++            descriptors=[
++                descriptor("one", DatasetType.DSM),
++                descriptor("two", DatasetType.DSM),
++            ],
++            policy=ProviderSelectionPolicy(requested_terrain_mode=TerrainMode.DSM),
++        )
++
++    assert caught.value.trace.outcome == "all-fetches-failed"
++    assert [item.provider_id for item in caught.value.trace.fetch_attempts] == ["one", "two"]
++    assert "one failed" in str(caught.value)
++    assert "two failed" in str(caught.value)
++
++
++def test_explicit_provider_mode_ignores_higher_ranked_auto_candidate(
++    aoi: Any, tmp_path: Path
++) -> None:
++    first = FakeProvider("first", dataset_type=DatasetType.DSM, resolution_m=10)
++    chosen = FakeProvider("chosen", dataset_type=DatasetType.DSM, resolution_m=90)
++
++    result = fetch_with_provider_selection(
++        aoi=aoi,
++        destination=tmp_path / "explicit.tif",
++        providers={"first": first, "chosen": chosen},
++        descriptors=[
++            descriptor("first", DatasetType.DSM),
++            descriptor("chosen", DatasetType.DSM),
++        ],
++        policy=ProviderSelectionPolicy(
++            requested_provider_id="chosen",
++            requested_terrain_mode=TerrainMode.DSM,
++        ),
++    )
++
++    assert result.trace.ranked_provider_ids == ["chosen"]
++    assert result.trace.selected_provider == "chosen"
++    assert first.fetch_count == 0
++    assert chosen.fetch_count == 1
++
++
++def test_retained_failed_destination_stops_fallback(aoi: Any, tmp_path: Path) -> None:
++    first = FakeProvider(
++        "first",
++        dataset_type=DatasetType.DSM,
++        resolution_m=10,
++        fetch_error=ProviderFetchError("partial publication"),
++        leave_artifact_on_failure=True,
++    )
++    second = FakeProvider("second", dataset_type=DatasetType.DSM, resolution_m=20)
++    destination = tmp_path / "aoi.tif"
++
++    with pytest.raises(ProviderSelectionError, match="left destination evidence") as caught:
++        fetch_with_provider_selection(
++            aoi=aoi,
++            destination=destination,
++            providers={"first": first, "second": second},
++            descriptors=[
++                descriptor("first", DatasetType.DSM),
++                descriptor("second", DatasetType.DSM),
++            ],
++            policy=ProviderSelectionPolicy(requested_terrain_mode=TerrainMode.DSM),
++        )
++
++    assert destination.read_bytes() == b"retained evidence"
++    assert second.fetch_count == 0
++    assert caught.value.trace.outcome == "failed-with-retained-evidence"
+diff --git a/uv.lock b/uv.lock
+index dcd0057..9253e32 100644
+--- a/uv.lock
++++ b/uv.lock
+@@ -860,7 +860,7 @@ wheels = [
+ 
+ [[package]]
+ name = "topoforge"
+-version = "0.2.0"
++version = "0.3.0"
+ source = { editable = "." }
+ dependencies = [
+     { name = "lib3mf" },

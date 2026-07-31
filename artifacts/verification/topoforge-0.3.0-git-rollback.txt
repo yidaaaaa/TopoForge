@@ -1,0 +1,7 @@
+HEAD is now at 434eb7e chore: finalize v0.2.0 rollback verification
+before_head=b44b518f852cbfb6569c2024567121a633e72635
+rollback_head=434eb7e663d251ad6fcef70ab8d7daf8afe6856a
+working_tree_clean=true
+expected_baseline=434eb7e663d251ad6fcef70ab8d7daf8afe6856a
+actual_tree=abb0bd85f291b03ecd6f7a2c9ca6d74c8082b2c3
+baseline_tree=abb0bd85f291b03ecd6f7a2c9ca6d74c8082b2c3

@@ -72,5 +72,28 @@
     "verification_sha256": "251d4bf8c116403b718f4d2b061bf44bb7ed1e0bc1043a6f62606dd41a8bcd83"
   },
   "release": "0.3.0",
-  "rollback_script": "/root/autodl-tmp/bambu/TopoForge/scripts/rollback-topoforge-0.3.0.sh"
+  "release_commit": "b44b518f852cbfb6569c2024567121a633e72635",
+  "rollback_script": "/root/autodl-tmp/bambu/TopoForge/scripts/rollback-topoforge-0.3.0.sh",
+  "rollback_verification": {
+    "exit_status": 0,
+    "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.3.0-git-rollback.txt",
+    "rollback_head": "434eb7e663d251ad6fcef70ab8d7daf8afe6856a",
+    "sha256": "3b7997e14ba13c9c140ed82b545cf54f3d6d38e381a82a2b79dc24fd54066ecd",
+    "tree_matches_baseline": true,
+    "working_tree_clean": true
+  },
+  "source_patch": {
+    "bytes": 105051,
+    "clean_after_reverse": true,
+    "diff_check_exit": 0,
+    "forward_apply_exit": 0,
+    "forward_check_exit": 0,
+    "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/patches/topoforge-0.3.0-source.patch",
+    "reverse_apply_exit": 0,
+    "reverse_check_exit": 0,
+    "sha256": "b4914d0f69900e9bb75b2ab4f29f8ee19a98fc8dd25803566edfa07cb9fd3de6",
+    "verification_path": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.3.0-source-patch-verification.txt",
+    "verification_sha256": "9a6ec0196045214531d431a82ee3e7b16e019346d6ef75b444ca7736b8941b4b"
+  },
+  "tag": "v0.3.0"
 }

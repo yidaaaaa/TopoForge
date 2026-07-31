@@ -239,3 +239,16 @@ Result: exit 0; all catalog/DEM/listing/EDM/FLM/HEM/WBM assets were cache hits; 
 Command: bump `pyproject.toml`/`uv.lock` and HTTP User-Agent to 0.3.0 with `uv lock --offline`; run `topoforge doctor`.
 
 Result: package rebuilt locally, doctor reports TopoForge `0.3.0`, Python 3.12.3, GDAL 3.12.1, PROJ 9.7.1, and PrusaSlicer available.
+
+
+Command: final 0.3.0 gate after docs/version updates.
+
+Result: exit 0; Ruff `All checks passed!`; format `104 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `135 passed, 45 warnings in 7.90s`; `git diff --check` passed. Log: `artifacts/logs/topoforge-0.3.0-quality-gates.log`.
+
+Command: `git commit -m "feat: add provider selection and candidate geocoding v0.3.0"` and create tag `v0.3.0`.
+
+Result: release implementation commit `b44b518f852cbfb6569c2024567121a633e72635` created.
+
+Command: in no-hardlink isolated clones, execute `scripts/rollback-topoforge-0.3.0.sh --confirm-rollback` and forward/check/apply/reverse-check/reverse `artifacts/patches/topoforge-0.3.0-source.patch`.
+
+Result: rollback exit 0 and tree exactly matched baseline `434eb7e663d251ad6fcef70ab8d7daf8afe6856a`; patch verification statuses were all 0 and the clone was clean after reverse. Patch SHA-256 `b4914d0f69900e9bb75b2ab4f29f8ee19a98fc8dd25803566edfa07cb9fd3de6`, 105,051 bytes.
