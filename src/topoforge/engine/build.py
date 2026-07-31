@@ -429,10 +429,13 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
         )
         dump_resolved_config(resolved_config, artifacts["resolved_config"])
         generated_at = datetime.now(UTC).isoformat()
-        provenance: dict[str, Any] = {
-            "topoforge_version": __version__,
-            "generated_at": generated_at,
-            "provider_selection": {
+        recorded_provider_selection = (
+            (source_acquisition or {}).get("provider_selection")
+            if source_acquisition is not None
+            else None
+        )
+        if not isinstance(recorded_provider_selection, dict):
+            recorded_provider_selection = {
                 "selected": processed.report.metadata.provider,
                 "reason": (
                     [
@@ -460,7 +463,11 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
                 "source_acquisition_artifact": (
                     "source_acquisition.json" if source_acquisition is not None else None
                 ),
-            },
+            }
+        provenance: dict[str, Any] = {
+            "topoforge_version": __version__,
+            "generated_at": generated_at,
+            "provider_selection": recorded_provider_selection,
             "source_acquisition": source_acquisition,
             "dataset": processed.report.metadata.model_dump(mode="json"),
             "source_file_checksums": processed.report.metadata.checksums,

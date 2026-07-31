@@ -23,6 +23,16 @@ from topoforge.providers.copernicus_aws import (
 )
 from topoforge.providers.protocol import CoverageInfo, ElevationProvider, ProviderDescriptor
 from topoforge.providers.registry import list_provider_descriptors
+from topoforge.providers.selection import (
+    ProviderEvaluation,
+    ProviderFetchAttempt,
+    ProviderFetchSelection,
+    ProviderSelectionError,
+    ProviderSelectionPolicy,
+    ProviderSelectionTrace,
+    evaluate_providers,
+    fetch_with_provider_selection,
+)
 from topoforge.providers.transport import (
     CachingHttpClient,
     DownloadResult,
@@ -51,6 +61,14 @@ __all__ = [
     "NetworkAttempt",
     "ProviderAcquisition",
     "ProviderDescriptor",
+    "ProviderEvaluation",
+    "ProviderFetchAttempt",
+    "ProviderFetchSelection",
+    "ProviderSelectionError",
+    "ProviderSelectionPolicy",
+    "ProviderSelectionTrace",
+    "evaluate_providers",
+    "fetch_with_provider_selection",
     "list_provider_descriptors",
     "parse_s3_object_listing",
     "parse_tile_list",

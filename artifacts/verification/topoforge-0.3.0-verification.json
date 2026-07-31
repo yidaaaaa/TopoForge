@@ -1,0 +1,76 @@
+{
+  "baseline_commit": "434eb7e663d251ad6fcef70ab8d7daf8afe6856a",
+  "changed_worktree_entries_before_commit": [
+    " M .agent/DECISIONS.md",
+    " M .agent/ISSUES.md",
+    " M .agent/PLANS.md",
+    " M .agent/RUN_LOG.md",
+    " M .agent/STATE.md",
+    " M README.md",
+    " M docs/architecture.md",
+    " M docs/data-sources.md",
+    " M docs/provenance.md",
+    " M docs/provider-development.md",
+    " M pyproject.toml",
+    " M src/topoforge/cli/app.py",
+    " M src/topoforge/engine/build.py",
+    " M src/topoforge/models/domain.py",
+    " M src/topoforge/providers/__init__.py",
+    " M src/topoforge/providers/transport.py",
+    " M src/topoforge/raster/aoi.py",
+    " M tests/cli/test_build_config_overrides.py",
+    " M tests/providers/test_copernicus_aws.py",
+    " M uv.lock",
+    "?? artifacts/verification/amazon-provider-selection-v1.json",
+    "?? scripts/rollback-topoforge-0.3.0.sh",
+    "?? src/topoforge/geocoding/",
+    "?? src/topoforge/providers/selection.py",
+    "?? tests/providers/test_nominatim.py",
+    "?? tests/providers/test_selection.py"
+  ],
+  "existing_manufacturing_evidence_reused": {
+    "bundle": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-quality-v2",
+    "slice": "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/amazon-copernicus-aws-quality-v2-prusa.gcode",
+    "terrain_pipeline_changed": false
+  },
+  "quality_commands": [
+    {
+      "command": "uv run ruff check .",
+      "exit_status": 0,
+      "literal_result": "All checks passed!"
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "exit_status": 0,
+      "literal_result": "104 files already formatted"
+    },
+    {
+      "command": "uv run pyright",
+      "exit_status": 0,
+      "literal_result": "0 errors, 0 warnings, 0 informations"
+    },
+    {
+      "command": "uv run pytest",
+      "exit_status": 0,
+      "literal_result": "135 passed, 45 warnings in 7.90s"
+    },
+    {
+      "command": "git diff --check",
+      "exit_status": 0,
+      "literal_result": ""
+    }
+  ],
+  "real_cache_replay": {
+    "all_assets_cache_hits": true,
+    "network_downloads": 0,
+    "raster_path": "/root/autodl-tmp/bambu/TopoForge/downloads/amazon-provider-selection-v1/global-aoi.tif",
+    "raster_sha256": "d9b0b6b827f7e26565cdd0d835f4afb83eb08352a2ccf6ed56030240149c6029",
+    "selected_provider": "copernicus-aws",
+    "source_acquisition_path": "/root/autodl-tmp/bambu/TopoForge/downloads/amazon-provider-selection-v1/global-aoi.tif.source_acquisition.json",
+    "source_acquisition_sha256": "dfa2057e2086e9cedd7e56c67477036383be34ef5284d542af591cf6c0d316a0",
+    "verification_path": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/amazon-provider-selection-v1.json",
+    "verification_sha256": "251d4bf8c116403b718f4d2b061bf44bb7ed1e0bc1043a6f62606dd41a8bcd83"
+  },
+  "release": "0.3.0",
+  "rollback_script": "/root/autodl-tmp/bambu/TopoForge/scripts/rollback-topoforge-0.3.0.sh"
+}

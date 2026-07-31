@@ -576,3 +576,15 @@ HTTP 200; bundled license is CC BY-NC-SA 4.0; tile index has 19,011 features.
 - FABDEM's conflicting repository license field and upstream Copernicus notice.
 - Actual provider integration tests for one land, coastal, antimeridian, and
   high-latitude AOI; online tests must remain opt-in.
+
+## Nominatim-compatible place search policy
+
+TopoForge uses place search only to propose explicit WGS84 candidate bounding boxes; it is not an elevation source. The default public endpoint is OpenStreetMap Nominatim JSONv2 search. Public-service requests use a descriptive TopoForge User-Agent, a minimum one-second interval, bounded result counts, no autocomplete, and content-addressed caching. Output and acquisition provenance retain `Geocoding © OpenStreetMap contributors`.
+
+Ambiguous names are never resolved by first result, importance score, or string similarity. The CLI returns the candidate ids, display names, coordinates, feature types, and bounding boxes, then requires `--place-candidate-id`. Private Nominatim-compatible endpoints remain configurable, but their operator policy and attribution must be reviewed separately.
+
+Sources:
+
+- [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/)
+- [Nominatim Search API](https://nominatim.org/release-docs/latest/api/Search/)
+- [OpenStreetMap copyright and attribution](https://www.openstreetmap.org/copyright)

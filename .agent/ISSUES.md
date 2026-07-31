@@ -33,12 +33,12 @@
 ## TF-004 — Global provider and geocoding path not implemented
 
 - **Severity:** High
-- **Status:** Partially resolved
-- **Reproduction:** `topoforge providers` shows global entries as `implemented: false`; `topoforge build` currently requires `--dem` or a local config.
+- **Status:** Resolved
+- **Reproduction:** Earlier global commands directly instantiated Copernicus AWS and accepted no resolved place candidate.
 - **Expected behavior:** bbox/center/place inputs can select, fetch, cache, and build real global data.
-- **Actual behavior:** The no-key Copernicus AWS path, cache, bounded transport, normalized AOI acquisition, `fetch-dem`, `build-global`, provenance, offline tests, and a real Amazon build/slice are complete. Candidate geocoding, additional providers, and explainable multi-provider fallback remain. Copernicus EDM/FLM/HEM/WBM preservation is complete.
+- **Actual behavior:** `fetch-dem`/`build-global` default to explainable `--provider auto`; full registry evaluation/fetch history is recorded, cached Nominatim-compatible searches return explicit candidates, ambiguous names require an id, and resolved places enter the normal AOI/build pipeline. Copernicus AWS remains the current production network implementation; additional providers are separate roadmap work.
 - **Owner:** Primary agent
-- **Resolution:** Copernicus AWS is now the implemented default global DSM route; continue with explainable provider selection/fallback, then Nominatim-compatible candidate handling.
+- **Resolution:** Completed provider selection/fallback and candidate geocoding in TopoForge 0.3.0 with offline regressions and a real all-cache-hit Amazon auto-selection replay.
 
 ## TF-005 — Exhaustive self-intersection backend pending
 

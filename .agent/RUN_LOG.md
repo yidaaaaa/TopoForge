@@ -216,3 +216,26 @@ Result: exit 0; rollback HEAD and tree exactly matched the baseline (`89de6c49d8
 Command: generate `artifacts/patches/topoforge-0.2.0-source.patch` from the release baseline while excluding agent state, binary previews, and prior verification/patch archives; in the baseline clone run forward check/apply, `git diff --check`, reverse check/apply.
 
 Result: all five statuses were 0 and the clone was clean after reverse. Exact final patch SHA-256/bytes are stored in `artifacts/verification/topoforge-0.2.0-source-patch-verification.txt`.
+
+
+### Explainable provider selection, candidate geocoding, and 0.3.0
+
+Command: implement `ProviderSelectionPolicy`, registry evaluation/ranking, fetch attempt aggregation, retained-destination evidence stop, acquisition-manifest trace writing, exact build-provenance passthrough, and `--provider auto`/explicit CLI integration.
+
+Result: focused selection/Copernicus/CLI tests passed (`28 passed`). Exact DTM/DSM semantics outrank nominal resolution; fallback is opt-in; incomplete coverage, missing credentials, unimplemented providers, licence/datum/download constraints, deterministic ties, successful fallback, all-failed aggregation, and retained evidence are covered.
+
+Command: implement cached Nominatim-compatible JSONv2 search, explicit candidate selection, resolved-place AOI normalization, `topoforge geocode`, and global `--place/--place-candidate-id` integration.
+
+Result: public endpoint policy enforces a one-second interval, canonical cached requests, no autocomplete, bounded candidates, and OSM attribution. Zero/unique/ambiguous states are distinct; ambiguity returns candidates and blocks acquisition until an id is supplied. Offline geocoding/AOI/CLI tests passed.
+
+Command: full pre-release quality gate: `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, and `git diff --check`.
+
+Result: exit 0; Ruff passed; format `104 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `135 passed, 45 warnings in 8.14s`; diff whitespace check passed. Log: `artifacts/logs/topoforge-provider-selection-geocoding-pre-release.log`.
+
+Command: replay Amazon bbox `[-60.02, -3.13, -60.00, -3.11]` through `fetch-dem --provider auto --terrain-mode dsm` into a new evidence directory using the existing cache.
+
+Result: exit 0; all catalog/DEM/listing/EDM/FLM/HEM/WBM assets were cache hits; no source was redownloaded; `copernicus-aws` was selected and every planned provider rejection was recorded. The 74 x 74 raster SHA-256 is `d9b0b6b827f7e26565cdd0d835f4afb83eb08352a2ccf6ed56030240149c6029`. Verification: `artifacts/verification/amazon-provider-selection-v1.json`.
+
+Command: bump `pyproject.toml`/`uv.lock` and HTTP User-Agent to 0.3.0 with `uv lock --offline`; run `topoforge doctor`.
+
+Result: package rebuilt locally, doctor reports TopoForge `0.3.0`, Python 3.12.3, GDAL 3.12.1, PROJ 9.7.1, and PrusaSlicer available.

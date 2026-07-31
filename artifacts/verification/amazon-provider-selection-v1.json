@@ -1,0 +1,27 @@
+{
+  "all_provider_assets_cache_hits": true,
+  "command": "uv run topoforge fetch-dem --bbox -60.02 -3.13 -60.00 -3.11 --provider auto --terrain-mode dsm --output downloads/amazon-provider-selection-v1/global-aoi.tif --cache-dir cache/providers --timeout-seconds 2 --max-attempts 1 --min-request-interval-seconds 0",
+  "evaluation_statuses": {
+    "aws-terrain-tiles": "rejected",
+    "copernicus-aws": "eligible",
+    "copernicus-cdse": "rejected",
+    "usgs-3dep": "rejected"
+  },
+  "exit_status": 0,
+  "fetch_attempts": [
+    {
+      "error_message": null,
+      "error_type": null,
+      "provider_id": "copernicus-aws",
+      "rank_order": 1,
+      "retained_destination_artifacts": [],
+      "status": "selected"
+    }
+  ],
+  "output_raster_sha256": "d9b0b6b827f7e26565cdd0d835f4afb83eb08352a2ccf6ed56030240149c6029",
+  "ranked_provider_ids": [
+    "copernicus-aws"
+  ],
+  "selected_provider": "copernicus-aws",
+  "source_acquisition": "/root/autodl-tmp/bambu/TopoForge/downloads/amazon-provider-selection-v1/global-aoi.tif.source_acquisition.json"
+}

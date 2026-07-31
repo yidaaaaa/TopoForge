@@ -38,7 +38,7 @@ class HttpTransportConfig(BaseModel):
     min_request_interval_seconds: float = Field(default=0.2, ge=0)
     max_download_bytes: int = Field(default=2_000_000_000, gt=0)
     chunk_size_bytes: int = Field(default=1024 * 1024, ge=4096)
-    user_agent: str = "TopoForge/0.2 (+https://github.com/topoforge/topoforge)"
+    user_agent: str = "TopoForge/0.3 (+https://github.com/topoforge/topoforge)"
 
 
 class NetworkAttempt(BaseModel):

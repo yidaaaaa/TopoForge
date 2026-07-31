@@ -231,3 +231,106 @@ def test_cli_center_radius_aoi_is_resolved(monkeypatch: Any) -> None:
     assert resolved.aoi is not None
     assert resolved.aoi.center_wgs84 == (101.8, 29.6)
     assert resolved.aoi.radius_m == 10_000.0
+
+
+def test_fetch_dem_defaults_to_auto_and_records_selection_policy(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    from topoforge.models import DatasetMetadata
+
+    captured: list[Any] = []
+
+    class FakeAcquisition:
+        def __init__(self) -> None:
+            self.provider_id = "copernicus-aws"
+            self.dataset = DatasetMetadata(
+                provider="copernicus-aws",
+                dataset_name="fixture DSM",
+                dataset_type=DatasetType.DSM,
+                horizontal_crs="EPSG:4326",
+                license="TEST-LICENSE",
+                attribution="fixture",
+            )
+            self.aoi = {"kind": "bbox"}
+            self.plan = SimpleNamespace(model_dump=lambda mode: {"product": "fixture"})
+            self.raster_path = tmp_path / "source.tif"
+            self.acquisition_manifest_path = tmp_path / "source.json"
+
+    def fake_selection(**kwargs: Any) -> SimpleNamespace:
+        captured.append(kwargs["policy"])
+        return SimpleNamespace(
+            acquisition=FakeAcquisition(),
+            trace=SimpleNamespace(model_dump=lambda mode: {"selected_provider": "copernicus-aws"}),
+        )
+
+    monkeypatch.setattr(cli_module, "ProviderAcquisition", FakeAcquisition)
+    monkeypatch.setattr(cli_module, "fetch_with_provider_selection", fake_selection)
+
+    result = runner.invoke(
+        cli_module.app,
+        [
+            "fetch-dem",
+            "--output",
+            str(tmp_path / "requested.tif"),
+            "--bbox",
+            "101.2",
+            "29.2",
+            "101.3",
+            "29.3",
+            "--terrain-mode",
+            "dtm",
+            "--allow-semantic-fallback",
+            "--preferred-provider",
+            "copernicus-aws",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    policy = captured.pop()
+    assert policy.requested_provider_id == "auto"
+    assert policy.requested_terrain_mode.value == "dtm"
+    assert policy.allow_semantic_fallback is True
+    assert policy.preferred_provider_ids == ["copernicus-aws"]
+    assert '"selected_provider": "copernicus-aws"' in result.output
+
+
+def test_fetch_dem_retains_explicit_provider_mode(tmp_path: Path, monkeypatch: Any) -> None:
+    captured: list[Any] = []
+
+    class FakeAcquisition:
+        def __init__(self) -> None:
+            self.provider_id = "copernicus-aws"
+            self.dataset = SimpleNamespace(model_dump=lambda mode: {})
+            self.aoi: dict[str, Any] = {}
+            self.plan = SimpleNamespace(model_dump=lambda mode: {})
+            self.raster_path = tmp_path / "source.tif"
+            self.acquisition_manifest_path = tmp_path / "source.json"
+
+    def fake_selection(**kwargs: Any) -> SimpleNamespace:
+        captured.append(kwargs["policy"])
+        return SimpleNamespace(
+            acquisition=FakeAcquisition(),
+            trace=SimpleNamespace(model_dump=lambda mode: {}),
+        )
+
+    monkeypatch.setattr(cli_module, "ProviderAcquisition", FakeAcquisition)
+    monkeypatch.setattr(cli_module, "fetch_with_provider_selection", fake_selection)
+
+    result = runner.invoke(
+        cli_module.app,
+        [
+            "fetch-dem",
+            "--output",
+            str(tmp_path / "requested.tif"),
+            "--bbox",
+            "101.2",
+            "29.2",
+            "101.3",
+            "29.3",
+            "--provider",
+            "copernicus-aws",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured.pop().requested_provider_id == "copernicus-aws"

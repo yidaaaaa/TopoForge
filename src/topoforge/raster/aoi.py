@@ -87,8 +87,14 @@ def _minimal_longitude_bounds(longitudes: list[float]) -> tuple[float, float, bo
 
 def normalize_area_of_interest(request: AreaOfInterestInput) -> AreaOfInterest:
     """Normalize a bbox or center-radius request into explicit WGS84 bounds/geometry."""
-    if request.bbox_wgs84 is not None:
-        west, south, east, north = request.bbox_wgs84
+    if request.bbox_wgs84 is not None or request.resolved_place_bbox_wgs84 is not None:
+        raw_bounds = (
+            request.bbox_wgs84
+            if request.bbox_wgs84 is not None
+            else request.resolved_place_bbox_wgs84
+        )
+        assert raw_bounds is not None
+        west, south, east, north = raw_bounds
         west = _validated_longitude(west, "bbox west")
         east = _validated_longitude(east, "bbox east")
         south = _validated_latitude(south, "bbox south")
@@ -99,9 +105,22 @@ def normalize_area_of_interest(request: AreaOfInterestInput) -> AreaOfInterest:
             raise ValueError("bbox south must be below bbox north")
         geometry, crosses = _geometry_for_bounds(west, south, east, north)
         bounds = (west, south, east, north)
-        kind = "bbox"
-        user_input: dict[str, object] = {"bbox_wgs84": list(request.bbox_wgs84)}
-        method = "validated WGS84 bbox; antimeridian split when west > east"
+        if request.bbox_wgs84 is not None:
+            kind = "bbox"
+            user_input: dict[str, object] = {"bbox_wgs84": list(request.bbox_wgs84)}
+            method = "validated WGS84 bbox; antimeridian split when west > east"
+        else:
+            kind = "place"
+            assert request.resolved_place_bbox_wgs84 is not None
+            user_input = {
+                "place_query": str(request.place_query),
+                "place_candidate_id": str(request.place_candidate_id),
+                "place_display_name": str(request.place_display_name),
+                "resolved_place_bbox_wgs84": list(request.resolved_place_bbox_wgs84),
+            }
+            method = (
+                "explicit Nominatim-compatible candidate bbox; antimeridian split when west > east"
+            )
     else:
         assert request.center_wgs84 is not None and request.radius_m is not None
         longitude = _validated_longitude(request.center_wgs84[0], "center longitude")

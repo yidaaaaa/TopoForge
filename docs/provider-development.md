@@ -2,6 +2,16 @@
 
 A provider exposes an identifier, coverage probe, dataset metadata, and fetch operation. Selection weighs semantic match (DTM/DSM/bathymetry), coverage completeness, actual resolution, license mode, credentials, expected bytes, vertical datum compatibility, recency, and observed reliability; resolution alone never decides.
 
+## Explainable selection and fetch fallback
+
+`ProviderSelectionPolicy` defines requested terrain semantics, complete-coverage requirements, authenticated-provider/credential availability, explicit semantic fallback, optional resolution/download/vertical-datum/licence limits, and deterministic preferences. `evaluate_providers` records every registry candidate, including unimplemented, unavailable, metadata-failed, probe-failed, and hard-filter rejections. Eligible candidates are ranked by semantics, completeness, horizontal resolution, credential penalty, operational risk, user preference, registry order, and provider id.
+
+`fetch_with_provider_selection` attempts ranked candidates in order. Each error type/message is retained. Fallback continues only when the failed provider published no destination evidence; otherwise selection stops so partial evidence is not overwritten. Success writes the complete `ProviderSelectionTrace` into `source_acquisition.json`, and the build engine copies that exact object into `provenance.json` rather than synthesizing a successful single-provider history. Offline fake-provider tests exercise successful and exhausted fallback even while only `copernicus-aws` is a production network implementation.
+
+## Nominatim-compatible candidate geocoding
+
+Place search is separate from elevation-provider selection. Canonical JSONv2 search URLs enter the same content-addressed cache. The public Nominatim endpoint requires a descriptive application User-Agent, no autocomplete, no more than one request per second, bounded results, local caching, and OpenStreetMap attribution. Zero, unique, and ambiguous results are distinct states. Ambiguous results require an explicit candidate id; TopoForge never chooses by response order, importance, or name similarity. The selected candidate bbox becomes a network-free resolved-place `AreaOfInterestInput`, preserving the query, candidate id, display name, and exact WGS84 bbox.
+
 ## Implemented Copernicus AWS boundary
 
 `copernicus-aws` is implemented with configurable GLO-30/GLO-90 endpoints. It downloads and caches authoritative `tileList.txt` records, selects GLO-30 only when every AOI cell is present, falls back to a complete GLO-90 plan rather than blending dataset identities, stores immutable bytes by content SHA-256, and indexes canonical provider/dataset/version/URL requests atomically. The HTTP client enforces timeout, bounded attempts, exponential backoff, minimum request interval, declared/streamed byte limits, and a descriptive User-Agent.

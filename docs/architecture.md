@@ -42,7 +42,8 @@ Builds use a sibling staging directory. Every required file is written and reope
 - `provenance`: stable JSON and dependency-free HTML reports.
 - `engine`: atomic orchestration and bundle verification.
 - `cli`: Typer argument parsing and JSON presentation.
-- `providers`: normalized-AOI provider contracts, Copernicus AWS catalog/tile/ancillary-mask planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
+- `providers`: normalized-AOI provider contracts, explainable deterministic selection/fetch fallback, Copernicus AWS catalog/tile/ancillary-mask planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
+- `geocoding`: cached Nominatim-compatible candidate search and explicit ambiguity resolution; selected candidates become ordinary recorded AOIs before provider selection.
 
 ## Geometry topology
 
@@ -56,4 +57,4 @@ The interoperable 3MF path adds official lib3mf strict read with zero warnings, 
 
 ## Extension sequence
 
-The local AOI, printer-aware sampling, content-addressed cache, and configurable no-key Copernicus AWS GLO-30/GLO-90 provider are complete. Network acquisitions enter the existing local pipeline as a metric AOI raster plus `source_acquisition.json`; no download-first parallel geometry path exists. Quality-mask preservation is complete. Next steps are explainable multi-provider fallback, Nominatim-compatible candidate geocoding, tiling, API, and Web.
+The local/resolved-place AOI, printer-aware sampling, content-addressed cache, configurable no-key Copernicus AWS GLO-30/GLO-90 provider, explainable provider-selection/fetch-fallback engine, Nominatim-compatible candidate handling, and quality-mask preservation are complete. Network acquisitions enter the existing local pipeline as a metric AOI raster plus `source_acquisition.json`; no download-first parallel geometry path exists. Next steps are additional production provider implementations, remaining manufacturing-resource UX, tiling, API, and Web.

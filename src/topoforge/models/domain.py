@@ -62,16 +62,44 @@ class AreaOfInterestInput(BaseModel):
     bbox_wgs84: tuple[float, float, float, float] | None = None
     center_wgs84: tuple[float, float] | None = None
     radius_m: float | None = Field(default=None, gt=0)
+    place_query: str | None = None
+    place_candidate_id: str | None = None
+    place_display_name: str | None = None
+    resolved_place_bbox_wgs84: tuple[float, float, float, float] | None = None
 
     @model_validator(mode="after")
     def validate_shape(self) -> AreaOfInterestInput:
         """Require exactly one complete AOI input form."""
         has_bbox = self.bbox_wgs84 is not None
         has_center = self.center_wgs84 is not None or self.radius_m is not None
-        if has_bbox == has_center:
-            raise ValueError("AOI requires exactly one of bbox_wgs84 or center_wgs84 + radius_m")
+        has_place = any(
+            value is not None
+            for value in (
+                self.place_query,
+                self.place_candidate_id,
+                self.place_display_name,
+                self.resolved_place_bbox_wgs84,
+            )
+        )
+        if sum((has_bbox, has_center, has_place)) != 1:
+            raise ValueError(
+                "AOI requires exactly one of bbox_wgs84, center_wgs84 + radius_m, "
+                "or a resolved place candidate"
+            )
         if has_center and (self.center_wgs84 is None or self.radius_m is None):
             raise ValueError("center_wgs84 and radius_m must be supplied together")
+        if has_place and any(
+            value is None
+            for value in (
+                self.place_query,
+                self.place_candidate_id,
+                self.place_display_name,
+                self.resolved_place_bbox_wgs84,
+            )
+        ):
+            raise ValueError(
+                "resolved place AOI requires query, candidate id, display name, and bbox"
+            )
         return self
 
 

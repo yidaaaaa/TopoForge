@@ -2,7 +2,7 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Implemented milestone (TopoForge 0.2.0):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, bbox/center-radius AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, and real slicing. Geocoding, additional providers/fallback, tiling/connectors, API, and Web remain on the authoritative roadmap in `.agent/PLANS.md`.
+**Implemented milestone (TopoForge 0.3.0):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Additional provider implementations, tiling/connectors, API, and Web remain on the authoritative roadmap in `.agent/PLANS.md`.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
 
@@ -118,20 +118,29 @@ A depth of `0` preserves the raster aspect ratio. An explicit depth that conflic
 ## Fetch or build from the no-key global provider
 
 ```bash
+# Ambiguous names return candidates; copy one candidate_id explicitly.
+uv run topoforge geocode "PLACE NAME" --cache-dir cache/providers
+
 uv run topoforge fetch-dem \
   --bbox -60.02 -3.13 -60.00 -3.11 \
+  --provider auto --terrain-mode dsm \
   --output downloads/amazon/source.tif \
   --cache-dir cache/providers
 
 uv run topoforge build-global \
-  --bbox -60.02 -3.13 -60.00 -3.11 \
-  --output outputs/amazon \
-  --source-dir downloads/amazon \
+  --place "PLACE NAME" --place-candidate-id CANDIDATE_ID \
+  --provider auto --terrain-mode dsm \
+  --output outputs/place-terrain \
+  --source-dir downloads/place-terrain \
   --cache-dir cache/providers \
   --size-mm 80 0
 
 uv run topoforge cache status --cache-dir cache/providers
 ```
+
+`--provider auto` evaluates every registered network provider and records unimplemented, unavailable, rejected, probe-failed, fetch-failed, and selected candidates. Terrain semantics, licence suitability, complete coverage, credentials, vertical datum/resource limits, resolution, operational risk, preferences, and deterministic registry tie breaks are explicit; resolution alone never decides. A failed provider is tried only when it left no destination evidence.
+
+`geocode` uses a cached Nominatim-compatible JSONv2 search. The public endpoint path enforces at least one second between requests, performs no autocomplete, preserves OpenStreetMap attribution, and returns every bounded candidate. An ambiguous name never becomes an AOI until `--place-candidate-id` identifies one returned candidate. The query, selected id/display name, candidate bbox, request/cache evidence, and normalized AOI are retained in source acquisition provenance.
 
 `build-global` always uses the normalized AOI contract, authoritative product tile lists, one complete GLO-30 product or whole-AOI GLO-90 fallback, bounded HTTP attempts, and the same local raster/mesh/validation engine. It preserves ETag, Last-Modified, byte count, SHA-256, retry history, licence notices, coverage crop, and cache-hit state in `source_acquisition.json`. Exact S3 tile-prefix listings discover EDM, FLM, HEM, and WBM assets; exposed masks are cached, verified against the source DEM grid, nearest-neighbour reprojected with the DEM transform/window, copied into the final build, and never converted into invented elevation values.
 

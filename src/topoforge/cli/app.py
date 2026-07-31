@@ -21,11 +21,20 @@ from topoforge.config import DEFAULT_PRINTER_PROFILE_ID, get_printer_profile, lo
 from topoforge.engine import build_local_terrain, record_slice_validation, verify_artifact_bundle
 from topoforge.exceptions import TopoForgeError
 from topoforge.exporters.three_mf import inspect_3mf
+from topoforge.geocoding import (
+    NominatimConfig,
+    NominatimGeocoder,
+    PlaceCandidateSelectionError,
+    PlaceSearchResult,
+    place_candidate_aoi_input,
+    select_place_candidate,
+)
 from topoforge.models import (
     AreaOfInterestInput,
     BuildConfig,
     DatasetType,
     SamplingMode,
+    TerrainMode,
     VerticalScaleMode,
 )
 from topoforge.providers import (
@@ -33,6 +42,10 @@ from topoforge.providers import (
     ContentAddressedCache,
     CopernicusAwsProvider,
     HttpTransportConfig,
+    ProviderAcquisition,
+    ProviderSelectionError,
+    ProviderSelectionPolicy,
+    fetch_with_provider_selection,
     list_provider_descriptors,
 )
 from topoforge.raster import SyntheticTerrain, create_synthetic_geotiff
@@ -54,6 +67,110 @@ def _emit(value: Any) -> None:
 def _fail(exc: Exception) -> None:
     typer.echo(f"Error: {exc}", err=True)
     raise typer.Exit(code=2) from exc
+
+
+def _fail_provider_selection(exc: ProviderSelectionError) -> None:
+    typer.echo(
+        json.dumps(
+            {
+                "status": "failed",
+                "error": str(exc),
+                "provider_selection": exc.trace.model_dump(mode="json"),
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        err=True,
+    )
+    raise typer.Exit(code=2) from exc
+
+
+def _global_provider_descriptors() -> list[Any]:
+    return [item for item in list_provider_descriptors() if item.provider_id != "local"]
+
+
+def _global_provider_instances(client: CachingHttpClient) -> dict[str, Any]:
+    return {"copernicus-aws": CopernicusAwsProvider(client)}
+
+
+def _fail_place_candidates(exc: PlaceCandidateSelectionError) -> None:
+    typer.echo(
+        json.dumps(
+            {
+                "status": "candidate-selection-required",
+                "error": str(exc),
+                "place_search": exc.result.model_dump(mode="json"),
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        err=True,
+    )
+    raise typer.Exit(code=2) from exc
+
+
+def _resolve_global_aoi(
+    *,
+    bbox: tuple[float, float, float, float] | None,
+    center: tuple[float, float] | None,
+    radius_m: float | None,
+    place: str | None,
+    place_candidate_id: str | None,
+    geocoder_url: str,
+    cache_store: ContentAddressedCache,
+    timeout_seconds: float,
+    max_attempts: int,
+) -> tuple[AreaOfInterestInput, Any, PlaceSearchResult | None]:
+    from topoforge.raster import normalize_area_of_interest
+
+    if place is None and place_candidate_id is not None:
+        raise ValueError("--place-candidate-id requires --place")
+    if place is not None:
+        if bbox is not None or center is not None or radius_m is not None:
+            raise ValueError("--place cannot be combined with --bbox or --center/--radius-m")
+        geocoder_client = CachingHttpClient(
+            cache_store,
+            HttpTransportConfig(
+                timeout_seconds=timeout_seconds,
+                max_attempts=max_attempts,
+                min_request_interval_seconds=1.0,
+            ),
+        )
+        search = NominatimGeocoder(
+            geocoder_client,
+            NominatimConfig(base_url=geocoder_url),
+        ).search(place)
+        selected = select_place_candidate(search, candidate_id=place_candidate_id)
+        request = place_candidate_aoi_input(search, selected)
+        return request, normalize_area_of_interest(request), search
+    request = AreaOfInterestInput(
+        bbox_wgs84=bbox,
+        center_wgs84=center,
+        radius_m=radius_m,
+    )
+    return request, normalize_area_of_interest(request), None
+
+
+def _record_geocoding_manifest(
+    acquisition: ProviderAcquisition, search: PlaceSearchResult | None
+) -> None:
+    if search is None:
+        return
+    path = acquisition.acquisition_manifest_path.resolve()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("source acquisition manifest root is not an object")
+    payload["geocoding"] = search.model_dump(mode="json")
+    temporary = path.with_name(f".{path.name}.geocoding.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        json.loads(temporary.read_text(encoding="utf-8"))
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _was_provided(ctx: typer.Context, parameter_name: str) -> bool:
@@ -340,6 +457,47 @@ def preview(
 
 
 @app.command()
+def geocode(
+    query: Annotated[str, typer.Argument(help="Place name to search without autocomplete.")],
+    candidate_id: Annotated[str | None, typer.Option("--candidate-id")] = None,
+    cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path("cache/providers"),
+    geocoder_url: Annotated[str, typer.Option("--geocoder-url")] = (
+        "https://nominatim.openstreetmap.org"
+    ),
+    timeout_seconds: Annotated[float, typer.Option("--timeout-seconds", min=0.1)] = 30.0,
+    max_attempts: Annotated[int, typer.Option("--max-attempts", min=1, max=10)] = 4,
+) -> None:
+    """Return Nominatim-compatible candidates; ambiguous names require an explicit id."""
+    try:
+        cache_store = ContentAddressedCache(cache_dir)
+        client = CachingHttpClient(
+            cache_store,
+            HttpTransportConfig(
+                timeout_seconds=timeout_seconds,
+                max_attempts=max_attempts,
+                min_request_interval_seconds=1.0,
+            ),
+        )
+        result = NominatimGeocoder(
+            client,
+            NominatimConfig(base_url=geocoder_url),
+        ).search(query)
+        payload = result.model_dump(mode="json")
+        if candidate_id is not None or result.candidate_status == "unique":
+            selected = select_place_candidate(result, candidate_id=candidate_id)
+            request = place_candidate_aoi_input(result, selected)
+            from topoforge.raster import normalize_area_of_interest
+
+            payload["selected_candidate"] = selected.model_dump(mode="json")
+            payload["normalized_aoi"] = normalize_area_of_interest(request).model_dump(mode="json")
+        _emit(payload)
+    except PlaceCandidateSelectionError as exc:
+        _fail_place_candidates(exc)
+    except (TopoForgeError, ValueError, OSError) as exc:
+        _fail(exc)
+
+
+@app.command()
 def providers() -> None:
     """List provider semantics, key requirements, and implementation state."""
     _emit([item.model_dump(mode="json") for item in list_provider_descriptors()])
@@ -359,7 +517,26 @@ def fetch_dem(
     radius_m: Annotated[
         float | None, typer.Option("--radius-m", min=0.001, help="Geodesic AOI radius.")
     ] = None,
-    provider: Annotated[str, typer.Option("--provider")] = "copernicus-aws",
+    place: Annotated[str | None, typer.Option("--place")] = None,
+    place_candidate_id: Annotated[str | None, typer.Option("--place-candidate-id")] = None,
+    geocoder_url: Annotated[str, typer.Option("--geocoder-url")] = (
+        "https://nominatim.openstreetmap.org"
+    ),
+    provider: Annotated[str, typer.Option("--provider")] = "auto",
+    terrain_mode: Annotated[TerrainMode, typer.Option("--terrain-mode")] = (
+        TerrainMode.BEST_AVAILABLE
+    ),
+    allow_semantic_fallback: Annotated[
+        bool,
+        typer.Option(
+            "--allow-semantic-fallback",
+            help="Permit an explicitly recorded DTM/DSM/mixed semantic downgrade.",
+        ),
+    ] = False,
+    preferred_provider: Annotated[
+        list[str] | None,
+        typer.Option("--preferred-provider", help="Repeat in deterministic preference order."),
+    ] = None,
     cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path("cache/providers"),
     timeout_seconds: Annotated[float, typer.Option("--timeout-seconds", min=0.1)] = 30.0,
     max_attempts: Annotated[int, typer.Option("--max-attempts", min=1, max=10)] = 4,
@@ -369,17 +546,18 @@ def fetch_dem(
 ) -> None:
     """Fetch, cache, verify, and AOI-crop a no-key global DEM."""
     try:
-        if provider != "copernicus-aws":
-            raise ValueError("--provider currently supports copernicus-aws")
-        request = AreaOfInterestInput(
-            bbox_wgs84=bbox,
-            center_wgs84=center,
-            radius_m=radius_m,
-        )
-        from topoforge.raster import normalize_area_of_interest
-
-        normalized = normalize_area_of_interest(request)
         cache_store = ContentAddressedCache(cache_dir)
+        _request, normalized, place_search = _resolve_global_aoi(
+            bbox=bbox,
+            center=center,
+            radius_m=radius_m,
+            place=place,
+            place_candidate_id=place_candidate_id,
+            geocoder_url=geocoder_url,
+            cache_store=cache_store,
+            timeout_seconds=timeout_seconds,
+            max_attempts=max_attempts,
+        )
         client = CachingHttpClient(
             cache_store,
             HttpTransportConfig(
@@ -388,11 +566,30 @@ def fetch_dem(
                 min_request_interval_seconds=min_request_interval_seconds,
             ),
         )
-        acquisition = CopernicusAwsProvider(client).acquire(normalized, output)
+        selection = fetch_with_provider_selection(
+            aoi=normalized,
+            destination=output,
+            providers=_global_provider_instances(client),
+            descriptors=_global_provider_descriptors(),
+            policy=ProviderSelectionPolicy(
+                requested_provider_id=provider,
+                requested_terrain_mode=terrain_mode,
+                allow_semantic_fallback=allow_semantic_fallback,
+                preferred_provider_ids=preferred_provider or [],
+            ),
+        )
+        if not isinstance(selection.acquisition, ProviderAcquisition):
+            raise ValueError("selected provider returned an unsupported acquisition result")
+        acquisition = selection.acquisition
+        _record_geocoding_manifest(acquisition, place_search)
         _emit(
             {
                 "status": "completed",
                 "provider": acquisition.provider_id,
+                "provider_selection": selection.trace.model_dump(mode="json"),
+                "geocoding": (
+                    place_search.model_dump(mode="json") if place_search is not None else None
+                ),
                 "dataset": acquisition.dataset.model_dump(mode="json"),
                 "aoi": acquisition.aoi,
                 "plan": acquisition.plan.model_dump(mode="json"),
@@ -401,6 +598,10 @@ def fetch_dem(
                 "cache": cache_store.summary().model_dump(mode="json"),
             }
         )
+    except PlaceCandidateSelectionError as exc:
+        _fail_place_candidates(exc)
+    except ProviderSelectionError as exc:
+        _fail_provider_selection(exc)
     except (TopoForgeError, ValueError, OSError) as exc:
         _fail(exc)
 
@@ -420,6 +621,26 @@ def build_global(
     ] = None,
     radius_m: Annotated[
         float | None, typer.Option("--radius-m", min=0.001, help="Geodesic AOI radius.")
+    ] = None,
+    place: Annotated[str | None, typer.Option("--place")] = None,
+    place_candidate_id: Annotated[str | None, typer.Option("--place-candidate-id")] = None,
+    geocoder_url: Annotated[str, typer.Option("--geocoder-url")] = (
+        "https://nominatim.openstreetmap.org"
+    ),
+    provider: Annotated[str, typer.Option("--provider")] = "auto",
+    terrain_mode: Annotated[TerrainMode, typer.Option("--terrain-mode")] = (
+        TerrainMode.BEST_AVAILABLE
+    ),
+    allow_semantic_fallback: Annotated[
+        bool,
+        typer.Option(
+            "--allow-semantic-fallback",
+            help="Permit an explicitly recorded DTM/DSM/mixed semantic downgrade.",
+        ),
+    ] = False,
+    preferred_provider: Annotated[
+        list[str] | None,
+        typer.Option("--preferred-provider", help="Repeat in deterministic preference order."),
     ] = None,
     source_dir: Annotated[
         Path | None,
@@ -453,14 +674,18 @@ def build_global(
     try:
         if output.exists():
             raise ValueError(f"output already exists; preserve it and choose a new path: {output}")
-        request = AreaOfInterestInput(
-            bbox_wgs84=bbox,
-            center_wgs84=center,
+        cache_store = ContentAddressedCache(cache_dir)
+        request, normalized, place_search = _resolve_global_aoi(
+            bbox=bbox,
+            center=center,
             radius_m=radius_m,
+            place=place,
+            place_candidate_id=place_candidate_id,
+            geocoder_url=geocoder_url,
+            cache_store=cache_store,
+            timeout_seconds=timeout_seconds,
+            max_attempts=max_attempts,
         )
-        from topoforge.raster import normalize_area_of_interest
-
-        normalized = normalize_area_of_interest(request)
         source_root = (
             source_dir if source_dir is not None else output.parent / f"{output.name}-source"
         ).resolve()
@@ -468,8 +693,7 @@ def build_global(
             raise ValueError(
                 f"source evidence directory already exists; choose a new path: {source_root}"
             )
-        source_raster = source_root / "copernicus-aws-aoi.tif"
-        cache_store = ContentAddressedCache(cache_dir)
+        source_raster = source_root / "global-aoi.tif"
         client = CachingHttpClient(
             cache_store,
             HttpTransportConfig(
@@ -478,7 +702,22 @@ def build_global(
                 min_request_interval_seconds=min_request_interval_seconds,
             ),
         )
-        acquisition = CopernicusAwsProvider(client).acquire(normalized, source_raster)
+        selection = fetch_with_provider_selection(
+            aoi=normalized,
+            destination=source_raster,
+            providers=_global_provider_instances(client),
+            descriptors=_global_provider_descriptors(),
+            policy=ProviderSelectionPolicy(
+                requested_provider_id=provider,
+                requested_terrain_mode=terrain_mode,
+                allow_semantic_fallback=allow_semantic_fallback,
+                preferred_provider_ids=preferred_provider or [],
+            ),
+        )
+        if not isinstance(selection.acquisition, ProviderAcquisition):
+            raise ValueError("selected provider returned an unsupported acquisition result")
+        acquisition = selection.acquisition
+        _record_geocoding_manifest(acquisition, place_search)
         dataset = acquisition.dataset
         resolved = BuildConfig(
             dem_path=acquisition.raster_path,
@@ -512,6 +751,10 @@ def build_global(
             {
                 "status": "completed",
                 "provider": dataset.provider,
+                "provider_selection": selection.trace.model_dump(mode="json"),
+                "geocoding": (
+                    place_search.model_dump(mode="json") if place_search is not None else None
+                ),
                 "dataset": dataset.model_dump(mode="json"),
                 "source_raster": str(acquisition.raster_path),
                 "source_acquisition": str(acquisition.acquisition_manifest_path),
@@ -522,6 +765,10 @@ def build_global(
                 "cache": cache_store.summary().model_dump(mode="json"),
             }
         )
+    except PlaceCandidateSelectionError as exc:
+        _fail_place_candidates(exc)
+    except ProviderSelectionError as exc:
+        _fail_provider_selection(exc)
     except (TopoForgeError, ValueError, OSError) as exc:
         _fail(exc)
 

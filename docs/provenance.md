@@ -13,3 +13,8 @@ Network builds add `source_acquisition.json` as a checksummed bundle role. It re
 
 
 Copernicus AWS acquisitions also record an exact per-tile S3 object listing and an inventory for EDM (editing), FLM (ancillary filling), HEM (height-error standard deviation), and WBM (modified water) rasters. Every exposed source object retains URL, ETag, Last-Modified, byte count, content SHA-256, and cache status. A quality raster is published only when every selected DEM tile exposes the role and its source CRS, transform, width, and height align exactly with the corresponding DEM. Values are not remapped: the aligned AOI raster uses nearest-neighbour reprojection and the identical DEM coverage-crop window. Complete masks are copied into build bundles as `source_quality_edm`, `source_quality_flm`, `source_quality_hem`, and `source_quality_wbm` manifest roles; absent or incomplete roles remain explicit inventory decisions.
+
+
+Provider-selection provenance stores the complete policy, candidate evaluations, deterministic rank tuples/order, fetch attempts, exact error types/messages, retained-evidence decisions, selected provider/dataset, and selection reasons. The exact same object is present in `source_acquisition.json` and `provenance.json`; build orchestration does not replace it with a simplified success record.
+
+Resolved-place acquisitions additionally store the normalized query, candidate status/list, explicit candidate id/display name, WGS84 candidate bbox, canonical request URL, response SHA-256/bytes/ETag/Last-Modified, cache state, bounded attempts, OpenStreetMap attribution, and usage-policy decisions. Ambiguous searches are emitted as candidates and do not create a raster until one id is explicitly selected.

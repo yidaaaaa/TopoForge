@@ -7,7 +7,7 @@ Updated: 2026-08-01
 - [x] Phase 0 — repository, toolchain, official-source research, architecture, fixtures. Completed 2026-07-31.
 - [x] Milestone 01 — full-raster local GeoTIFF/synthetic manufacturing core, deterministic 3MF/provenance, validation, and real slicer evidence. Completed 2026-07-31.
 - [x] Phase 1 closure — explicit local AOI bbox/center-radius clipping and GIS edge contracts. Completed 2026-07-31.
-- [ ] Phase 2 closure — revalidate deterministic export/provenance after Phase 1 AOI closure.
+- [x] Phase 2 closure — deterministic export/provenance revalidated after Phase 1 AOI closure. Completed 2026-07-31.
 - [ ] Phase 3 — global/high-resolution providers, AOI/geocoding, cache, selection/fallback.
 - [ ] Phase 4 — printer-aware sampling foundation is complete; remaining build-volume/resource UX and vertical-scaling refinements continue.
 - [ ] Phase 5 — tiling, assembly manifest/map, labels, and verified connectors.
@@ -57,24 +57,24 @@ Updated: 2026-08-01
 - [x] Actual PrusaSlicer diagnostic: exit 0, 149 layers, no floating/empty/out-of-bed/support warning.
 - [x] Repeat real build: DEM/STL/3MF/GLB/PNG roles byte-identical.
 
-## Current milestone: Milestone 02 AOI and no-key global terrain
+## Completed milestone: Milestone 02 AOI and no-key global terrain
 
-Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> windowed COG fetch -> provider selection/fallback -> real Gongga/Amazon builds -> provenance and slicer evidence.
+Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> windowed COG fetch -> provider selection/fallback -> candidate geocoding -> real Gongga/Amazon builds -> provenance and slicer evidence.
 
 - [x] Verify current official sources, access, licenses, attribution, and no-key route.
 - [x] Implement bbox and center-radius `AreaOfInterest` normalization.
 - [x] Apply explicit AOI pixel-window clipping to local rasters with coverage/NoData records.
 - [x] Implement antimeridian/high-latitude/cross-zone projection decisions and tests.
-- [ ] Implement Nominatim-compatible geocoding with candidate handling and usage policy.
+- [x] Implement Nominatim-compatible geocoding with candidate handling and usage policy.
 - [x] Implement content-addressed cache, timeout/retry/rate-limit boundaries.
 - [x] Implement configurable `copernicus-aws` GLO-30/GLO-90 COG provider.
 - [x] Preserve Copernicus quality/editing masks when assets expose them.
-- [ ] Implement explainable auto-selection and recorded fallback attempts.
+- [x] Implement explainable auto-selection and recorded fallback attempts.
 - [x] Execute a real Gongga build from fetched DSM data (reference bundle complete; integrated provider automation remains pending).
 - [x] Execute a real Amazon low-relief build with DSM semantics visible; v2 provider/cache bundle and diagnostic slice completed 2026-07-31.
 - [x] Slice at least one global-provider 3MF and publish milestone-02 evidence (official Bambu Studio P2S bundle).
 
-## Milestone 02 acceptance
+## Milestone 02 acceptance — passed in 0.3.0
 
 - Local and no-key global commands accept normalized bbox/center AOIs and emit complete bundles.
 - Place resolution returns candidates for ambiguity rather than silently selecting.

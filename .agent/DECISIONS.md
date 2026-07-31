@@ -116,3 +116,18 @@
 - **Context:** The public Copernicus AWS tile prefixes expose EDM, FLM, HEM, and WBM rasters, but filenames alone do not prove availability and categorical/error values must not be converted into fabricated terrain.
 - **Decision:** Cache and parse the exact per-tile S3 ListObjectsV2 response. Download only listed ancillary objects through the normal content-addressed transport, require each source raster to match its DEM tile CRS/transform/shape, retain raw values, use nearest-neighbour reprojection, and crop with the exact DEM target window. Publish a composite only when every selected tile exposes the role; otherwise record `absent` or `incomplete`. Copy complete aligned rasters into build bundles as checksummed source-quality roles.
 - **Impact:** Quality/editing/filling/water/error evidence becomes reproducible and self-contained while terrain elevations and geometry remain unchanged. The final Amazon DEM/STL/3MF/GLB/PNG are byte-identical to the pre-mask bundle.
+
+
+## ADR-016 — Provider selection is a deterministic recorded decision
+
+- **Date:** 2026-08-01
+- **Context:** Direct CLI construction of one provider hid unimplemented/rejected candidates and could not prove fetch fallback behavior. Resolution alone is not a sufficient provider choice.
+- **Decision:** Evaluate the explicit registry under a typed policy. Licence suitability, requested semantics unless fallback is explicit, coverage, credentials, vertical datum, and resource limits are hard requirements. Rank eligible providers deterministically by semantics, completeness, resolution, credential penalty, operational risk, preference, registry order, and id. Record every evaluation and fetch attempt. Continue after a fetch error only when no destination evidence was published. Copy the exact acquisition trace into build provenance.
+- **Impact:** Auto and explicit provider modes are explainable and repeatable. Fake providers verify multi-provider fallback offline while production currently instantiates Copernicus AWS. Partial evidence is preserved rather than overwritten.
+
+## ADR-017 — Place names resolve to explicit cached candidates before AOI normalization
+
+- **Date:** 2026-08-01
+- **Context:** Same-name places make automatic first-result selection unsafe, and public Nominatim has usage, attribution, rate, and caching requirements.
+- **Decision:** Use bounded Nominatim-compatible JSONv2 search with canonical cached URLs. Enforce a one-second minimum interval for the public endpoint, no autocomplete, and OSM attribution. Return zero/unique/ambiguous states. Ambiguous results require a returned candidate id. Preserve query, candidate id, display name, and exact bbox in a network-free resolved-place AOI, then run the existing normalization/provider/build pipeline.
+- **Impact:** Place inputs cannot silently choose the wrong feature. Repeated search is cached, acquisition provenance includes search evidence, and bbox/center/place converge on one AOI contract.

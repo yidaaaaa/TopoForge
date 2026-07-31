@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from email.message import Message
 from io import BytesIO
 from pathlib import Path
@@ -12,7 +13,7 @@ from rasterio.io import MemoryFile
 from rasterio.transform import from_bounds
 
 from topoforge.exceptions import ProviderFetchError
-from topoforge.models import AreaOfInterestInput
+from topoforge.models import AreaOfInterestInput, TerrainMode
 from topoforge.providers.cache import ContentAddressedCache
 from topoforge.providers.copernicus_aws import (
     CopernicusAwsConfig,
@@ -22,6 +23,8 @@ from topoforge.providers.copernicus_aws import (
     required_tile_coordinates,
     tile_id,
 )
+from topoforge.providers.protocol import ProviderDescriptor
+from topoforge.providers.selection import ProviderSelectionPolicy, fetch_with_provider_selection
 from topoforge.providers.transport import CachingHttpClient, HttpTransportConfig
 from topoforge.raster import normalize_area_of_interest
 
@@ -215,7 +218,26 @@ def test_provider_acquisition_reuses_local_build_and_enters_provenance(tmp_path:
     instance = provider(tmp_path, responses)
     request = AreaOfInterestInput(bbox_wgs84=(101.2, 29.2, 101.21, 29.21))
     aoi = normalize_area_of_interest(request)
-    acquisition = instance.acquire(aoi, tmp_path / "source" / "dem.tif")
+    selection = fetch_with_provider_selection(
+        aoi=aoi,
+        destination=tmp_path / "source" / "dem.tif",
+        providers={"copernicus-aws": instance},
+        descriptors=[
+            ProviderDescriptor(
+                provider_id="copernicus-aws",
+                name="Copernicus fixture",
+                implemented=True,
+                requires_api_key=False,
+                dataset_types=[instance.metadata().dataset_type],
+                notes="offline fixture",
+            )
+        ],
+        policy=ProviderSelectionPolicy(
+            requested_terrain_mode=TerrainMode.DSM,
+        ),
+    )
+    acquisition = selection.acquisition
+    assert hasattr(acquisition, "dataset")
     dataset = acquisition.dataset
 
     result = build_local_terrain(
@@ -243,7 +265,12 @@ def test_provider_acquisition_reuses_local_build_and_enters_provenance(tmp_path:
     )
 
     assert result.validation["required_checks_passed"] is True
-    assert result.provenance["provider_selection"]["selected"] == "copernicus-aws"
+    acquisition_manifest = json.loads(
+        acquisition.acquisition_manifest_path.read_text(encoding="utf-8")
+    )
+    assert result.provenance["provider_selection"] == selection.trace.model_dump(mode="json")
+    assert result.provenance["provider_selection"] == acquisition_manifest["provider_selection"]
+    assert result.provenance["provider_selection"]["selected_provider"] == "copernicus-aws"
     assert result.provenance["source_acquisition"]["plan"]["dataset_id"] == (
         "copernicus-dem-glo-30-aws-2021"
     )
@@ -269,8 +296,6 @@ def test_acquire_crops_reprojection_only_gap_at_source_tile_edge(tmp_path: Path)
 
     with rasterio.open(result.raster_path) as dataset:
         assert np.all(np.isfinite(dataset.read(1)))
-    import json
-
     manifest = json.loads(result.acquisition_manifest_path.read_text(encoding="utf-8"))
     assert manifest["coverage_crop"]["discarded_reprojection_gap_cells"] > 0
     assert manifest["output_source_nodata_pixels"] == 0
