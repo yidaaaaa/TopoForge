@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly BASELINE_COMMIT="a9f5f5d9cd3e7394b13efbc6db8430701cc07b4e"
+readonly BASELINE_COMMIT="a9f5f5da77ba231f23128fe76e21c6f93890b7ef"
 
 if [[ "${1:-}" != "--confirm-rollback" ]]; then
   printf 'Usage: %s --confirm-rollback\n' "$0" >&2
