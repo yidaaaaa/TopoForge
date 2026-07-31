@@ -66,6 +66,19 @@ def render_elevation_preview(
         f"Measured elevation range: {float(np.min(values)):.2f}-{float(np.max(values)):.2f} m",
         fill=(182, 193, 199),
     )
+    north_x = width_px - 42
+    north_tip_y = header_px + 10
+    north_tail_y = header_px + 58
+    draw.line((north_x, north_tail_y, north_x, north_tip_y), fill=(255, 255, 255), width=4)
+    draw.polygon(
+        (
+            (north_x, north_tip_y),
+            (north_x - 9, north_tip_y + 15),
+            (north_x + 9, north_tip_y + 15),
+        ),
+        fill=(255, 255, 255),
+    )
+    draw.text((north_x - 5, header_px + 60), "N", fill=(255, 255, 255))
     temporary = path.with_name(f".{path.name}.tmp")
     canvas.save(temporary, format="PNG", optimize=True)
     temporary.replace(path)

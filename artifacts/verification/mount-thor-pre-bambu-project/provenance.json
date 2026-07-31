@@ -1,0 +1,705 @@
+{
+  "dataset": {
+    "acquisition_period": "TanDEM-X primarily 2011-2015; Copernicus DEM 2021 release",
+    "attribution": "© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved.",
+    "checksums": {
+      "Copernicus_DSM_COG_10_N66_00_W066_00_DEM": "6418e945ca4181b599c0db8f6e346f413835ec69b034bd7e1b587eeb2ea01e12"
+    },
+    "dataset_name": "Copernicus DEM GLO-30 2021 — Mount Thor",
+    "dataset_type": "dsm",
+    "dataset_version": "AWS mirror 2021",
+    "download_time": "2026-07-31T03:07:55.077380+00:00",
+    "horizontal_crs": "EPSG:32620",
+    "horizontal_resolution_m": 29.933828957089247,
+    "license": "Copernicus-DEM-GLO-30-F",
+    "provider": "copernicus-aws",
+    "source_urls": [
+      "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N66_00_W066_00_DEM/Copernicus_DSM_COG_10_N66_00_W066_00_DEM.tif"
+    ],
+    "vertical_crs": "EPSG:3855",
+    "vertical_datum": "EGM2008"
+  },
+  "downsampling_factor": 1.0,
+  "elevation_reference_comparison": {
+    "dataset_semantics": "dsm",
+    "interpretation": "The published nominal elevation is contextual provenance only; the model retains measured source raster elevations without an artificial peak.",
+    "note": null,
+    "published_reference_peak_elevation_m": null,
+    "raw_dem_peak_elevation_m": 2089.2275390625,
+    "reference_minus_raw_dem_m": null,
+    "terrain_adjustment_applied": false,
+    "vertical_datum": "EGM2008"
+  },
+  "estimated_triangle_count": 809996,
+  "formats": {
+    "3mf": {
+      "lib3mf_version": [
+        2,
+        5,
+        0
+      ],
+      "strict_warning_count": 0,
+      "writer": "lib3mf"
+    },
+    "glb": {
+      "role": "preview only"
+    },
+    "stl": {
+      "units_contract": "millimetres"
+    }
+  },
+  "generated_at": "2026-07-31T03:12:16.708255+00:00",
+  "geometry": {
+    "construction": "explicit regular-grid top, four boundary walls, and flat bottom",
+    "manufacturing_units": "millimetres",
+    "self_intersection_status": "not_fully_checked"
+  },
+  "license_note": "Dataset terms are separate from the Apache-2.0 TopoForge code license.",
+  "orientation": {
+    "coordinate_correction_only": true,
+    "east_axis": "+X = East",
+    "north_axis": "+Y = North",
+    "north_edge": "y=model_depth_mm",
+    "orientation_transform": "mesh_heightfield=flipud(processed_dem); source row 0 north maps to y=model_depth_mm",
+    "source_bounds": {
+      "full_grid_shape": [
+        450,
+        450
+      ],
+      "native": [
+        390181.65010740765,
+        7375069.286994169,
+        403651.8684633177,
+        7388539.514699639
+      ],
+      "native_crs": "EPSG:32620",
+      "wgs84": [
+        -65.47812046666786,
+        66.4754067323374,
+        -65.16391587479507,
+        66.60063680450617
+      ]
+    },
+    "up_axis": "+Z = Up"
+  },
+  "peak_elevation_loss_m": 0.0,
+  "peak_horizontal_shift_m": 0.0,
+  "physical_sample_spacing_mm": 0.4008910077242973,
+  "processed_elevation_max_m": 2089.2275390625,
+  "processed_elevation_min_m": 85.61587524414062,
+  "processed_grid_shape": [
+    450,
+    450
+  ],
+  "processed_horizontal_resolution_m": 29.933828957089247,
+  "processed_peak_coordinate": {
+    "column": 63,
+    "crs": "EPSG:32620",
+    "latitude": 66.5462329977988,
+    "longitude": -65.43032257967121,
+    "row": 188,
+    "x": 392082.4475865194,
+    "y": 7382896.985983014
+  },
+  "processing": {
+    "aoi": null,
+    "array_shape": [
+      450,
+      450
+    ],
+    "automatic_projection_choice": "EPSG:32620",
+    "downsampling_factor": 1.0,
+    "elevation_max_m": 2089.2275390625,
+    "elevation_min_m": 85.61587524414062,
+    "estimated_memory_mb": 61.798095703125,
+    "estimated_triangle_count": 809996,
+    "horizontal_resolution_m": 29.933828957089247,
+    "interpolated_percentage": 0.0,
+    "max_estimated_memory_mb": 768.0,
+    "max_grid_cells": 500000,
+    "mesh_sampling_mm": null,
+    "nodata_percentage": 0.0,
+    "original_nodata_mask": "original_nodata_mask.tif",
+    "peak_elevation_loss_m": 0.0,
+    "peak_elevation_loss_threshold_m": 59.867657914178494,
+    "peak_horizontal_shift_m": 0.0,
+    "peak_horizontal_shift_threshold_m": 89.80148687126774,
+    "physical_sample_spacing_mm": 0.4008910077242973,
+    "physical_sample_spacing_xy_mm": [
+      0.40089086859688194,
+      0.40089114685171273
+    ],
+    "pipeline": [
+      "read metadata",
+      "normalize to a north-up metric CRS when required",
+      "resolve print-aware/source-preserving/custom sampling",
+      "enforce deterministic cell and memory budgets using average resampling",
+      "preserve original NoData mask",
+      "interpolate bounded interior holes from nearest valid cells",
+      "write processed DEM"
+    ],
+    "processed_crs": "EPSG:32620",
+    "processed_elevation_max_m": 2089.2275390625,
+    "processed_elevation_min_m": 85.61587524414062,
+    "processed_grid_shape": [
+      450,
+      450
+    ],
+    "processed_horizontal_resolution_m": 29.933828957089247,
+    "processed_peak_coordinate": {
+      "column": 63,
+      "crs": "EPSG:32620",
+      "latitude": 66.5462329977988,
+      "longitude": -65.43032257967121,
+      "row": 188,
+      "x": 392082.4475865194,
+      "y": 7382896.985983014
+    },
+    "raw_elevation_max_m": 2089.2275390625,
+    "raw_elevation_min_m": 85.61587524414062,
+    "raw_peak_coordinate": {
+      "column": 63,
+      "crs": "EPSG:32620",
+      "latitude": 66.5462329977988,
+      "longitude": -65.43032257967121,
+      "row": 188,
+      "x": 392082.4475865194,
+      "y": 7382896.985983014
+    },
+    "sampling_decision_reasons": [
+      "source grid is 450 x 450",
+      "source samples map to 0.400891 x 0.400891 mm on the model",
+      "source-preserving mode requested every normalized source sample",
+      "effective cell limit is 500000 from max_grid_cells=500000 and max_estimated_memory_mb=768.000"
+    ],
+    "sampling_mode": "source-preserving",
+    "sampling_warnings": [],
+    "source_bounds": {
+      "full_grid_shape": [
+        450,
+        450
+      ],
+      "native": [
+        390181.65010740765,
+        7375069.286994169,
+        403651.8684633177,
+        7388539.514699639
+      ],
+      "native_crs": "EPSG:32620",
+      "wgs84": [
+        -65.47812046666786,
+        66.4754067323374,
+        -65.16391587479507,
+        66.60063680450617
+      ]
+    },
+    "source_grid_shape": [
+      450,
+      450
+    ],
+    "source_horizontal_resolution_m": 29.933828957089247,
+    "terrain_fidelity_passed": true,
+    "terrain_fidelity_status": "source-resolution-preserved"
+  },
+  "provider_selection": {
+    "attempted_providers": [
+      {
+        "dataset": "Copernicus DEM GLO-30 2021 — Mount Thor",
+        "provider": "copernicus-aws",
+        "status": "selected"
+      }
+    ],
+    "reason": [
+      "normalized AOI requires 1 one-degree source cell(s)",
+      "glo-30 authoritative tileList.txt covers every required cell",
+      "selected one dataset id copernicus-dem-glo-30-aws-2021; GLO-30/GLO-90 are not blended"
+    ],
+    "selected": "copernicus-aws",
+    "source_acquisition_artifact": "source_acquisition.json"
+  },
+  "raw_elevation_max_m": 2089.2275390625,
+  "raw_elevation_min_m": 85.61587524414062,
+  "raw_peak_coordinate": {
+    "column": 63,
+    "crs": "EPSG:32620",
+    "latitude": 66.5462329977988,
+    "longitude": -65.43032257967121,
+    "row": 188,
+    "x": 392082.4475865194,
+    "y": 7382896.985983014
+  },
+  "sampling_decision_reasons": [
+    "source grid is 450 x 450",
+    "source samples map to 0.400891 x 0.400891 mm on the model",
+    "source-preserving mode requested every normalized source sample",
+    "effective cell limit is 500000 from max_grid_cells=500000 and max_estimated_memory_mb=768.000"
+  ],
+  "scaling": {
+    "base_thickness_mm": 3.0,
+    "baseline_elevation_m": 85.61587524414062,
+    "height_limit_applied": true,
+    "height_limit_mm": 48.0,
+    "horizontal_scale_mm_per_m": 0.013362812334888787,
+    "model_depth_mm": 180.000124936419,
+    "model_width_mm": 180.0,
+    "policy_vertical_exaggeration": 1.9547442713996124,
+    "predicted_max_z_mm": 48.0,
+    "predicted_min_z_mm": 3.0,
+    "robust_high_elevation_m": 1830.9974365234375,
+    "robust_low_elevation_m": 108.2377700805664,
+    "scale_mode": "fit-height",
+    "vertical_exaggeration": 1.6807421566711345
+  },
+  "slicer_validation": {
+    "bambu_report": "bambu_studio_validation.json",
+    "gcode_generated": true,
+    "gcode_size_bytes": 46330376,
+    "manufacturing_validation": {
+      "parameter_checks": [
+        {
+          "actual": "BambuStudio",
+          "expected": "BambuStudio",
+          "name": "slicer.name",
+          "passed": true
+        },
+        {
+          "actual": "succeeded",
+          "expected": "succeeded",
+          "name": "slice.status",
+          "passed": true
+        },
+        {
+          "actual": 0,
+          "expected": 0,
+          "name": "slice.exit_code",
+          "passed": true
+        },
+        {
+          "actual": true,
+          "expected": true,
+          "name": "slice.gcode_generated",
+          "passed": true
+        },
+        {
+          "actual": "bambu-p2s-0.4",
+          "expected": "bambu-p2s-0.4",
+          "name": "machine.internal_profile_id",
+          "passed": true
+        },
+        {
+          "actual": "Bambu Lab P2S",
+          "expected": "Bambu Lab P2S",
+          "name": "machine.printer_model",
+          "passed": true
+        },
+        {
+          "actual": "Bambu Lab P2S 0.4 nozzle",
+          "expected": "Bambu Lab P2S 0.4 nozzle",
+          "name": "machine.printer_settings_id",
+          "passed": true
+        },
+        {
+          "actual": "0.4",
+          "expected": "0.4",
+          "name": "machine.printer_variant",
+          "passed": true
+        },
+        {
+          "actual": 0.4,
+          "expected": 0.4,
+          "name": "machine.nozzle_diameter_mm",
+          "passed": true
+        },
+        {
+          "actual": 256.0,
+          "expected": 256.0,
+          "name": "machine.printable_width_mm",
+          "passed": true
+        },
+        {
+          "actual": 256.0,
+          "expected": 256.0,
+          "name": "machine.printable_depth_mm",
+          "passed": true
+        },
+        {
+          "actual": 256.0,
+          "expected": 256.0,
+          "name": "machine.printable_height_mm",
+          "passed": true
+        },
+        {
+          "actual": "0.20mm Standard @BBL P2S",
+          "expected": "0.20mm Standard @BBL P2S",
+          "name": "process.settings_id",
+          "passed": true
+        },
+        {
+          "actual": 0.2,
+          "expected": 0.2,
+          "name": "process.layer_height_mm",
+          "passed": true
+        },
+        {
+          "actual": 0.2,
+          "expected": 0.2,
+          "name": "process.initial_layer_height_mm",
+          "passed": true
+        },
+        {
+          "actual": 2,
+          "expected": 2,
+          "name": "process.wall_loops",
+          "passed": true
+        },
+        {
+          "actual": 5,
+          "expected": 5,
+          "name": "process.top_shell_layers",
+          "passed": true
+        },
+        {
+          "actual": 3,
+          "expected": 3,
+          "name": "process.bottom_shell_layers",
+          "passed": true
+        },
+        {
+          "actual": 15.0,
+          "expected": 15.0,
+          "name": "process.sparse_infill_density_percent",
+          "passed": true
+        },
+        {
+          "actual": "grid",
+          "expected": "grid",
+          "name": "process.sparse_infill_pattern",
+          "passed": true
+        },
+        {
+          "actual": false,
+          "expected": false,
+          "name": "process.support_enabled",
+          "passed": true
+        },
+        {
+          "actual": "auto_brim",
+          "expected": "auto_brim",
+          "name": "process.brim_type",
+          "passed": true
+        },
+        {
+          "actual": "Textured PEI Plate",
+          "expected": "Textured PEI Plate",
+          "name": "machine.bed_type",
+          "passed": true
+        },
+        {
+          "actual": 55.0,
+          "expected": 55.0,
+          "name": "machine.bed_temperature_c",
+          "passed": true
+        },
+        {
+          "actual": 220.0,
+          "expected": 220.0,
+          "name": "machine.nozzle_temperature_c",
+          "passed": true
+        },
+        {
+          "actual": [
+            "Bambu PLA Basic @BBL P2S"
+          ],
+          "expected": [
+            "Bambu PLA Basic @BBL P2S"
+          ],
+          "name": "filament.settings_id",
+          "passed": true
+        },
+        {
+          "actual": "Bambu Lab",
+          "expected": "Bambu Lab",
+          "name": "filament.vendor",
+          "passed": true
+        },
+        {
+          "actual": "PLA",
+          "expected": "PLA",
+          "name": "filament.type",
+          "passed": true
+        },
+        {
+          "actual": 1.26,
+          "expected": 1.26,
+          "name": "filament.density_g_cm3",
+          "passed": true
+        },
+        {
+          "actual": 1.75,
+          "expected": 1.75,
+          "name": "filament.diameter_mm",
+          "passed": true
+        },
+        {
+          "actual": 0.98,
+          "expected": 0.98,
+          "name": "filament.flow_ratio",
+          "passed": true
+        },
+        {
+          "actual": false,
+          "expected": false,
+          "name": "slice.out_of_bed",
+          "passed": true
+        },
+        {
+          "actual": false,
+          "expected": false,
+          "name": "slice.empty_layer_warning",
+          "passed": true
+        },
+        {
+          "actual": false,
+          "expected": false,
+          "name": "slice.floating_region_warning",
+          "passed": true
+        }
+      ],
+      "parameter_checks_passed": true,
+      "policy_id": "bambu-p2s-official-release-v1",
+      "printer_profile_id": "bambu-p2s-0.4",
+      "release_gate_passed": true,
+      "required": true,
+      "required_validator": "BambuStudio",
+      "slice_checks_passed": true
+    },
+    "metrics": {
+      "empty_layer_warning": false,
+      "estimated_time_seconds": 23758,
+      "estimated_time_text": "6h 35m 58s",
+      "filament_used_cm3": 195.12471,
+      "filament_used_g": 245.86,
+      "filament_used_mm": 81123.43,
+      "floating_region_warning": false,
+      "layer_count": 240,
+      "out_of_bed": false,
+      "settings": {
+        "bed_temperature_c": 55.0,
+        "bed_type": "Textured PEI Plate",
+        "bottom_shell_layers": 3,
+        "brim_type": "auto_brim",
+        "brim_width_mm": 5.0,
+        "filament_density_g_cm3": 1.26,
+        "filament_diameter_mm": 1.75,
+        "filament_flow_ratio": 0.98,
+        "filament_max_volumetric_speed_mm3_s": 21.0,
+        "filament_settings_ids": [
+          "Bambu PLA Basic @BBL P2S"
+        ],
+        "filament_type": "PLA",
+        "filament_vendor": "Bambu Lab",
+        "initial_layer_height_mm": 0.2,
+        "layer_height_mm": 0.2,
+        "nozzle_diameter_mm": 0.4,
+        "nozzle_temperature_c": 220.0,
+        "printable_depth_mm": 256.0,
+        "printable_height_mm": 256.0,
+        "printable_width_mm": 256.0,
+        "printer_model": "Bambu Lab P2S",
+        "printer_settings_id": "Bambu Lab P2S 0.4 nozzle",
+        "printer_variant": "0.4",
+        "process_settings_id": "0.20mm Standard @BBL P2S",
+        "sparse_infill_density_percent": 15.0,
+        "sparse_infill_pattern": "grid",
+        "support_enabled": false,
+        "support_type": "tree(auto)",
+        "top_shell_layers": 5,
+        "wall_loops": 2
+      },
+      "support_material": false,
+      "warnings": [
+        "[warning] cli mode, Current BambuStudio Version 02.07.01.62",
+        "[warning] no filament colors found in projects",
+        "[warning] Detected missing Voronoi vertex, input polygons will be rotated back and forth.",
+        "[error]   ZFiller: both point in subject : 1, 0, 87, 88",
+        "[error]   ZFiller: encounter idx from clip: 4562",
+        "[warning] tree support default to organic support",
+        "[error]   Invalid T command (T65535)."
+      ]
+    },
+    "profile": "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic",
+    "release_role": "official-p2s-release",
+    "report": "slicer_validation.json",
+    "slicer": {
+      "detail": null,
+      "executable": "/root/autodl-tmp/bambu/TopoForge/downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage",
+      "name": "BambuStudio",
+      "status": "available",
+      "version": "02.07.01.62"
+    },
+    "success": true
+  },
+  "source_acquisition": {
+    "acquisition_manifest_path": "/root/autodl-tmp/bambu/TopoForge/downloads/examples/mount-thor-glo30.tif.source_acquisition.json",
+    "aoi": {
+      "area_m2": 168999102.62332153,
+      "bounds_wgs84": [
+        -65.4665538596351,
+        66.47974157953497,
+        -65.1740655403649,
+        66.5963175830641
+      ],
+      "crosses_antimeridian": false,
+      "kind": "center-radius",
+      "normalization_method": "geodesic 5-degree bearing envelope normalized to explicit WGS84 pixel-crop bounds",
+      "normalized_geometry_geojson": {
+        "coordinates": [
+          [
+            [
+              -65.1740655403649,
+              66.47974157953497
+            ],
+            [
+              -65.1740655403649,
+              66.5963175830641
+            ],
+            [
+              -65.4665538596351,
+              66.5963175830641
+            ],
+            [
+              -65.4665538596351,
+              66.47974157953497
+            ],
+            [
+              -65.1740655403649,
+              66.47974157953497
+            ]
+          ]
+        ],
+        "type": "Polygon"
+      },
+      "target_local_crs": "EPSG:32620",
+      "user_input": {
+        "center_wgs84": [
+          -65.3203097,
+          66.5380298
+        ],
+        "radius_m": 6500.0
+      }
+    },
+    "catalog_downloads": [
+      {
+        "attempts": [],
+        "bytes": 1110900,
+        "cache_lookup_reason": "request index and content SHA-256 verified",
+        "cache_status": "hit",
+        "etag": "\"637fe75ddf7615ba853dd83caf05cd82\"",
+        "fetched_at": "2026-07-31T02:36:02.496919+00:00",
+        "last_modified": "Mon, 09 May 2022 18:23:01 GMT",
+        "media_type": "text/plain",
+        "request_key": "c3e950848692918b435c4b8750a94e5ba271be7ed2e63d4826a2d15c9c3b949c",
+        "sha256": "10604e3052c98a09e9216f1a8f0a555a04148419757575f783d4937fd44316dc",
+        "url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/tileList.txt"
+      }
+    ],
+    "coverage_crop": {
+      "discarded_reprojection_gap_cells": 0,
+      "method": "largest all-source-footprint rectangle; source NoData remains masked and is not filled by provider acquisition",
+      "original_grid_shape": [
+        450,
+        450
+      ],
+      "pixel_window": {
+        "column_start": 0,
+        "column_stop": 450,
+        "row_start": 0,
+        "row_stop": 450
+      },
+      "selected_grid_shape": [
+        450,
+        450
+      ]
+    },
+    "dataset": {
+      "acquisition_period": "TanDEM-X primarily 2011-2015; Copernicus DEM 2021 release",
+      "attribution": "© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved.",
+      "checksums": {
+        "Copernicus_DSM_COG_10_N66_00_W066_00_DEM": "6418e945ca4181b599c0db8f6e346f413835ec69b034bd7e1b587eeb2ea01e12"
+      },
+      "dataset_name": "Copernicus DEM GLO-30 AWS 2021",
+      "dataset_type": "dsm",
+      "dataset_version": "AWS mirror 2021",
+      "download_time": "2026-07-31T03:07:55.077380+00:00",
+      "horizontal_crs": "EPSG:4326 source COGs; normalized AOI raster uses its recorded metric CRS",
+      "horizontal_resolution_m": 30.0,
+      "license": "Copernicus-DEM-GLO-30-F",
+      "provider": "copernicus-aws",
+      "source_urls": [
+        "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N66_00_W066_00_DEM/Copernicus_DSM_COG_10_N66_00_W066_00_DEM.tif"
+      ],
+      "vertical_crs": "EPSG:3855",
+      "vertical_datum": "EGM2008"
+    },
+    "generated_at": "2026-07-31T03:07:55.077380+00:00",
+    "liability_notice": "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30.",
+    "license_url": "https://dataspace.copernicus.eu/sites/default/files/media/files/2025-06/copernicus_contributing_mission_data_access_v2_cop_dem_licenses.pdf",
+    "output_raster_sha256": "6c85376e74a5df5997d1cb4caf7d76727c7b83c79f1c553be7bfceab1601415e",
+    "output_source_nodata_pixels": 0,
+    "plan": {
+      "dataset_id": "copernicus-dem-glo-30-aws-2021",
+      "decisions": [
+        "normalized AOI requires 1 one-degree source cell(s)",
+        "glo-30 authoritative tileList.txt covers every required cell",
+        "selected one dataset id copernicus-dem-glo-30-aws-2021; GLO-30/GLO-90 are not blended"
+      ],
+      "horizontal_resolution_m": 30.0,
+      "missing_glo30_tiles": [],
+      "product": "glo-30",
+      "tiles": [
+        {
+          "latitude_degree": 66,
+          "longitude_degree": -66,
+          "product": "glo-30",
+          "tile_id": "Copernicus_DSM_COG_10_N66_00_W066_00_DEM",
+          "url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N66_00_W066_00_DEM/Copernicus_DSM_COG_10_N66_00_W066_00_DEM.tif"
+        }
+      ]
+    },
+    "provider_id": "copernicus-aws",
+    "raster_path": "/root/autodl-tmp/bambu/TopoForge/downloads/examples/mount-thor-glo30.tif",
+    "tile_downloads": [
+      {
+        "attempts": [
+          {
+            "attempt": 1,
+            "error": null,
+            "retry_delay_seconds": 0.0,
+            "status": "succeeded",
+            "status_code": 200
+          }
+        ],
+        "bytes": 20633573,
+        "cache_lookup_reason": "request index is absent",
+        "cache_status": "miss",
+        "etag": "\"c342b2a8e45c22e37dd8be1626c7a0aa\"",
+        "fetched_at": "2026-07-31T03:07:54.782193+00:00",
+        "last_modified": "Mon, 09 May 2022 14:43:35 GMT",
+        "media_type": "image/tiff",
+        "request_key": "2dc35307aa2fa05504237db03a7212a6dadf1d31defcfcdb50c8b4ce67146ae9",
+        "sha256": "6418e945ca4181b599c0db8f6e346f413835ec69b034bd7e1b587eeb2ea01e12",
+        "url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N66_00_W066_00_DEM/Copernicus_DSM_COG_10_N66_00_W066_00_DEM.tif"
+      }
+    ]
+  },
+  "source_file_checksums": {
+    "Copernicus_DSM_COG_10_N66_00_W066_00_DEM": "6418e945ca4181b599c0db8f6e346f413835ec69b034bd7e1b587eeb2ea01e12"
+  },
+  "source_grid_shape": [
+    450,
+    450
+  ],
+  "source_horizontal_resolution_m": 29.933828957089247,
+  "terrain_fidelity_status": "source-resolution-preserved",
+  "topoforge_version": "0.1.0"
+}

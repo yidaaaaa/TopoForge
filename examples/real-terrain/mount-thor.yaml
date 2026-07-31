@@ -1,0 +1,47 @@
+dem_path: downloads/examples/mount-thor-glo30.tif
+output_dir: outputs/mount-thor-example
+model_width_mm: 180.0
+model_depth_mm: null
+base_thickness_mm: 3.0
+terrain_mode: best-available
+dataset_type: dsm
+dataset_name: Copernicus DEM GLO-30 2021 — Mount Thor
+dataset_version: AWS mirror 2021
+acquisition_period: TanDEM-X primarily 2011-2015; Copernicus DEM 2021 release
+source_provider: copernicus-aws
+source_download_time: "2026-07-31T03:07:55.077380+00:00"
+source_urls:
+  - https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N66_00_W066_00_DEM/Copernicus_DSM_COG_10_N66_00_W066_00_DEM.tif
+source_checksums:
+  Copernicus_DSM_COG_10_N66_00_W066_00_DEM: 6418e945ca4181b599c0db8f6e346f413835ec69b034bd7e1b587eeb2ea01e12
+source_acquisition_manifest: downloads/examples/mount-thor-glo30.tif.source_acquisition.json
+vertical_crs: EPSG:3855
+vertical_datum: EGM2008
+data_license: Copernicus-DEM-GLO-30-F
+attribution: >-
+  © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018
+  provided under COPERNICUS by the European Union and ESA; all rights reserved.
+vertical_scale_mode: fit-height
+vertical_exaggeration: 1.0
+max_height_mm: 48.0
+min_vertical_exaggeration: 0.1
+max_vertical_exaggeration: 50.0
+robust_low_percentile: 0.5
+robust_high_percentile: 99.5
+baseline_mode: minimum
+nodata_max_fraction: 0.01
+nodata_max_hole_pixels: 64
+sampling_mode: source-preserving
+mesh_sampling_mm: null
+max_grid_cells: 500000
+max_estimated_memory_mb: 768.0
+printer_profile:
+  profile_id: bambu-p2s-0.4
+  build_volume_mm: [256.0, 256.0, 256.0]
+  nozzle_diameter_mm: 0.4
+  layer_height_mm: 0.2
+  minimum_feature_mm: 0.5
+  preferred_mesh_sampling_mm: 0.5
+  minimum_base_thickness_mm: 2.0
+  connector_tolerance_mm: 0.2
+output_formats: [stl, 3mf, glb]

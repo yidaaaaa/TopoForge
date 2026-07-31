@@ -10,3 +10,28 @@ quality_sampling_mm:
   draft: 0.80
   standard: 0.50
   high: 0.35
+default_for_builds: true
+release_validation:
+  policy_id: bambu-p2s-official-release-v1
+  required_validator: BambuStudio
+  machine_preset: Bambu Lab P2S 0.4 nozzle
+  process_preset: 0.20mm Standard @BBL P2S
+  filament_preset: Bambu PLA Basic @BBL P2S
+  bed_type: Textured PEI Plate
+  normative_check: true
+  resolved_parameter_assertions:
+    printable_area_mm: [256.0, 256.0]
+    printable_height_mm: 256.0
+    nozzle_diameter_mm: 0.4
+    layer_height_mm: 0.2
+    initial_layer_height_mm: 0.2
+    wall_loops: 2
+    top_shell_layers: 5
+    bottom_shell_layers: 3
+    sparse_infill_density_percent: 15.0
+    sparse_infill_pattern: grid
+    support_enabled: false
+    brim_type: auto_brim
+    brim_width_mm: 5.0
+    nozzle_temperature_c: 220.0
+    bed_temperature_c: 55.0

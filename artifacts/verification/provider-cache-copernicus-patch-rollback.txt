@@ -1,0 +1,13 @@
+patch=/root/autodl-tmp/bambu/TopoForge/artifacts/patches/provider-cache-copernicus.patch
+patch_sha256=e65ac5e7feb8a946ae024c462306c226bab2ae63c1bf58c5daaff86e20859769
+patch_bytes=114797
+forward_check_command=git apply --check /root/autodl-tmp/bambu/TopoForge/artifacts/patches/provider-cache-copernicus.patch
+forward_check_exit=0
+forward_apply_command=git apply --whitespace=error-all /root/autodl-tmp/bambu/TopoForge/artifacts/patches/provider-cache-copernicus.patch
+forward_apply_exit=0
+forward_regular_file_manifest_match=true
+rollback_command=bash /tmp/topoforge-provider-cache-patch-replay/scripts/rollback-provider-cache-copernicus.sh --confirm-rollback --patch /root/autodl-tmp/bambu/TopoForge/artifacts/patches/provider-cache-copernicus.patch
+provider/cache/Copernicus source patch reversed
+rollback_exit=0
+rollback_regular_file_manifest_match=true
+note=Compared regular-file path, Git executable bit, and SHA-256; generated data/cache were not removed during source rollback verification.

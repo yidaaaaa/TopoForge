@@ -42,6 +42,7 @@
 
 ## ADR-006 — Slicer adapter preference and truth boundary
 
+- **Status:** Superseded for the default production release by ADR-009; retained for diagnostic fallback.
 - **Date:** 2026-07-31
 - **Context:** Slicer availability and CLI flags differ by release/host.
 - **Decision:** Prefer a working OrcaSlicer adapter and fall back to PrusaSlicer. Execute argument arrays without a shell, publish G-code atomically, parse the G-code itself, and embed literal version/command/output/exit/metrics into the build.
@@ -63,3 +64,55 @@
 - **Decision:** Reproject a separate source-coverage mask, crop to its largest all-covered rectangle, then apply the normal source-NoData policy inside that crop.
 - **Alternatives:** Interpolate corners; reject every rotated raster; zero-fill outside coverage.
 - **Impact:** Rectangular Phase 1 models stay evidence-backed without confusing geometric reprojection gaps with source observations.
+
+## ADR-009 — Official Bambu Studio and dual 3MF roles define the default P2S release boundary
+
+- **Date:** 2026-07-31
+- **Context:** The default printer must be Bambu Lab P2S 0.4. Official leaf preset JSON files can return success while omitting inherited/include fragments and falling back to a generic 200 x 200 mm platform. Bambu project 3MF files also contain vendor parts outside the Core-only lib3mf source contract.
+- **Decision:** Default builds to bambu-p2s-0.4. Flatten official machine/process/filament presets in parent/include/child order, run official Bambu Studio with normative checks, assert resolved machine and print parameters from generated G-code, export a separate model.bambu-p2s.3mf, then reopen that project without external profiles and slice it again. Keep interoperable model.3mf unchanged as the strict lib3mf geometry source. OrcaSlicer and PrusaSlicer remain diagnostic.
+- **Alternatives:** Keep generic FDM as default; trust leaf preset names or exit code alone; use OrcaSlicer/PrusaSlicer as release evidence; replace the Core 3MF with the Bambu project.
+- **Impact:** P2S releases have reproducible official-tool and parameter evidence, while portability and strict Core 3MF validation remain intact. Builds store two intentional 3MF artifacts and a larger Bambu validation record.
+
+## ADR-010 — Printer-aware sampling is explicit and resource-bounded
+
+- **Date:** 2026-07-31
+- **Context:** A fixed cell budget reduced a nominal ~30 m DSM to ~89 m without enough explanation, while unconditional source preservation can create meshes finer than the printer can reproduce.
+- **Decision:** Provide `print-aware`, `source-preserving`, and `custom` modes. Resolve print-aware spacing from preferred mesh sampling, nozzle diameter, minimum feature size, source/model scale, max cells, exact triangle count, and estimated memory. Never upsample beyond source data.
+- **Impact:** The real reference resolves to 0.40018 mm physical spacing and 68.9589 m processed resolution. Source and processed claims are separate, resource limits are deterministic, and source-preserving limitations emit explicit warnings.
+
+## ADR-011 — Manufacturing axes are +X East, +Y North, +Z Up
+
+- **Date:** 2026-07-31
+- **Context:** North-up raster row 0 previously mapped to y=0, making +Y point south in viewers.
+- **Decision:** Flip the processed heightfield once before mesh construction. Record the transform/source bounds in provenance and 3MF metadata; verify asymmetric corners and peak coordinates after STL, GLB, and 3MF serialization.
+- **Impact:** North is the maximum-y edge without east/west mirroring, winding reversal, negative volume, or terrain alteration.
+
+## ADR-012 — AOIs normalize in WGS84 before source-pixel clipping
+
+- **Date:** 2026-07-31
+- **Context:** Provider and local builds need one explicit bbox/center-radius contract, including dateline, high-latitude, cross-zone, partial-overlap, and empty-result behavior.
+- **Decision:** Normalize user input to recorded WGS84 bounds/geometry. Use UTM only for a single mid-latitude zone and local AEQD otherwise. Clip local rasters to an explicit pixel window before metric reprojection; record full/partial coverage and reject empty/NoData-only results.
+- **Impact:** Local AOI behavior is complete and testable. Global providers must consume this contract rather than implementing a parallel download-first AOI path.
+
+
+## ADR-013 — Provider bytes are content-addressed and network requests are bounded
+
+- **Date:** 2026-07-31
+- **Context:** A no-key provider needs reproducible source identities, corruption detection, operational limits, and offline tests before global downloads enter the manufacturing engine.
+- **Decision:** Index canonical provider/dataset/version/URL requests separately from immutable SHA-256 objects; atomically publish and reopen both. Enforce timeout, bounded attempts, exponential backoff, minimum request spacing, and byte limits. Preserve ETag, Last-Modified, byte count, attempts, cache state, and content hash.
+- **Impact:** Cache hits are verified rather than trusted by filename, corrupt content is refetched, duplicate content is deduplicated, and network behavior has testable upper bounds.
+
+## ADR-014 — Copernicus AWS plans one complete product through normalized AOIs
+
+- **Date:** 2026-07-31
+- **Context:** Filename formulas do not establish coverage, partial GLO-30/GLO-90 blending obscures dataset identity, and projected AOI rectangles can contain cells outside source footprints.
+- **Decision:** Treat `tileList.txt` as coverage authority; use GLO-30 only when every required one-degree cell exists, otherwise use complete GLO-90 or report incomplete coverage. Reproject source-footprint masks independently, crop only reprojection gaps, preserve source NoData, and enter the resulting metric raster plus `source_acquisition.json` through the local build engine.
+- **Impact:** `build-global` shares local AOI/sampling/orientation/validation behavior, source product identity remains explicit, and the real Amazon tile-edge case is documented rather than filled.
+
+
+## ADR-015 — Copernicus quality rasters remain source evidence, not elevation edits
+
+- **Date:** 2026-08-01
+- **Context:** The public Copernicus AWS tile prefixes expose EDM, FLM, HEM, and WBM rasters, but filenames alone do not prove availability and categorical/error values must not be converted into fabricated terrain.
+- **Decision:** Cache and parse the exact per-tile S3 ListObjectsV2 response. Download only listed ancillary objects through the normal content-addressed transport, require each source raster to match its DEM tile CRS/transform/shape, retain raw values, use nearest-neighbour reprojection, and crop with the exact DEM target window. Publish a composite only when every selected tile exposes the role; otherwise record `absent` or `incomplete`. Copy complete aligned rasters into build bundles as checksummed source-quality roles.
+- **Impact:** Quality/editing/filling/water/error evidence becomes reproducible and self-contained while terrain elevations and geometry remain unchanged. The final Amazon DEM/STL/3MF/GLB/PNG are byte-identical to the pre-mask bundle.

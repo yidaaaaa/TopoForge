@@ -1,0 +1,1719 @@
+diff --git a/.agent/DECISIONS.md b/.agent/DECISIONS.md
+index 28c8c4be7857e01a414fe10cdf1863b84186b18c..4fd357747e71b6125448199deae4f6b34f9cf355 100644
+--- a/.agent/DECISIONS.md
++++ b/.agent/DECISIONS.md
+@@ -42,6 +42,7 @@
+ 
+ ## ADR-006 — Slicer adapter preference and truth boundary
+ 
++- **Status:** Superseded for the default production release by ADR-009; retained for diagnostic fallback.
+ - **Date:** 2026-07-31
+ - **Context:** Slicer availability and CLI flags differ by release/host.
+ - **Decision:** Prefer a working OrcaSlicer adapter and fall back to PrusaSlicer. Execute argument arrays without a shell, publish G-code atomically, parse the G-code itself, and embed literal version/command/output/exit/metrics into the build.
+@@ -63,3 +64,11 @@
+ - **Decision:** Reproject a separate source-coverage mask, crop to its largest all-covered rectangle, then apply the normal source-NoData policy inside that crop.
+ - **Alternatives:** Interpolate corners; reject every rotated raster; zero-fill outside coverage.
+ - **Impact:** Rectangular Phase 1 models stay evidence-backed without confusing geometric reprojection gaps with source observations.
++
++## ADR-009 — Official Bambu Studio and dual 3MF roles define the default P2S release boundary
++
++- **Date:** 2026-07-31
++- **Context:** The default printer must be Bambu Lab P2S 0.4. Official leaf preset JSON files can return success while omitting inherited/include fragments and falling back to a generic 200 x 200 mm platform. Bambu project 3MF files also contain vendor parts outside the Core-only lib3mf source contract.
++- **Decision:** Default builds to bambu-p2s-0.4. Flatten official machine/process/filament presets in parent/include/child order, run official Bambu Studio with normative checks, assert resolved machine and print parameters from generated G-code, export a separate model.bambu-p2s.3mf, then reopen that project without external profiles and slice it again. Keep interoperable model.3mf unchanged as the strict lib3mf geometry source. OrcaSlicer and PrusaSlicer remain diagnostic.
++- **Alternatives:** Keep generic FDM as default; trust leaf preset names or exit code alone; use OrcaSlicer/PrusaSlicer as release evidence; replace the Core 3MF with the Bambu project.
++- **Impact:** P2S releases have reproducible official-tool and parameter evidence, while portability and strict Core 3MF validation remain intact. Builds store two intentional 3MF artifacts and a larger Bambu validation record.
+diff --git a/.agent/ISSUES.md b/.agent/ISSUES.md
+index 18daa294cc694f11742109df4b93581b51ad58ac..5ba6c6e400c23448db44e305ed74eaef7cc9c70a 100644
+--- a/.agent/ISSUES.md
++++ b/.agent/ISSUES.md
+@@ -56,7 +56,7 @@
+ - **Status:** Open
+ - **Reproduction:** Run the full suite with Rasterio 1.5.0 and NumPy 2.5.1.
+ - **Expected behavior:** No upstream deprecation warnings.
+-- **Actual behavior:** 33 warnings about masked-array shape assignment; 71 tests pass.
++- **Actual behavior:** 33 warnings about masked-array shape assignment; 80 tests pass.
+ - **Owner:** Primary agent
+ - **Resolution:** Track upstream compatibility or constrain NumPy after benchmark/compatibility evidence; warnings are not hidden.
+ 
+@@ -90,3 +90,33 @@
+ - **Actual behavior:** The engine processes the full raster and only crops reprojection-only rotated coverage gaps.
+ - **Owner:** Primary agent
+ - **Resolution:** Milestone 02 begins with AOI normalization and local bbox/polygon clipping before global-provider integration.
++
++## TF-010 — Bambu leaf presets silently produced a generic platform
++
++- **Severity:** High
++- **Status:** Resolved
++- **Reproduction:** Pass the official P2S leaf machine/process JSON directly to Bambu Studio CLI and inspect the resolved platform/G-code.
++- **Expected behavior:** P2S 0.4 resolves to a 256 x 256 x 256 mm machine and P2S firmware/process settings.
++- **Actual behavior:** The command returned success but unresolved inheritance/include fragments produced a generic 200 x 200 mm platform.
++- **Owner:** P2S validation workstream
++- **Resolution:** Added deterministic preset flattening and a release gate that asserts actual platform, machine, process, filament, temperatures, shells, infill, support, and brim values.
++
++## TF-011 — Bambu project 3MF is not the interoperable Core source role
++
++- **Severity:** Medium
++- **Status:** Resolved
++- **Reproduction:** Open the Bambu-exported project 3MF through the existing lib3mf Core-only inspection path.
++- **Expected behavior:** The portable geometry source remains strict-reader compatible.
++- **Actual behavior:** Bambu vendor project parts trigger Could not create OPC Part in the Core-only path.
++- **Owner:** P2S validation workstream
++- **Resolution:** Preserve model.3mf as the interoperable lib3mf source and publish model.bambu-p2s.3mf as a separate embedded-settings project artifact.
++
++## TF-012 — Prusa zero-value settings broke the shared G-code parser
++
++- **Severity:** Medium
++- **Status:** Resolved
++- **Reproduction:** Run the real PrusaSlicer integration test after adding typed resolved settings; Prusa emits filament_density = 0 and filament_max_volumetric_speed = 0 sentinels.
++- **Expected behavior:** Optional unset settings do not invalidate an otherwise successful diagnostic slice.
++- **Actual behavior:** Pydantic rejected the zero sentinels for positive optional fields.
++- **Owner:** Primary agent
++- **Resolution:** Parse non-positive values for positive optional settings as unset and add a focused regression; the real Prusa test and full 80-test suite pass.
+diff --git a/.agent/PLANS.md b/.agent/PLANS.md
+index 0facda6a6f1b1a904554b718b70a720580bf1b6d..18b0730680408843074ac3251c4e6aa5808423ab 100644
+--- a/.agent/PLANS.md
++++ b/.agent/PLANS.md
+@@ -35,6 +35,17 @@ Updated: 2026-07-31
+ - [x] Reproducibility, property, unit, GIS, geometry, CLI, provider-registry, integration, and slicer tests.
+ - [x] Final gates: uv sync, Ruff check/format, Pyright, 71-test suite.
+ 
++## Completed cross-cutting P2S release hardening
++
++- [x] Make bambu-p2s-0.4 the default build profile while retaining an explicit generic FDM profile.
++- [x] Make official Bambu Studio the production slice validator; keep OrcaSlicer/PrusaSlicer diagnostic-only.
++- [x] Flatten official P2S machine/process/filament inheritance and include fragments.
++- [x] Hard-check the 256 mm platform, nozzle, preset IDs, layer/shell/infill/support/brim/temperature settings, and slice warnings.
++- [x] Preserve dual 3MF roles: interoperable lib3mf source plus Bambu project with embedded settings.
++- [x] Reopen the Bambu project without external profiles and complete a second normative slice.
++- [x] Publish the real Copernicus GLO-30 Gongga P2S reference bundle and verification record.
++- [x] Add unit, CLI, adapter, parser, and manufacturing-gate regressions; final suite is 80 passed.
++
+ ## Current milestone: Milestone 02 AOI and no-key global terrain
+ 
+ Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> windowed COG fetch -> provider selection/fallback -> real Gongga/Amazon builds -> provenance and slicer evidence.
+@@ -48,9 +59,9 @@ Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> wi
+ - [ ] Implement configurable `copernicus-aws` GLO-30/GLO-90 COG provider.
+ - [ ] Preserve Copernicus quality/editing masks when assets expose them.
+ - [ ] Implement explainable auto-selection and recorded fallback attempts.
+-- [ ] Execute a real Gongga build from fetched DSM data.
++- [x] Execute a real Gongga build from fetched DSM data (reference bundle complete; integrated provider automation remains pending).
+ - [ ] Execute a real Amazon low-relief build with DSM semantics visible.
+-- [ ] Slice at least one global-provider 3MF and publish milestone-02 evidence.
++- [x] Slice at least one global-provider 3MF and publish milestone-02 evidence (official Bambu Studio P2S bundle).
+ 
+ ## Milestone 02 acceptance
+ 
+@@ -65,3 +76,5 @@ Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> wi
+ - The initial hand-written Core-only 3MF writer was replaced by official `lib3mf==2.5.0`; deterministic UUID and strict-reader tests cover the production path.
+ - OrcaSlicer 2.4.2 on this Ubuntu 22.04 host was replaced operationally by OrcaSlicer 2.3.0/PrusaSlicer fallback after verified GLIBC/GLIBCXX incompatibility. The adapter still prefers a working Orca installation.
+ - The ambiguous `copernicus` provider descriptor was split into the no-key `copernicus-aws` route and authenticated `copernicus-cdse` route.
++- Direct loading of Bambu leaf preset JSON was replaced by deterministic inherits/include flattening after official Bambu Studio silently fell back to a generic 200 x 200 mm platform.
++- Replacing the interoperable Core model.3mf with a Bambu vendor project was rejected; both 3MF roles are preserved because lib3mf does not reopen the vendor project parts as the Core source package.
+diff --git a/.agent/RUN_LOG.md b/.agent/RUN_LOG.md
+index c1c5ea8a37b38495465afe6fef658b2e1d03e02f..d6f03b49165416c2a554967e610d556faaf63553 100644
+--- a/.agent/RUN_LOG.md
++++ b/.agent/RUN_LOG.md
+@@ -95,3 +95,31 @@ Result: exit 0; patch SHA-256 `a7e9be54c80ab7d9d9b6feb139f63af7b41c44ceca7db5a1f
+ Command: run `scripts/rollback-milestone-01.sh --confirm-rollback` in `/tmp/topoforge-milestone01-rollback.tk9j5e` checked out at the source commit.
+ 
+ Result: exit 0; HEAD `10112b0a827bd27db6054d3ecf01a47d62b4aed5`, working tree clean.
++
++### Default P2S and official Bambu Studio release hardening
++
++Command: resolve official Bambu Lab P2S 0.4 machine, 0.20mm Standard process, and Bambu PLA Basic presets by recursively flattening inherits/include fragments.
++
++Result: official Bambu Studio leaf presets alone were shown to fall back to a generic 200 x 200 mm platform. The flattened profiles resolve 113 machine, 197 process, and 140 filament keys and hard-check a 256 x 256 x 256 mm P2S platform.
++
++Command: official Bambu Studio 02.07.01.62 normative export/slice of outputs/gongga-copernicus-glo30/model.3mf, followed by reopening outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf without external profiles and slicing again.
++
++Result: both invocations exited 0 with return_code 0, error_string Success, and empty warning_message. The Bambu project SHA-256 is 898610a7b3094ed51d5ff9bb8e1f5701eee93ecd666c1e1d9e0cf61556f8d27d; the independent G-code SHA-256 is 27b43eb59965ae93c0f0867ca3c63b38d19fc13f97a5aeba3486366b8a19654d. Reopened model dimensions are 180 x 175.359 x 45 mm with 477,396 triangles, 24,550.9707 s estimate, and 211.008 g filament. Embedded settings and G-code MD5 checks pass.
++
++Command: uv run ruff format . && uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest
++
++Result: 85 files unchanged by formatting, Ruff passed, Pyright reported 0 errors/0 warnings, and Pytest reported 80 passed with 33 tracked upstream warnings.
++
++Regression: the first full run reported 78 passed and one failure because PrusaSlicer 2.4.0 writes zero sentinels for optional filament density and maximum volumetric speed.
++
++Resolution: non-positive values for positive optional G-code settings now parse as unset. Focused real-Prusa/parser tests report 5 passed; the full suite reports 80 passed.
++
++### P2S source patch replay and rollback
++
++Command: create a detached worktree at HEAD a9f5f5d; run git apply --check, git apply --whitespace=error-all, git diff --check, Ruff check/format, Pyright with the project Python, and the full Pytest suite against the patched worktree.
++
++Result: forward check/apply exited 0; Ruff passed; Pyright reported 0 errors/0 warnings; Pytest reported 80 passed and 33 tracked warnings.
++
++Command: bash scripts/rollback-p2s-bambu-validation.sh --confirm-rollback --patch /root/autodl-tmp/bambu/TopoForge/artifacts/patches/p2s-bambu-validation.patch
++
++Result: exit 0; reverse check/apply passed, HEAD remained a9f5f5d, and git status --porcelain was empty.
+diff --git a/.agent/STATE.md b/.agent/STATE.md
+index f43e919d647b1c7ee96f14f912491d93e74fadaf..ed63eca34d3615ac55260edb94d45c138a1d6125 100644
+--- a/.agent/STATE.md
++++ b/.agent/STATE.md
+@@ -1,12 +1,12 @@
+ # Current State
+ 
+ - **Current milestone:** Milestone 02 — AOI normalization/local clipping followed by the no-key global provider.
+-- **Current branch/worktree:** `main`, `/root/autodl-tmp/bambu/TopoForge`.
+-- **Last completed task:** Committed Milestone 01, replayed its binary-safe patch from the empty baseline with tests/build/slice, and executed rollback to a clean baseline in a second worktree.
+-- **Current implementation status:** Full-raster local GeoTIFF/synthetic builds emit and reopen STL, 3MF, GLB, processed DEM, original NoData mask, provenance, validation JSON/HTML, resolved YAML, checksum-verified manifest, and PNG. Explicit local AOI cropping, network provider fetching, and geocoding remain next.
+-- **Known failing tests:** None. Latest full suite: 71 passed.
+-- **Current blockers:** No blocking external dependency. OrcaSlicer 2.4.2 targets a newer system runtime; verified OrcaSlicer 2.3.0 and PrusaSlicer 2.4.0 paths are available.
+-- **Known warnings:** 33 upstream Rasterio/NumPy masked-array deprecation warnings under NumPy 2.5.1; behavior tests pass.
++- **Current branch/worktree:** main, /root/autodl-tmp/bambu/TopoForge; P2S release-hardening changes are present in the working tree.
++- **Last completed task:** Made Bambu Lab P2S 0.4 the default target and produced a real Copernicus GLO-30 Gongga reference package that passed official Bambu Studio 02.07.01.62 export/slice plus profile-free project reopen/reslice.
++- **Current implementation status:** Full-raster local builds remain complete. The default printer is now bambu-p2s-0.4; official Bambu Studio is the P2S production release boundary, resolved P2S parameters are hard-checked and recorded, and bundles retain separate interoperable model.3mf and embedded-settings model.bambu-p2s.3mf roles. Explicit local AOI cropping, provider fetching, and geocoding remain next.
++- **Known failing tests:** None. Latest full suite: 80 passed.
++- **Current blockers:** None.
++- **Known warnings:** 33 upstream Rasterio/NumPy masked-array deprecation warnings. The Gongga Bambu logs also retain nonfatal internal ZFiller/T65535/display diagnostics, while structured results are Success, warning messages are empty, embedded G-code MD5 passes, and independent reopen/reslice succeeds.
+ - **Next exact action:** Implement normalized bbox/center AOIs and explicit local raster clipping before connecting the configurable Copernicus AWS GLO-30/GLO-90 provider.
+-- **Next exact command:** `uv run topoforge providers && uv run pytest tests/providers tests/integration -q`
+-- **Important paths:** `src/topoforge/engine/build.py`, `src/topoforge/raster/processing.py`, `src/topoforge/scaling/policy.py`, `src/topoforge/exporters/three_mf.py`, `src/topoforge/validation/slicers/`, `docs/data-sources.md`, `outputs/milestone-01-synthetic/`, `artifacts/reports/milestone-01.md`.
++- **Next exact command:** uv run topoforge providers && uv run pytest tests/providers tests/integration -q
++- **Important paths:** src/topoforge/validation/slicers/bambu.py, src/topoforge/validation/manufacturing.py, scripts/resolve_bambu_profiles.py, printer_profiles/bambu-p2s-0.4.yaml, outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf, outputs/gongga-copernicus-glo30-bambu-p2s/bambu_studio_validation.json, artifacts/slicer/gongga-copernicus-glo30-bambu-p2s.gcode.
+diff --git a/AGENTS.md b/AGENTS.md
+index e83739e37aff98a709706faafc293096f260a70c..8a9bfb40dc138c38fdd694c801d219730f4d0d52 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -27,6 +27,7 @@ The current milestone is the local GeoTIFF/synthetic Phase 1 pipeline. Global pr
+ - Run `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, and `uv run pytest` before a milestone commit.
+ - Geometry claims require measured assertions: watertightness, winding, volume, flat bottom, dimensions, degeneracy, duplicates, and connected components.
+ - Online tests are opt-in integration tests; default tests must work offline.
++- The default manufacturing target is Bambu Lab P2S with a 0.4 mm nozzle. Production P2S 3MF evidence requires official Bambu Studio normative slicing, resolved official preset hashes, hard parameter assertions, and project reopen/reslice verification.
+ 
+ ## Data and license rules
+ 
+@@ -42,6 +43,7 @@ The current milestone is the local GeoTIFF/synthetic Phase 1 pipeline. Global pr
+ - No angle-space mesh construction in EPSG:4326.
+ - No silent CRS, datum, unit, NoData, or provider fallback.
+ - No unverified printable/manifold/slicer claims.
++- No P2S production release based only on a slicer exit code, preset filename, OrcaSlicer, or PrusaSlicer; the official Bambu Studio parameter gate must pass.
+ - No large DEM, mesh, cache, download, or G-code files in Git.
+ - No duplicated core algorithms in CLI/API/Web.
+ 
+@@ -61,4 +63,4 @@ The current milestone is the local GeoTIFF/synthetic Phase 1 pipeline. Global pr
+ 
+ ## Definition of Done
+ 
+-A milestone is done only when source, tests, generated artifacts, validation reports, preview, and (where required) actual slicer output exist; all required quality commands pass; state documents match the repository; generated outputs are ignored; a milestone report exists; and the milestone is committed with a reversible diff.
++A milestone is done only when source, tests, generated artifacts, validation reports, preview, and (where required) actual slicer output exist; all required quality commands pass; state documents match the repository; generated outputs are ignored; a milestone report exists; and the milestone is committed with a reversible diff. For the default P2S target, completion also requires separate interoperable and Bambu-project 3MF roles plus official reopen/reslice evidence.
+diff --git a/README.md b/README.md
+index 956a9de8fa17716d19661f684baf3eed2dc2e8e2..d7a3c50f82d138a0fbc233738e43a9167778e795 100644
+--- a/README.md
++++ b/README.md
+@@ -19,13 +19,32 @@ The repository's executed synthetic Gaussian-mountain build produced:
+ | Degenerate / duplicate faces | `0 / 0` |
+ | Bottom planarity error | `0.0 mm` |
+ | 3MF writer / strict reread | `lib3mf 2.5.0 / 0 warnings` |
+-| Actual slicer | `PrusaSlicer 2.4.0`, exit `0` |
++| Historical diagnostic slicer | `PrusaSlicer 2.4.0`, exit `0` |
+ | Slice result | `140` layers, `5,030,602` bytes G-code |
+ | Estimated print time | `7h 11m 41s` |
+ | Filament | `40,552.39 mm` / `97.54 cm3` |
+ 
+ The committed evidence copies are under `artifacts/reports/`; manufacturing files and G-code remain ignored under `outputs/` and `artifacts/slicer/`.
+ 
++## Verified Gongga P2S example
++
++A real Copernicus DEM GLO-30 Gongga terrain example has passed official Bambu Studio `02.07.01.62` software generation, normative checking, slicing, archive/MD5 checks, and an independent reopen/reslice without external presets:
++
++| Measurement | Result |
++| --- | --- |
++| Bambu project 3MF | `outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf` |
++| 3MF SHA-256 | `27aa850ebe666c14cc061dfcba97a42d4729a0bd9a37fd0a4d1888961386a55f` |
++| Model dimensions | `180.0 x 175.359 x 45.0 mm` |
++| Machine / model ID | `Bambu Lab P2S 0.4 nozzle` / `N7` |
++| Plate / material | `Textured PEI Plate` / `Bambu PLA Basic (GFA00)` |
++| Process | `0.20 mm`, 2 walls, 15% grid, 5/3 top/bottom, support off |
++| Temperatures | `220 °C` nozzle / `55 °C` bed |
++| Official slice | exit `0`, `Success.`, `224` layers, `210.99 g`, about `6h48m12s` |
++| Standalone reopen/reslice | exit `0`, `Success.`, no external settings/filaments |
++| Verification record | `outputs/gongga-copernicus-glo30-bambu-p2s/bambu_studio_validation.json` |
++
++This is a software-validated example, not a claim of a completed physical P2S print or vendor certification.
++
+ ## Install
+ 
+ ```bash
+@@ -93,15 +112,29 @@ build_manifest.json
+ preview.png
+ ```
+ 
+-## Slice the manufacturing model
++## Validate the manufacturing model for the default P2S
++
++The default release target is **Bambu Lab P2S / 0.4 mm nozzle**. Release evidence must come from official Bambu Studio with flattened official presets; OrcaSlicer and PrusaSlicer remain diagnostic tools only.
+ 
+ ```bash
+-uv run topoforge slice \
++python scripts/resolve_bambu_profiles.py \
++  --profiles-root /PATH/TO/BambuStudio/resources/profiles/BBL \
++  --output-dir outputs/p2s-profiles \
++  --machine "Bambu Lab P2S 0.4 nozzle" \
++  --process "0.20mm Standard @BBL P2S" \
++  --filament "Bambu PLA Basic @BBL P2S"
++
++TOPOFORGE_BAMBU_STUDIO=/PATH/TO/BambuStudio.AppImage uv run topoforge slice \
+   outputs/milestone-01-synthetic/model.3mf \
+-  --output artifacts/slicer/milestone-01.gcode
++  --machine-profile outputs/p2s-profiles/machine.json \
++  --process-profile outputs/p2s-profiles/process.json \
++  --filament-profile outputs/p2s-profiles/filament.json \
++  --output artifacts/slicer/milestone-01-p2s.gcode
+ ```
+ 
+-Discovery prefers OrcaSlicer and falls back to PrusaSlicer. A successful slice is attached to `validation.json`, `provenance.json`, `build_manifest.json`, and `slicer_validation.json` in the build bundle.
++The release gate hard-checks the resolved `256 x 256 x 256 mm` bed, P2S preset IDs, 0.4 mm nozzle, Textured PEI Plate, 0.20 mm layers, 2 walls, 15% grid infill, support off, and Bambu PLA Basic temperatures. `topoforge slice` performs the official G-code and parameter gate. Creating the self-contained Bambu project also requires Bambu Studio's `--export-3mf`; the exact executed export and standalone reopen commands are preserved as `bambu_studio_build_command.txt` and `bambu_studio_reopen_command.txt` in the verified Gongga bundle.
++
++Evidence is attached to `validation.json`, `provenance.json`, `build_manifest.json`, `slicer_validation.json`, and `bambu_studio_validation.json`. The Bambu project with embedded settings and sliced plate data is stored separately as `model.bambu-p2s.3mf`; the interoperable lib3mf source remains `model.3mf`.
+ 
+ ## CLI
+ 
+@@ -110,7 +143,7 @@ topoforge build       local GeoTIFF to complete artifact bundle
+ topoforge synthetic   deterministic analytic GeoTIFF fixtures
+ topoforge inspect     raster/STL/GLB/3MF measurements
+ topoforge validate    reopened STL geometry report
+-topoforge slice       actual OrcaSlicer/PrusaSlicer invocation
++topoforge slice       official Bambu Studio P2S G-code/parameter gate; optional diagnostics
+ topoforge preview     bundle verification and preview paths
+ topoforge providers   provider semantics and implementation state
+ topoforge cache       cache status
+@@ -128,6 +161,7 @@ topoforge doctor      Python/GDAL/PROJ/slicer versions
+ - The mesh is constructed as an explicit top grid, perimeter walls, and flat bottom in millimetres.
+ - STL is reopened with coordinate welding; 3MF is strict-read with lib3mf and independently inspected as OPC/XML.
+ - Exhaustive self-intersection remains `not_fully_checked` when no robust backend is available.
++- The default release boundary is official Bambu Studio plus resolved P2S machine/process/filament parameter checks; a slicer exit code alone is insufficient.
+ 
+ ## Quality gates
+ 
+@@ -138,7 +172,7 @@ uv run pyright
+ uv run pytest
+ ```
+ 
+-The 71-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, resource downsampling, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, slicer parsers/adapters, and an actual PrusaSlicer run.
++The 80-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, resource downsampling, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run.
+ 
+ ## Documentation
+ 
+diff --git a/docs/architecture.md b/docs/architecture.md
+index 8c510be908e07e8a8a24dccfe746accd5a67ca4b..313017b4b7796a3d06e8df06df3ee2d0b8c7f994 100644
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -21,7 +21,8 @@ BuildConfig (Pydantic)
+   -> STL + lib3mf 3MF + GLB
+   -> reopened STL validation + strict lib3mf reread + OPC/XML hardening
+   -> preview.png + provenance/validation/config/manifest
+-  -> optional external slicer adapter and embedded slice evidence
++  -> official Bambu Studio P2S release gate + optional diagnostic slicers
++  -> separate interoperable model.3mf and embedded-settings model.bambu-p2s.3mf
+ ```
+ 
+ Builds use a sibling staging directory. Every required file is written and reopened before the stage is atomically renamed to the requested new output directory. A non-empty destination is preserved and rejected.
+@@ -33,7 +34,7 @@ Builds use a sibling staging directory. Every required file is written and reope
+ - `scaling`: physical horizontal scale, baseline, robust relief, vertical exaggeration.
+ - `mesh`: deterministic topology; it does not repair an incomplete solid.
+ - `exporters`: format-specific serialization only. lib3mf stable UUIDv5 values make 3MF deterministic.
+-- `validation`: measured geometry plus independent OrcaSlicer/PrusaSlicer adapters.
++- `validation`: measured geometry, official Bambu Studio/P2S release checks, and optional OrcaSlicer/PrusaSlicer diagnostics.
+ - `rendering`: hillshade/color derived only from measured elevation samples.
+ - `provenance`: stable JSON and dependency-free HTML reports.
+ - `engine`: atomic orchestration and bundle verification.
+@@ -48,7 +49,7 @@ For an `R x C` grid, TopoForge creates matching top and bottom vertex grids. Eac
+ 
+ Manufacturing claims come from the reopened STL, not only the source NumPy arrays. Checks include finite vertices/normals, watertightness, winding, edge manifoldness, positive volume, one component, degenerates, duplicates, dimensions, flat bottom, base thickness, and triangle count. Exhaustive self-intersection is explicitly `not_fully_checked` in the current backend.
+ 
+-The 3MF path adds official lib3mf strict read with zero warnings, unit/object/build/topology checks, independent XML dimensions, safe ZIP paths, supported compression, no encryption, and no external relationships. An actual slicer invocation remains a separate gate.
++The interoperable 3MF path adds official lib3mf strict read with zero warnings, unit/object/build/topology checks, independent XML dimensions, safe ZIP paths, supported compression, no encryption, and no external relationships. For the default P2S target, official Bambu Studio normative slicing and resolved-parameter assertions form a separate mandatory release gate. The Bambu project 3MF remains a second artifact because its vendor project parts are outside the Core-only lib3mf contract.
+ 
+ ## Extension sequence
+ 
+diff --git a/docs/printing.md b/docs/printing.md
+index 3899b8e022aedc0477031d47e89f62537a7318b9..913d2f503f41a317c692ee232140174d32279fa7 100644
+--- a/docs/printing.md
++++ b/docs/printing.md
+@@ -2,13 +2,53 @@
+ 
+ Manufacturing coordinates are millimetres. STL relies on this coordinate contract; 3MF explicitly stores millimetre units. The chosen elevation baseline maps to the configured base reference above a flat `z=0` bottom. Minimum-baseline builds place the lowest terrain sample exactly there; other datum modes preserve their absolute offset and must still pass the printer-profile minimum-material gate.
+ 
+-TopoForge discovers OrcaSlicer first and falls back to PrusaSlicer. The executed milestone used:
++## Default release target
+ 
+-```bash
+-uv run topoforge slice outputs/milestone-01-synthetic/model.3mf \
+-  --output artifacts/slicer/milestone-01-final.gcode
+-```
++TopoForge defaults to **Bambu Lab P2S with a 0.4 mm nozzle**. A production 3MF is release-ready only after official Bambu Studio completes normative checking and slicing with resolved official presets. OrcaSlicer and PrusaSlicer may provide independent diagnostic evidence but do not satisfy the P2S release gate.
+ 
+-PrusaSlicer 2.4.0 exited 0, generated 5,030,602 bytes, 140 layers, estimated 7h 11m 41s, and reported 40,552.39 mm / 97.54 cm3 filament with no support, out-of-bed, empty-layer, or floating-region warning. The exact result is in `artifacts/reports/milestone-01-3mf-slice.json`.
++The default verified preset set is:
+ 
+-Official OrcaSlicer 2.4.2 targets newer Ubuntu runtimes than this host. Official generic OrcaSlicer 2.3.0 and installed PrusaSlicer both completed separate real test slices; see `artifacts/reports/slicer-research.md`.
++| Role | Required value |
++| --- | --- |
++| Machine | `Bambu Lab P2S 0.4 nozzle` |
++| Build volume | `256 x 256 x 256 mm` |
++| Process | `0.20mm Standard @BBL P2S` |
++| Filament | `Bambu PLA Basic @BBL P2S` |
++| Plate | `Textured PEI Plate` |
++| Layer / first layer | `0.20 / 0.20 mm` |
++| Walls / top / bottom | `2 / 5 / 3` |
++| Sparse infill | `15% grid` |
++| Support | disabled |
++| Brim | `auto_brim`, width `5 mm` |
++| Nozzle / bed | `220 / 55 °C` |
++
++Bambu's leaf preset JSON files contain inheritance and include references. Passing the leaf files directly can report success while silently producing a `200 x 200 mm` generic bed and generic start G-code. `scripts/resolve_bambu_profiles.py` therefore flattens parent profiles and included P2S firmware templates before validation. The gate compares resolved settings and G-code comments, not preset names alone.
++
++## Verified Gongga reference
++
++The delivered reference uses real Copernicus DEM GLO-30 terrain for Mount Gongga and passed official Bambu Studio `02.07.01.62` software validation:
++
++- Project: `outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf`
++- Project SHA-256: `27aa850ebe666c14cc061dfcba97a42d4729a0bd9a37fd0a4d1888961386a55f`
++- Primary G-code SHA-256: `2b6373a306f4d82adc2bb5bde2243b9528cb4e7cb5f305a9cf0d016466e050ae`
++- Reopen G-code SHA-256: `2bf706403e4e82f299246af745e418c98d3a43ae105ca25a3e566cda4cf64d7c`
++- First result: `return_code=0`, `Success.`, `224` layers, `210.9887 g`, `24492.496 s`
++- Independent reopen: no external settings or filament files; `return_code=0`, `Success.`, empty structured warning
++- Full record: `outputs/gongga-copernicus-glo30-bambu-p2s/bambu_studio_validation.json`
++
++The 3MF ZIP test, embedded G-code MD5, embedded-versus-external G-code bytes, embedded resolved settings, P2S firmware scripts, build-volume placement, and both structured slicing results are checked. This evidence is a software validation record, not a completed physical print or vendor certification.
++
++## Artifact roles
++
++- `model.3mf`: deterministic interoperable geometry, strict-read with lib3mf.
++- `model.bambu-p2s.3mf`: Bambu Studio project with embedded P2S settings and sliced plate data.
++- `bambu_studio_validation.json`: official binary identity, commands, profile hashes, parameter assertions, slicing results, reopen/reslice evidence, and release decision.
++- `resolved_print_settings.json`: the complete settings embedded in the Bambu project.
++
++Bambu project 3MF files contain vendor project parts that lib3mf does not treat as the Core-only source package. Keep both 3MF roles rather than replacing the interoperable source.
++
++## Operational PLA note
++
++Bambu Studio may emit the official `bed_temperature_too_high_than_filament` enclosure ventilation notice for PLA on a 55 °C Textured PEI Plate. Open the door or remove the top cover during the print as directed by the machine workflow. This notice is recorded separately from structural slicing success.
++
++The Milestone 01 PrusaSlicer result remains historical diagnostic evidence. It is not P2S release certification.
+diff --git a/docs/provenance.md b/docs/provenance.md
+index 5db27ece6e1dd6824e343c1736f648fa444c44b9..0bb4ba3d66a483ff0f5d2000140c74fadea63bc9 100644
+--- a/docs/provenance.md
++++ b/docs/provenance.md
+@@ -1,5 +1,5 @@
+ # Provenance
+ 
+-Each build writes source checksums; dataset provider/name/version/type; horizontal resolution and CRS; vertical CRS/datum or `unknown`; acquisition period; license/attribution; source URLs; original NoData and interpolation percentages; projection/resampling pipeline; horizontal scale; baseline; robust elevation range; vertical exaggeration; geometry method; output format writer; validation; and slicer evidence.
++Each build writes source checksums; dataset provider/name/version/type; horizontal resolution and CRS; vertical CRS/datum or `unknown`; acquisition period; license/attribution; source URLs; original NoData and interpolation percentages; projection/resampling pipeline; horizontal scale; baseline; robust elevation range; vertical exaggeration; geometry method; output format writer; validation; and slicer evidence. For the default P2S target, provenance also records the official Bambu Studio asset/version/hash, flattened machine/process/filament preset hashes, resolved print parameters, normative-check result, G-code metrics, Bambu project 3MF hash, reopen/reslice result, and the release-gate decision.
+ 
+ `build_manifest.json` binds artifacts to SHA-256 values. `build_config.resolved.yaml` records all defaults and CLI overrides. `original_nodata_mask.tif` preserves the pre-interpolation mask. Dataset rights are not replaced by the Apache-2.0 code license.
+diff --git a/printer_profiles/bambu-p2s-0.4.yaml b/printer_profiles/bambu-p2s-0.4.yaml
+index 41be0b8fa2cfca94599447150c2ac3e6ec008cdd..fe28709dacaca00950205c7b7d125d158332529a 100644
+--- a/printer_profiles/bambu-p2s-0.4.yaml
++++ b/printer_profiles/bambu-p2s-0.4.yaml
+@@ -10,3 +10,28 @@ quality_sampling_mm:
+   draft: 0.80
+   standard: 0.50
+   high: 0.35
++default_for_builds: true
++release_validation:
++  policy_id: bambu-p2s-official-release-v1
++  required_validator: BambuStudio
++  machine_preset: Bambu Lab P2S 0.4 nozzle
++  process_preset: 0.20mm Standard @BBL P2S
++  filament_preset: Bambu PLA Basic @BBL P2S
++  bed_type: Textured PEI Plate
++  normative_check: true
++  resolved_parameter_assertions:
++    printable_area_mm: [256.0, 256.0]
++    printable_height_mm: 256.0
++    nozzle_diameter_mm: 0.4
++    layer_height_mm: 0.2
++    initial_layer_height_mm: 0.2
++    wall_loops: 2
++    top_shell_layers: 5
++    bottom_shell_layers: 3
++    sparse_infill_density_percent: 15.0
++    sparse_infill_pattern: grid
++    support_enabled: false
++    brim_type: auto_brim
++    brim_width_mm: 5.0
++    nozzle_temperature_c: 220.0
++    bed_temperature_c: 55.0
+diff --git a/scripts/resolve_bambu_profiles.py b/scripts/resolve_bambu_profiles.py
+new file mode 100755
+index 0000000000000000000000000000000000000000..dca3e9b77336c796c5e76de2f06c082246f8045b
+--- /dev/null
++++ b/scripts/resolve_bambu_profiles.py
+@@ -0,0 +1,90 @@
++#!/usr/bin/env python3
++"""Resolve Bambu Studio JSON preset inheritance/includes for CLI use."""
++
++from __future__ import annotations
++
++import argparse
++import json
++from pathlib import Path
++from typing import Any
++
++
++def load_index(profiles_root: Path) -> dict[str, tuple[str, Path, dict[str, Any]]]:
++    index: dict[str, tuple[str, Path, dict[str, Any]]] = {}
++    for kind in ("machine", "process", "filament"):
++        directory = profiles_root / kind
++        for path in sorted(directory.glob("*.json")):
++            try:
++                data = json.loads(path.read_text(encoding="utf-8"))
++            except json.JSONDecodeError:
++                continue
++            name = data.get("name")
++            if not isinstance(name, str) or not name:
++                continue
++            prior = index.get(name)
++            if prior is not None and prior[1] != path:
++                raise ValueError(f"duplicate preset name {name!r}: {prior[1]} and {path}")
++            index[name] = (kind, path, data)
++    return index
++
++
++def resolve(
++    name: str,
++    index: dict[str, tuple[str, Path, dict[str, Any]]],
++    stack: tuple[str, ...] = (),
++) -> dict[str, Any]:
++    if name in stack:
++        raise ValueError("preset dependency cycle: " + " -> ".join((*stack, name)))
++    if name not in index:
++        raise KeyError(f"preset dependency not found: {name!r}")
++    _kind, _path, node = index[name]
++    merged: dict[str, Any] = {}
++    parent = node.get("inherits")
++    if isinstance(parent, str) and parent:
++        merged.update(resolve(parent, index, (*stack, name)))
++    includes = node.get("include", [])
++    if isinstance(includes, str):
++        includes = [includes]
++    if not isinstance(includes, list):
++        raise TypeError(f"invalid include list in {name!r}: {includes!r}")
++    for include in includes:
++        if not isinstance(include, str):
++            raise TypeError(f"invalid include name in {name!r}: {include!r}")
++        merged.update(resolve(include, index, (*stack, name)))
++    merged.update(node)
++    return merged
++
++
++def emit(
++    name: str,
++    expected_kind: str,
++    out_path: Path,
++    index: dict[str, tuple[str, Path, dict[str, Any]]],
++) -> None:
++    actual_kind, _source, _node = index[name]
++    if actual_kind != expected_kind:
++        raise ValueError(f"{name!r} is {actual_kind}, expected {expected_kind}")
++    data = resolve(name, index)
++    data.pop("inherits", None)
++    data.pop("include", None)
++    out_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
++    print(f"{expected_kind}: {name} -> {out_path} ({len(data)} keys)")
++
++
++def main() -> None:
++    parser = argparse.ArgumentParser()
++    parser.add_argument("--profiles-root", required=True, type=Path)
++    parser.add_argument("--output-dir", required=True, type=Path)
++    parser.add_argument("--machine", required=True)
++    parser.add_argument("--process", required=True)
++    parser.add_argument("--filament", required=True)
++    args = parser.parse_args()
++    args.output_dir.mkdir(parents=True, exist_ok=True)
++    index = load_index(args.profiles_root)
++    emit(args.machine, "machine", args.output_dir / "machine.json", index)
++    emit(args.process, "process", args.output_dir / "process.json", index)
++    emit(args.filament, "filament", args.output_dir / "filament.json", index)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/rollback-p2s-bambu-validation.sh b/scripts/rollback-p2s-bambu-validation.sh
+new file mode 100755
+index 0000000000000000000000000000000000000000..09d0428dcfeecd61533c8bda92381eeb1b24ed77
+--- /dev/null
++++ b/scripts/rollback-p2s-bambu-validation.sh
+@@ -0,0 +1,101 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++usage() {
++  printf '%s\n' \
++    'Usage: scripts/rollback-p2s-bambu-validation.sh --confirm-rollback [--patch PATH] [--source-only]' \
++    '' \
++    'Reverses the P2S/Bambu Studio source patch and, by default, restores the preserved pre-final 3MF/G-code evidence.'
++}
++
++confirm=false
++source_only=false
++patch_path='artifacts/patches/p2s-bambu-validation.patch'
++while (($#)); do
++  case "$1" in
++    --confirm-rollback)
++      confirm=true
++      shift
++      ;;
++    --patch)
++      [[ $# -ge 2 ]] || { usage >&2; exit 2; }
++      patch_path="$2"
++      shift 2
++      ;;
++    --source-only)
++      source_only=true
++      shift
++      ;;
++    --help|-h)
++      usage
++      exit 0
++      ;;
++    *)
++      printf 'Unknown argument: %s\n' "$1" >&2
++      usage >&2
++      exit 2
++      ;;
++  esac
++done
++
++if [[ "$confirm" != true ]]; then
++  printf '%s\n' 'Rollback confirmation missing; pass --confirm-rollback.' >&2
++  exit 2
++fi
++
++repo_root="$(git rev-parse --show-toplevel)"
++cd "$repo_root"
++if [[ "$patch_path" != /* ]]; then
++  patch_path="$repo_root/$patch_path"
++fi
++[[ -s "$patch_path" ]] || { printf 'Patch not found: %s\n' "$patch_path" >&2; exit 2; }
++
++out='outputs/gongga-copernicus-glo30-bambu-p2s'
++backup="$out/.rollback-pre-final-20260731"
++primary_gcode='artifacts/slicer/gongga-copernicus-glo30-bambu-p2s.gcode'
++reopen_gcode='artifacts/slicer/gongga-copernicus-glo30-bambu-p2s-reopen.gcode'
++expected_final_3mf='27aa850ebe666c14cc061dfcba97a42d4729a0bd9a37fd0a4d1888961386a55f'
++expected_baseline_3mf='898610a7b3094ed51d5ff9bb8e1f5701eee93ecd666c1e1d9e0cf61556f8d27d'
++expected_baseline_gcode='27b43eb59965ae93c0f0867ca3c63b38d19fc13f97a5aeba3486366b8a19654d'
++
++if [[ "$source_only" != true ]]; then
++  [[ -d "$backup" ]] || { printf 'Artifact backup not found: %s\n' "$backup" >&2; exit 3; }
++  current_3mf="$(sha256sum "$out/model.bambu-p2s.3mf" | awk '{print $1}')"
++  backup_3mf="$(sha256sum "$backup/model.bambu-p2s.3mf" | awk '{print $1}')"
++  backup_gcode="$(sha256sum "$backup/gongga-copernicus-glo30-bambu-p2s.gcode" | awk '{print $1}')"
++  [[ "$current_3mf" == "$expected_final_3mf" ]] || { printf '%s\n' 'Current P2S 3MF is not the verified final artifact.' >&2; exit 4; }
++  [[ "$backup_3mf" == "$expected_baseline_3mf" ]] || { printf '%s\n' 'Preserved 3MF baseline hash mismatch.' >&2; exit 5; }
++  [[ "$backup_gcode" == "$expected_baseline_gcode" ]] || { printf '%s\n' 'Preserved G-code baseline hash mismatch.' >&2; exit 6; }
++fi
++
++printf 'Baseline HEAD: %s\n' "$(git rev-parse HEAD)"
++printf 'Patch: %s\n' "$patch_path"
++git apply --reverse --check "$patch_path"
++git apply --reverse "$patch_path"
++
++if [[ "$source_only" != true ]]; then
++  for source in "$backup"/*; do
++    [[ -f "$source" ]] || continue
++    name="$(basename "$source")"
++    if [[ "$name" == 'gongga-copernicus-glo30-bambu-p2s.gcode' ]]; then
++      cp -a "$source" "$primary_gcode"
++    else
++      cp -a "$source" "$out/$name"
++    fi
++  done
++  rm -f \
++    "$reopen_gcode" \
++    "$out/bambu_studio_build_command.txt" \
++    "$out/bambu_studio_reopen_command.txt" \
++    "$out/bambu_p2s_prepare_profiles.sh"
++  restored_3mf="$(sha256sum "$out/model.bambu-p2s.3mf" | awk '{print $1}')"
++  restored_gcode="$(sha256sum "$primary_gcode" | awk '{print $1}')"
++  [[ "$restored_3mf" == "$expected_baseline_3mf" ]]
++  [[ "$restored_gcode" == "$expected_baseline_gcode" ]]
++  printf 'restored_3mf_sha256=%s\n' "$restored_3mf"
++  printf 'restored_gcode_sha256=%s\n' "$restored_gcode"
++fi
++
++git diff --check
++printf '%s\n' 'Rollback applied successfully.'
++git status --short --branch
+diff --git a/src/topoforge/cli/app.py b/src/topoforge/cli/app.py
+index 7a6a82489f6841f517714af1c71bda4f8462059d..5f0c9736ae6db0e907daef7621e0f49cfbb8811f 100644
+--- a/src/topoforge/cli/app.py
++++ b/src/topoforge/cli/app.py
+@@ -17,7 +17,7 @@ import typer
+ from rasterio.errors import RasterioError
+ 
+ from topoforge import __version__
+-from topoforge.config import get_printer_profile, load_build_config
++from topoforge.config import DEFAULT_PRINTER_PROFILE_ID, get_printer_profile, load_build_config
+ from topoforge.engine import build_local_terrain, record_slice_validation, verify_artifact_bundle
+ from topoforge.exceptions import TopoForgeError
+ from topoforge.exporters.three_mf import inspect_3mf
+@@ -73,7 +73,13 @@ def build(
+     vertical_exaggeration: Annotated[
+         float, typer.Option("--vertical-exaggeration", min=0.01)
+     ] = 1.0,
+-    printer_profile: Annotated[str, typer.Option("--printer-profile")] = "generic-fdm-0.4",
++    printer_profile: Annotated[
++        str,
++        typer.Option(
++            "--printer-profile",
++            help="Manufacturing profile; defaults to Bambu Lab P2S with a 0.4 mm nozzle.",
++        ),
++    ] = DEFAULT_PRINTER_PROFILE_ID,
+     dataset_type: Annotated[DatasetType, typer.Option("--dataset-type")] = DatasetType.UNKNOWN,
+     dataset_name: Annotated[str | None, typer.Option("--dataset-name")] = None,
+     dataset_version: Annotated[str, typer.Option("--dataset-version")] = "unknown",
+@@ -271,7 +277,14 @@ def doctor() -> None:
+     """Report the exact local runtime and external manufacturing tools."""
+     slicers = {
+         name: shutil.which(name)
+-        for name in ("OrcaSlicer", "orca-slicer", "prusa-slicer", "PrusaSlicer")
++        for name in (
++            "BambuStudio",
++            "bambu-studio",
++            "OrcaSlicer",
++            "orca-slicer",
++            "prusa-slicer",
++            "PrusaSlicer",
++        )
+         if shutil.which(name)
+     }
+     _emit(
+@@ -306,22 +319,63 @@ def cache(
+ def slice(
+     model: Annotated[Path, typer.Argument(help="STL or 3MF model.")],
+     output: Annotated[Path, typer.Option("--output", "-o")] = Path("outputs/sliced/model.gcode"),
+-    profile: Annotated[Path | None, typer.Option("--profile")] = None,
++    profile: Annotated[
++        Path | None,
++        typer.Option("--profile", help="Legacy process/machine settings file."),
++    ] = None,
++    machine_profile: Annotated[
++        Path | None, typer.Option("--machine-profile", help="Resolved machine preset JSON.")
++    ] = None,
++    process_profile: Annotated[
++        Path | None, typer.Option("--process-profile", help="Resolved process preset JSON.")
++    ] = None,
++    filament_profile: Annotated[
++        Path | None, typer.Option("--filament-profile", help="Resolved filament preset JSON.")
++    ] = None,
++    slicer: Annotated[
++        str,
++        typer.Option(
++            "--slicer",
++            help="bambu-studio (release gate), orca, prusa, or auto (diagnostic fallback).",
++        ),
++    ] = "bambu-studio",
+ ) -> None:
+     """Invoke the installed headless slicer adapter and emit measured results."""
+     try:
+         from topoforge.validation.slicers import (
++            BambuStudioAdapter,
++            OrcaSlicerAdapter,
++            PrusaSlicerAdapter,
+             SlicerProfile,
+             SliceStatus,
+             select_slicer,
+         )
+ 
+-        slicer_profile = (
+-            SlicerProfile(name=profile.stem, settings=(profile,))
+-            if profile is not None
+-            else SlicerProfile()
++        settings = tuple(
++            path for path in (machine_profile, process_profile, profile) if path is not None
+         )
+-        result = select_slicer().slice(model, output, profile=slicer_profile)
++        filaments = () if filament_profile is None else (filament_profile,)
++        slicer_profile = SlicerProfile(
++            name=(
++                "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic"
++                if slicer == "bambu-studio"
++                else None
++            ),
++            settings=settings,
++            filaments=filaments,
++        )
++        adapters = {
++            "bambu-studio": BambuStudioAdapter,
++            "orca": OrcaSlicerAdapter,
++            "prusa": PrusaSlicerAdapter,
++        }
++        if slicer == "auto":
++            adapter = select_slicer()
++        elif slicer in adapters:
++            adapter = adapters[slicer]()
++        else:
++            raise ValueError("--slicer must be bambu-studio, orca, prusa, or auto")
++        result = adapter.slice(model, output, profile=slicer_profile)
+         serialized_result = result.model_dump(mode="json")
+         if result.status is SliceStatus.SUCCEEDED and (model.parent / "validation.json").is_file():
+             report_path = record_slice_validation(model.parent, serialized_result)
+diff --git a/src/topoforge/config/__init__.py b/src/topoforge/config/__init__.py
+index c59c287521ee8d840be5018c68b815d4cc36f3c8..3bf56a61ad2b2685c8b9a183d32e6cbb0c2764d7 100644
+--- a/src/topoforge/config/__init__.py
++++ b/src/topoforge/config/__init__.py
+@@ -1,9 +1,14 @@
+ """Configuration loading and printer profiles."""
+ 
+ from topoforge.config.loader import dump_resolved_config, load_build_config
+-from topoforge.config.profiles import get_printer_profile, list_printer_profiles
++from topoforge.config.profiles import (
++    DEFAULT_PRINTER_PROFILE_ID,
++    get_printer_profile,
++    list_printer_profiles,
++)
+ 
+ __all__ = [
++    "DEFAULT_PRINTER_PROFILE_ID",
+     "dump_resolved_config",
+     "get_printer_profile",
+     "list_printer_profiles",
+diff --git a/src/topoforge/config/profiles.py b/src/topoforge/config/profiles.py
+index d2b2b856fc3bd53a4d6fea94b43285e36c512557..3d6d1e2f61e12a28d038d015efefd351ef6ce999 100644
+--- a/src/topoforge/config/profiles.py
++++ b/src/topoforge/config/profiles.py
+@@ -2,18 +2,14 @@
+ 
+ from topoforge.models import PrinterProfile
+ 
++DEFAULT_PRINTER_PROFILE_ID = "bambu-p2s-0.4"
++
+ _PROFILES: dict[str, PrinterProfile] = {
+-    "generic-fdm-0.4": PrinterProfile(),
+-    "bambu-p2s-0.4": PrinterProfile(
+-        profile_id="bambu-p2s-0.4",
+-        build_volume_mm=(256.0, 256.0, 256.0),
+-        nozzle_diameter_mm=0.4,
+-        layer_height_mm=0.2,
+-        minimum_feature_mm=0.5,
+-        preferred_mesh_sampling_mm=0.5,
+-        minimum_base_thickness_mm=2.0,
+-        connector_tolerance_mm=0.2,
++    "generic-fdm-0.4": PrinterProfile(
++        profile_id="generic-fdm-0.4",
++        build_volume_mm=(220.0, 220.0, 250.0),
+     ),
++    "bambu-p2s-0.4": PrinterProfile(),
+     "bambu-p2s-0.2": PrinterProfile(
+         profile_id="bambu-p2s-0.2",
+         build_volume_mm=(256.0, 256.0, 256.0),
+diff --git a/src/topoforge/engine/build.py b/src/topoforge/engine/build.py
+index 858162798511c0e9a9d44b8e94d237cea85cdee6..29411cedf207b0b18bd9a3d1d489b80338e0ab03 100644
+--- a/src/topoforge/engine/build.py
++++ b/src/topoforge/engine/build.py
+@@ -28,7 +28,7 @@ from topoforge.raster import process_local_raster
+ from topoforge.rendering import render_elevation_preview
+ from topoforge.scaling import apply_vertical_scale, resolve_scaling
+ from topoforge.util import sha256_file
+-from topoforge.validation import validate_mesh
++from topoforge.validation import evaluate_bambu_p2s_release_gate, validate_mesh
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+@@ -392,9 +392,25 @@ def record_slice_validation(build_dir: Path, result: dict[str, Any]) -> Path:
+     validation = json.loads(validation_path.read_text(encoding="utf-8"))
+     provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
++    resolved_config = yaml.safe_load(
++        (build_dir / "build_config.resolved.yaml").read_text(encoding="utf-8")
++    )
++    printer_profile_id = str(resolved_config["printer_profile"]["profile_id"])
++    manufacturing_validation = evaluate_bambu_p2s_release_gate(
++        result, printer_profile_id=printer_profile_id
++    )
+     slicer_path = build_dir / "slicer_validation.json"
+     write_json(slicer_path, result)
++    bambu_path = build_dir / "bambu_studio_validation.json"
++    write_json(
++        bambu_path,
++        {
++            "manufacturing_validation": manufacturing_validation,
++            "slicer_result": result,
++        },
++    )
+     validation["slicer_result"] = result
++    validation["manufacturing_validation"] = manufacturing_validation
+     provenance["slicer_validation"] = {
+         "slicer": result.get("slicer"),
+         "profile": result.get("profile"),
+@@ -402,16 +418,24 @@ def record_slice_validation(build_dir: Path, result: dict[str, Any]) -> Path:
+         "gcode_generated": result.get("gcode_generated"),
+         "gcode_size_bytes": result.get("gcode_size_bytes"),
+         "metrics": result.get("metrics"),
++        "manufacturing_validation": manufacturing_validation,
+         "report": slicer_path.name,
++        "bambu_report": bambu_path.name,
+     }
+     write_json(validation_path, validation)
+     write_validation_html(build_dir / "validation.html", validation)
+     write_json(provenance_path, provenance)
+     manifest.setdefault("artifacts", {})["slicer_validation"] = slicer_path.name
++    manifest.setdefault("artifacts", {})["bambu_studio_validation"] = bambu_path.name
+     manifest.setdefault("sha256", {})["slicer_validation"] = sha256_file(slicer_path)
++    manifest.setdefault("sha256", {})["bambu_studio_validation"] = sha256_file(bambu_path)
+     manifest["sha256"]["validation_json"] = sha256_file(validation_path)
+     manifest["sha256"]["validation_html"] = sha256_file(build_dir / "validation.html")
+     manifest["sha256"]["provenance"] = sha256_file(provenance_path)
+     write_json(manifest_path, manifest)
+     verify_artifact_bundle(build_dir)
++    if manufacturing_validation["required"] and not manufacturing_validation["release_gate_passed"]:
++        raise MeshValidationError(
++            "Bambu Lab P2S release gate failed; inspect bambu_studio_validation.json"
++        )
+     return slicer_path
+diff --git a/src/topoforge/models/domain.py b/src/topoforge/models/domain.py
+index 4285209b6d6f13fc599ccbe8b62fcb384a1b9c21..13f8a3780b14f2abd50f8e782f66187dcbcb30a8 100644
+--- a/src/topoforge/models/domain.py
++++ b/src/topoforge/models/domain.py
+@@ -85,8 +85,8 @@ class PrinterProfile(BaseModel):
+ 
+     model_config = ConfigDict(extra="forbid")
+ 
+-    profile_id: str = "generic-fdm-0.4"
+-    build_volume_mm: tuple[float, float, float] = (220.0, 220.0, 250.0)
++    profile_id: str = "bambu-p2s-0.4"
++    build_volume_mm: tuple[float, float, float] = (256.0, 256.0, 256.0)
+     nozzle_diameter_mm: float = Field(default=0.4, gt=0)
+     layer_height_mm: float = Field(default=0.2, gt=0)
+     minimum_feature_mm: float = Field(default=0.5, gt=0)
+diff --git a/src/topoforge/validation/__init__.py b/src/topoforge/validation/__init__.py
+index de22d308d01aafa89fa3f149c16c40c55758a3e5..9e0e0e17f0399a2cf47df225d55baa9b0e341208 100644
+--- a/src/topoforge/validation/__init__.py
++++ b/src/topoforge/validation/__init__.py
+@@ -1,11 +1,13 @@
+ """Mesh validation API."""
+ 
++from topoforge.validation.manufacturing import evaluate_bambu_p2s_release_gate
+ from topoforge.validation.mesh import validate_mesh, write_validation_report
+ from topoforge.validation.models import SelfIntersectionStatus, ValidationReport
+ 
+ __all__ = [
+     "SelfIntersectionStatus",
+     "ValidationReport",
++    "evaluate_bambu_p2s_release_gate",
+     "validate_mesh",
+     "write_validation_report",
+ ]
+diff --git a/src/topoforge/validation/manufacturing.py b/src/topoforge/validation/manufacturing.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4cc5416ceb3c7a4f12b3f17c480cba9ffbc2366a
+--- /dev/null
++++ b/src/topoforge/validation/manufacturing.py
+@@ -0,0 +1,104 @@
++"""Release-gate evaluation for the default Bambu Lab P2S workflow."""
++
++from __future__ import annotations
++
++from collections.abc import Mapping
++from typing import Any
++
++DEFAULT_RELEASE_PROFILE_ID = "bambu-p2s-0.4"
++
++
++def evaluate_bambu_p2s_release_gate(
++    result: Mapping[str, Any],
++    *,
++    printer_profile_id: str,
++) -> dict[str, Any]:
++    """Evaluate official Bambu Studio and resolved P2S parameter evidence."""
++    metrics = _mapping(result.get("metrics"))
++    settings = _mapping(metrics.get("settings"))
++    slicer = _mapping(result.get("slicer"))
++    checks: list[dict[str, Any]] = []
++
++    def exact(name: str, actual: Any, expected: Any) -> None:
++        checks.append(
++            {"name": name, "expected": expected, "actual": actual, "passed": actual == expected}
++        )
++
++    def close(name: str, actual: Any, expected: float, tolerance: float = 1e-6) -> None:
++        try:
++            passed = abs(float(actual) - expected) <= tolerance
++        except (TypeError, ValueError):
++            passed = False
++        checks.append({"name": name, "expected": expected, "actual": actual, "passed": passed})
++
++    exact("slicer.name", slicer.get("name"), "BambuStudio")
++    exact("slice.status", result.get("status"), "succeeded")
++    exact("slice.exit_code", result.get("exit_code"), 0)
++    exact("slice.gcode_generated", result.get("gcode_generated"), True)
++    exact("machine.internal_profile_id", printer_profile_id, DEFAULT_RELEASE_PROFILE_ID)
++    exact("machine.printer_model", settings.get("printer_model"), "Bambu Lab P2S")
++    exact(
++        "machine.printer_settings_id",
++        settings.get("printer_settings_id"),
++        "Bambu Lab P2S 0.4 nozzle",
++    )
++    exact("machine.printer_variant", settings.get("printer_variant"), "0.4")
++    close("machine.nozzle_diameter_mm", settings.get("nozzle_diameter_mm"), 0.4)
++    close("machine.printable_width_mm", settings.get("printable_width_mm"), 256.0)
++    close("machine.printable_depth_mm", settings.get("printable_depth_mm"), 256.0)
++    close("machine.printable_height_mm", settings.get("printable_height_mm"), 256.0)
++    exact(
++        "process.settings_id",
++        settings.get("process_settings_id"),
++        "0.20mm Standard @BBL P2S",
++    )
++    close("process.layer_height_mm", settings.get("layer_height_mm"), 0.2)
++    close("process.initial_layer_height_mm", settings.get("initial_layer_height_mm"), 0.2)
++    exact("process.wall_loops", settings.get("wall_loops"), 2)
++    exact("process.top_shell_layers", settings.get("top_shell_layers"), 5)
++    exact("process.bottom_shell_layers", settings.get("bottom_shell_layers"), 3)
++    close(
++        "process.sparse_infill_density_percent",
++        settings.get("sparse_infill_density_percent"),
++        15.0,
++    )
++    exact("process.sparse_infill_pattern", settings.get("sparse_infill_pattern"), "grid")
++    exact("process.support_enabled", settings.get("support_enabled"), False)
++    exact("process.brim_type", settings.get("brim_type"), "auto_brim")
++    exact("machine.bed_type", settings.get("bed_type"), "Textured PEI Plate")
++    close("machine.bed_temperature_c", settings.get("bed_temperature_c"), 55.0)
++    close("machine.nozzle_temperature_c", settings.get("nozzle_temperature_c"), 220.0)
++    exact(
++        "filament.settings_id",
++        settings.get("filament_settings_ids"),
++        ["Bambu PLA Basic @BBL P2S"],
++    )
++    exact("filament.vendor", settings.get("filament_vendor"), "Bambu Lab")
++    exact("filament.type", settings.get("filament_type"), "PLA")
++    close("filament.density_g_cm3", settings.get("filament_density_g_cm3"), 1.26)
++    close("filament.diameter_mm", settings.get("filament_diameter_mm"), 1.75)
++    close("filament.flow_ratio", settings.get("filament_flow_ratio"), 0.98)
++    exact("slice.out_of_bed", metrics.get("out_of_bed"), False)
++    exact("slice.empty_layer_warning", metrics.get("empty_layer_warning"), False)
++    exact("slice.floating_region_warning", metrics.get("floating_region_warning"), False)
++
++    required = printer_profile_id == DEFAULT_RELEASE_PROFILE_ID
++    parameter_checks_passed = all(check["passed"] for check in checks[4:])
++    slice_checks_passed = all(check["passed"] for check in checks[:4]) and all(
++        check["passed"] for check in checks[-3:]
++    )
++    release_gate_passed = required and all(check["passed"] for check in checks)
++    return {
++        "policy_id": "bambu-p2s-official-release-v1",
++        "required": required,
++        "required_validator": "BambuStudio",
++        "printer_profile_id": printer_profile_id,
++        "parameter_checks": checks,
++        "parameter_checks_passed": parameter_checks_passed,
++        "slice_checks_passed": slice_checks_passed,
++        "release_gate_passed": release_gate_passed,
++    }
++
++
++def _mapping(value: Any) -> Mapping[str, Any]:
++    return value if isinstance(value, Mapping) else {}
+diff --git a/src/topoforge/validation/slicers/__init__.py b/src/topoforge/validation/slicers/__init__.py
+index 019ceb00d0ec5da0eaf4ee3e1db7da0853bde8d0..705fc4fa5f17cb2e7b77177c572f0dc0c39c9329 100644
+--- a/src/topoforge/validation/slicers/__init__.py
++++ b/src/topoforge/validation/slicers/__init__.py
+@@ -1,8 +1,10 @@
+ """External headless slicer adapters."""
+ 
++from topoforge.validation.slicers.bambu import BambuStudioAdapter
+ from topoforge.validation.slicers.base import (
+     CommandExecution,
+     CommandRunner,
++    ResolvedPrintSettings,
+     SliceMetrics,
+     SlicerAdapter,
+     SlicerAvailability,
+@@ -12,16 +14,19 @@ from topoforge.validation.slicers.base import (
+     SliceStatus,
+     parse_gcode_generator,
+     parse_gcode_metrics,
++    parse_gcode_settings,
+ )
+ from topoforge.validation.slicers.discovery import discover_slicers, select_slicer
+ from topoforge.validation.slicers.orca import OrcaSlicerAdapter
+ from topoforge.validation.slicers.prusa import PrusaSlicerAdapter
+ 
+ __all__ = [
++    "BambuStudioAdapter",
+     "CommandExecution",
+     "CommandRunner",
+     "OrcaSlicerAdapter",
+     "PrusaSlicerAdapter",
++    "ResolvedPrintSettings",
+     "SliceMetrics",
+     "SliceResult",
+     "SliceStatus",
+@@ -32,5 +37,6 @@ __all__ = [
+     "discover_slicers",
+     "parse_gcode_generator",
+     "parse_gcode_metrics",
++    "parse_gcode_settings",
+     "select_slicer",
+ ]
+diff --git a/src/topoforge/validation/slicers/bambu.py b/src/topoforge/validation/slicers/bambu.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f7776bbd16162f67b431f0e12095fbab3f06ff8
+--- /dev/null
++++ b/src/topoforge/validation/slicers/bambu.py
+@@ -0,0 +1,58 @@
++"""Official Bambu Studio headless CLI adapter."""
++
++from __future__ import annotations
++
++import re
++from collections.abc import Sequence
++from pathlib import Path
++
++from topoforge.validation.slicers.base import SlicerProfile
++from topoforge.validation.slicers.orca import OrcaSlicerAdapter
++
++
++class BambuStudioAdapter(OrcaSlicerAdapter):
++    """Slice models with Bambu Lab's official Bambu Studio batch interface."""
++
++    display_name = "BambuStudio"
++    executable_candidates = ("bambu-studio", "BambuStudio")
++    environment_keys = ("TOPOFORGE_BAMBU_STUDIO", "BAMBU_STUDIO")
++
++    def _version_from_output(self, output: str) -> str | None:
++        match = re.search(r"BambuStudio-([0-9][0-9.]*)", output, re.IGNORECASE)
++        return None if match is None else match.group(1).rstrip(".")
++
++    def _slice_command(
++        self,
++        input_model: Path,
++        output_dir: Path,
++        data_dir: Path,
++        profile: SlicerProfile,
++        extra_args: Sequence[str],
++    ) -> list[str]:
++        del data_dir
++        if self.executable is None:
++            return []
++        command = [str(self.executable), "--debug", "2"]
++        if profile.settings:
++            command.extend(
++                ("--load-settings", ";".join(str(path.resolve()) for path in profile.settings))
++            )
++        if profile.filaments:
++            command.extend(
++                ("--load-filaments", ";".join(str(path.resolve()) for path in profile.filaments))
++            )
++        command.extend(
++            (
++                "--load-defaultfila",
++                "--curr-bed-type",
++                "Textured PEI Plate",
++                "--normative-check",
++                "--ensure-on-bed",
++                "--arrange",
++                "1",
++            )
++        )
++        command.extend(("--slice", "0", "--outputdir", str(output_dir)))
++        command.extend(str(argument) for argument in extra_args)
++        command.append(str(input_model))
++        return command
+diff --git a/src/topoforge/validation/slicers/base.py b/src/topoforge/validation/slicers/base.py
+index 442039627eb0f304af64fc9332b1b931dc99d768..b5c9ab644fd24d46ba2d57be0491fefcb5fef84f 100644
+--- a/src/topoforge/validation/slicers/base.py
++++ b/src/topoforge/validation/slicers/base.py
+@@ -68,6 +68,42 @@ class SlicerProfile(BaseModel):
+         return "; ".join(path.name for path in paths) if paths else "slicer defaults"
+ 
+ 
++class ResolvedPrintSettings(BaseModel):
++    """Machine, process, and filament settings parsed from generated G-code."""
++
++    model_config = ConfigDict(extra="forbid", frozen=True)
++
++    printer_model: str | None = None
++    printer_settings_id: str | None = None
++    process_settings_id: str | None = None
++    filament_settings_ids: tuple[str, ...] = ()
++    printer_variant: str | None = None
++    nozzle_diameter_mm: float | None = Field(default=None, gt=0)
++    printable_width_mm: float | None = Field(default=None, gt=0)
++    printable_depth_mm: float | None = Field(default=None, gt=0)
++    printable_height_mm: float | None = Field(default=None, gt=0)
++    layer_height_mm: float | None = Field(default=None, gt=0)
++    initial_layer_height_mm: float | None = Field(default=None, gt=0)
++    wall_loops: int | None = Field(default=None, ge=0)
++    top_shell_layers: int | None = Field(default=None, ge=0)
++    bottom_shell_layers: int | None = Field(default=None, ge=0)
++    sparse_infill_density_percent: float | None = Field(default=None, ge=0, le=100)
++    sparse_infill_pattern: str | None = None
++    support_enabled: bool | None = None
++    support_type: str | None = None
++    brim_type: str | None = None
++    brim_width_mm: float | None = Field(default=None, ge=0)
++    bed_type: str | None = None
++    bed_temperature_c: float | None = Field(default=None, ge=0)
++    nozzle_temperature_c: float | None = Field(default=None, ge=0)
++    filament_vendor: str | None = None
++    filament_type: str | None = None
++    filament_density_g_cm3: float | None = Field(default=None, gt=0)
++    filament_diameter_mm: float | None = Field(default=None, gt=0)
++    filament_flow_ratio: float | None = Field(default=None, gt=0)
++    filament_max_volumetric_speed_mm3_s: float | None = Field(default=None, gt=0)
++
++
+ class SliceMetrics(BaseModel):
+     """Useful statistics and warnings parsed from slicer output."""
+ 
+@@ -84,6 +120,7 @@ class SliceMetrics(BaseModel):
+     empty_layer_warning: bool = False
+     floating_region_warning: bool = False
+     warnings: tuple[str, ...] = ()
++    settings: ResolvedPrintSettings = Field(default_factory=ResolvedPrintSettings)
+ 
+ 
+ class SliceResult(BaseModel):
+@@ -399,31 +436,117 @@ _FLOAT = r"([0-9]+(?:\.[0-9]+)?)"
+ 
+ 
+ def parse_gcode_generator(gcode_text: str) -> tuple[str, str] | None:
+-    """Return slicer name and version from a generated-by G-code comment."""
++    """Return slicer name and version from a generated G-code comment."""
+     match = re.search(
+         r"^;\s*generated by\s+([A-Za-z][A-Za-z ]*?Slicer)\s+([^\s;]+)",
+         gcode_text,
+         flags=re.IGNORECASE | re.MULTILINE,
+     )
++    if match is None:
++        match = re.search(
++            r"^;\s*(BambuStudio)\s+([^\s;]+)",
++            gcode_text,
++            flags=re.IGNORECASE | re.MULTILINE,
++        )
+     if match is None:
+         return None
+     return match.group(1).strip(), match.group(2).strip()
+ 
+ 
++def parse_gcode_settings(gcode_text: str) -> ResolvedPrintSettings:
++    """Parse the resolved manufacturing settings embedded in slicer G-code."""
++    printable_width_mm: float | None = None
++    printable_depth_mm: float | None = None
++    printable_area = _config_value(gcode_text, "printable_area")
++    if printable_area is not None:
++        points = [
++            (float(match.group(1)), float(match.group(2)))
++            for match in re.finditer(
++                r"(-?[0-9]+(?:\.[0-9]+)?)x(-?[0-9]+(?:\.[0-9]+)?)",
++                printable_area,
++            )
++        ]
++        if points:
++            xs = [point[0] for point in points]
++            ys = [point[1] for point in points]
++            printable_width_mm = max(xs) - min(xs)
++            printable_depth_mm = max(ys) - min(ys)
++
++    filament_ids = _config_value(gcode_text, "filament_settings_id")
++    parsed_filament_ids: tuple[str, ...] = ()
++    if filament_ids:
++        quoted = tuple(value.strip() for value in re.findall(r'"([^"]+)"', filament_ids))
++        parsed_filament_ids = quoted or tuple(
++            value.strip() for value in re.split(r"[;,]", filament_ids) if value.strip()
++        )
++
++    return ResolvedPrintSettings(
++        printer_model=_config_value(gcode_text, "printer_model"),
++        printer_settings_id=_config_value(gcode_text, "printer_settings_id"),
++        process_settings_id=_config_value(gcode_text, "print_settings_id"),
++        filament_settings_ids=parsed_filament_ids,
++        printer_variant=_config_value(gcode_text, "printer_variant"),
++        nozzle_diameter_mm=_positive_float_config(gcode_text, "nozzle_diameter"),
++        printable_width_mm=printable_width_mm,
++        printable_depth_mm=printable_depth_mm,
++        printable_height_mm=_positive_float_config(gcode_text, "printable_height"),
++        layer_height_mm=_positive_float_config(gcode_text, "layer_height"),
++        initial_layer_height_mm=_positive_float_config(gcode_text, "initial_layer_print_height"),
++        wall_loops=_int_config(gcode_text, "wall_loops"),
++        top_shell_layers=_int_config(gcode_text, "top_shell_layers"),
++        bottom_shell_layers=_int_config(gcode_text, "bottom_shell_layers"),
++        sparse_infill_density_percent=_percent_config(gcode_text, "sparse_infill_density"),
++        sparse_infill_pattern=_config_value(gcode_text, "sparse_infill_pattern"),
++        support_enabled=_bool_config(gcode_text, "enable_support"),
++        support_type=_config_value(gcode_text, "support_type"),
++        brim_type=_config_value(gcode_text, "brim_type"),
++        brim_width_mm=_float_config(gcode_text, "brim_width"),
++        bed_type=_config_value(gcode_text, "curr_bed_type"),
++        bed_temperature_c=_float_config(gcode_text, "textured_plate_temp")
++        or _float_config(gcode_text, "cool_plate_temp"),
++        nozzle_temperature_c=_float_config(gcode_text, "nozzle_temperature"),
++        filament_vendor=_config_value(gcode_text, "filament_vendor"),
++        filament_type=_config_value(gcode_text, "filament_type"),
++        filament_density_g_cm3=_positive_float_config(gcode_text, "filament_density"),
++        filament_diameter_mm=_positive_float_config(gcode_text, "filament_diameter"),
++        filament_flow_ratio=_positive_float_config(gcode_text, "filament_flow_ratio"),
++        filament_max_volumetric_speed_mm3_s=_positive_float_config(
++            gcode_text, "filament_max_volumetric_speed"
++        ),
++    )
++
++
+ def parse_gcode_metrics(gcode_text: str, diagnostics: str = "") -> SliceMetrics:
+     """Parse metrics emitted by OrcaSlicer, PrusaSlicer, and close forks."""
+     estimated_time_text = _first_group(
+         gcode_text,
+         (
++            r"^;\s*model printing time\s*:\s*([^;\r\n]+)",
+             r"^;\s*estimated printing time(?:\s*\([^)]*\))?\s*=\s*([^\r\n]+)",
+             r"^;\s*(?:model|total) printing time\s*[:=]\s*([^\r\n]+)",
+         ),
+     )
+-    filament_used_mm = _float_metric(gcode_text, rf"^;\s*filament used \[mm\]\s*=\s*{_FLOAT}")
++    filament_used_mm = _float_metric(
++        gcode_text,
++        rf"^;\s*filament used \[mm\]\s*=\s*{_FLOAT}",
++    )
++    if filament_used_mm is None:
++        filament_used_mm = _float_metric(
++            gcode_text, rf"^;\s*total filament length \[mm\]\s*:\s*{_FLOAT}"
++        )
+     filament_used_cm3 = _float_metric(gcode_text, rf"^;\s*filament used \[cm3\]\s*=\s*{_FLOAT}")
++    if filament_used_cm3 is None:
++        bambu_volume_mm3 = _float_metric(
++            gcode_text, rf"^;\s*total filament volume \[cm\^3\]\s*:\s*{_FLOAT}"
++        )
++        filament_used_cm3 = None if bambu_volume_mm3 is None else bambu_volume_mm3 / 1000.0
+     filament_used_g = _float_metric(
+         gcode_text, rf"^;\s*(?:total )?filament used \[g\]\s*=\s*{_FLOAT}"
+     )
++    if filament_used_g is None:
++        filament_used_g = _float_metric(
++            gcode_text, rf"^;\s*total filament weight \[g\]\s*:\s*{_FLOAT}"
++        )
+ 
+     layer_text = _first_group(
+         gcode_text,
+@@ -488,9 +611,55 @@ def parse_gcode_metrics(gcode_text: str, diagnostics: str = "") -> SliceMetrics:
+             for phrase in ("floating region", "floating object", "not connected to the bed")
+         ),
+         warnings=warnings,
++        settings=parse_gcode_settings(gcode_text),
+     )
+ 
+ 
++def _config_value(text: str, key: str) -> str | None:
++    value = _first_group(
++        text,
++        (rf"^;\s*{re.escape(key)}\s*[:=]\s*([^\r\n]+)",),
++    )
++    if value is None:
++        return None
++    return value.strip().strip('"')
++
++
++def _float_config(text: str, key: str) -> float | None:
++    value = _config_value(text, key)
++    if value is None:
++        return None
++    match = re.match(r"-?[0-9]+(?:\.[0-9]+)?", value)
++    return None if match is None else float(match.group(0))
++
++
++def _positive_float_config(text: str, key: str) -> float | None:
++    """Parse a positive setting, treating slicer zero sentinels as unset."""
++    value = _float_config(text, key)
++    return value if value is not None and value > 0 else None
++
++
++def _int_config(text: str, key: str) -> int | None:
++    value = _float_config(text, key)
++    return None if value is None else int(value)
++
++
++def _percent_config(text: str, key: str) -> float | None:
++    return _float_config(text, key)
++
++
++def _bool_config(text: str, key: str) -> bool | None:
++    value = _config_value(text, key)
++    if value is None:
++        return None
++    normalized = value.casefold()
++    if normalized in {"1", "true", "yes", "on"}:
++        return True
++    if normalized in {"0", "false", "no", "off"}:
++        return False
++    return None
++
++
+ def _duration_seconds(value: str | None) -> int | None:
+     if value is None:
+         return None
+diff --git a/src/topoforge/validation/slicers/discovery.py b/src/topoforge/validation/slicers/discovery.py
+index 872d3ed4c7824aa3d5c0f8ee6c06f9edfa9132ea..48101c833f735900d6c3dfcb128faae699c249bd 100644
+--- a/src/topoforge/validation/slicers/discovery.py
++++ b/src/topoforge/validation/slicers/discovery.py
+@@ -4,6 +4,7 @@ from __future__ import annotations
+ 
+ from pathlib import Path
+ 
++from topoforge.validation.slicers.bambu import BambuStudioAdapter
+ from topoforge.validation.slicers.base import (
+     CommandRunner,
+     SlicerAdapter,
+@@ -16,12 +17,14 @@ from topoforge.validation.slicers.prusa import PrusaSlicerAdapter
+ 
+ def discover_slicers(
+     *,
++    bambu_executable: str | Path | None = None,
+     orca_executable: str | Path | None = None,
+     prusa_executable: str | Path | None = None,
+     runner: CommandRunner = run_command,
+-) -> tuple[OrcaSlicerAdapter, PrusaSlicerAdapter]:
+-    """Return OrcaSlicer and PrusaSlicer adapters in preference order."""
++) -> tuple[BambuStudioAdapter, OrcaSlicerAdapter, PrusaSlicerAdapter]:
++    """Return Bambu Studio, OrcaSlicer, and PrusaSlicer in preference order."""
+     return (
++        BambuStudioAdapter(bambu_executable, runner=runner),
+         OrcaSlicerAdapter(orca_executable, runner=runner),
+         PrusaSlicerAdapter(prusa_executable, runner=runner),
+     )
+@@ -29,12 +32,14 @@ def discover_slicers(
+ 
+ def select_slicer(
+     *,
++    bambu_executable: str | Path | None = None,
+     orca_executable: str | Path | None = None,
+     prusa_executable: str | Path | None = None,
+     runner: CommandRunner = run_command,
+ ) -> SlicerAdapter:
+     """Select the first working slicer, retaining an unavailable result if none work."""
+     adapters = discover_slicers(
++        bambu_executable=bambu_executable,
+         orca_executable=orca_executable,
+         prusa_executable=prusa_executable,
+         runner=runner,
+diff --git a/tests/cli/test_build_config_overrides.py b/tests/cli/test_build_config_overrides.py
+index ae968d6cf8ca9741832c5aa352ee38d6c696f649..74e4f48efd67bdac9d81346ff19ecab8eca6c151 100644
+--- a/tests/cli/test_build_config_overrides.py
++++ b/tests/cli/test_build_config_overrides.py
+@@ -163,3 +163,12 @@ def test_explicit_cli_options_override_all_corresponding_yaml_fields(
+     assert resolved.vertical_datum == "EGM2008"
+     assert resolved.data_license == "CLI-LICENSE"
+     assert resolved.attribution == "CLI attribution"
++
++
++def test_build_without_profile_uses_bambu_p2s_default(monkeypatch: Any) -> None:
++    captured = _capture_build(monkeypatch)
++
++    result = runner.invoke(cli_module.app, ["build", "--dem", "source.tif"])
++
++    assert result.exit_code == 0, result.output
++    assert captured.pop().printer_profile.profile_id == "bambu-p2s-0.4"
+diff --git a/tests/slicer/test_bambu.py b/tests/slicer/test_bambu.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..c15bb6ced269ef63afabd345ec2ea331ace6e1af
+--- /dev/null
++++ b/tests/slicer/test_bambu.py
+@@ -0,0 +1,136 @@
++from __future__ import annotations
++
++import json
++from collections.abc import Mapping, Sequence
++from pathlib import Path
++
++from topoforge.validation.slicers import (
++    BambuStudioAdapter,
++    CommandExecution,
++    SlicerProfile,
++    SliceStatus,
++    parse_gcode_generator,
++    parse_gcode_metrics,
++)
++
++BAMBU_GCODE = """; HEADER_BLOCK_START
++; BambuStudio 02.07.01.62
++; model printing time: 6h 42m 13s; total estimated time: 6h 49m 15s
++; total layer number: 224
++; total filament length [mm] : 69624.45
++; total filament volume [cm^3] : 167466.43
++; total filament weight [g] : 211.01
++; filament_density: 1.26
++; filament_diameter: 1.75
++; HEADER_BLOCK_END
++; printer_model = Bambu Lab P2S
++; printer_settings_id = Bambu Lab P2S 0.4 nozzle
++; printer_variant = 0.4
++; nozzle_diameter = 0.4
++; printable_area = 0x0,256x0,256x256,0x256
++; printable_height = 256
++; print_settings_id = 0.20mm Standard @BBL P2S
++; filament_settings_id = "Bambu PLA Basic @BBL P2S"
++; filament_vendor = "Bambu Lab"
++; filament_type = PLA
++; filament_flow_ratio = 0.98
++; filament_max_volumetric_speed = 21
++; layer_height = 0.2
++; initial_layer_print_height = 0.2
++; wall_loops = 2
++; top_shell_layers = 5
++; bottom_shell_layers = 3
++; sparse_infill_density = 15%
++; sparse_infill_pattern = grid
++; enable_support = 0
++; support_type = tree(auto)
++; brim_type = auto_brim
++; brim_width = 5
++; curr_bed_type = Textured PEI Plate
++; textured_plate_temp = 55
++; nozzle_temperature = 220
++"""
++
++
++class FakeBambuRunner:
++    def __init__(self) -> None:
++        self.calls: list[tuple[tuple[str, ...], Mapping[str, str] | None]] = []
++
++    def __call__(
++        self,
++        command: Sequence[str],
++        *,
++        timeout_seconds: float,
++        env: Mapping[str, str] | None = None,
++        cwd: Path | None = None,
++    ) -> CommandExecution:
++        del timeout_seconds, cwd
++        normalized = tuple(command)
++        self.calls.append((normalized, env))
++        if "--help" in normalized:
++            return CommandExecution(0, "BambuStudio-02.07.01.62:", "", 0.01)
++        output_dir = Path(normalized[normalized.index("--outputdir") + 1])
++        output_dir.joinpath("plate_1.gcode").write_text(BAMBU_GCODE, encoding="utf-8")
++        output_dir.joinpath("result.json").write_text(
++            json.dumps(
++                {
++                    "error_string": "Success.",
++                    "return_code": 0,
++                    "sliced_plates": [{"warning_message": ""}],
++                }
++            ),
++            encoding="utf-8",
++        )
++        return CommandExecution(0, "official slice succeeded", "", 0.2)
++
++
++def _executable(path: Path) -> Path:
++    executable = path / "BambuStudio.AppImage"
++    executable.write_text("#!/bin/sh\n", encoding="utf-8")
++    executable.chmod(0o755)
++    return executable
++
++
++def test_bambu_adapter_uses_normative_p2s_command_and_parses_settings(tmp_path: Path) -> None:
++    runner = FakeBambuRunner()
++    model = tmp_path / "terrain.3mf"
++    model.write_bytes(b"3mf")
++    machine = tmp_path / "machine.json"
++    process = tmp_path / "process.json"
++    filament = tmp_path / "filament.json"
++    for path in (machine, process, filament):
++        path.write_text("{}", encoding="utf-8")
++
++    result = BambuStudioAdapter(_executable(tmp_path), runner=runner).slice(
++        model,
++        tmp_path / "terrain.gcode",
++        profile=SlicerProfile(settings=(machine, process), filaments=(filament,)),
++    )
++
++    assert result.status is SliceStatus.SUCCEEDED
++    assert result.slicer.name == "BambuStudio"
++    assert result.slicer.version == "02.07.01.62"
++    assert result.metrics.layer_count == 224
++    assert result.metrics.filament_used_g == 211.01
++    assert result.metrics.settings.printer_model == "Bambu Lab P2S"
++    assert result.metrics.settings.printable_width_mm == 256.0
++    assert result.metrics.settings.bed_type == "Textured PEI Plate"
++    command, environment = runner.calls[-1]
++    assert "--normative-check" in command
++    assert "--ensure-on-bed" in command
++    assert "--load-defaultfila" in command
++    assert command[command.index("--curr-bed-type") + 1] == "Textured PEI Plate"
++    assert environment is not None
++    assert environment["APPIMAGE_EXTRACT_AND_RUN"] == "1"
++
++
++def test_bambu_gcode_parser_captures_release_parameters() -> None:
++    metrics = parse_gcode_metrics(BAMBU_GCODE)
++
++    assert parse_gcode_generator(BAMBU_GCODE) == ("BambuStudio", "02.07.01.62")
++    assert metrics.estimated_time_seconds == 24133
++    assert metrics.filament_used_mm == 69624.45
++    assert metrics.filament_used_cm3 == 167.46643
++    assert metrics.settings.process_settings_id == "0.20mm Standard @BBL P2S"
++    assert metrics.settings.filament_settings_ids == ("Bambu PLA Basic @BBL P2S",)
++    assert metrics.settings.support_enabled is False
+diff --git a/tests/slicer/test_metrics.py b/tests/slicer/test_metrics.py
+index 942b0487bb93af44c8bf8edea80b7302f737e1d6..cadf403e7584f4efb20402079ec5890b6285c8b6 100644
+--- a/tests/slicer/test_metrics.py
++++ b/tests/slicer/test_metrics.py
+@@ -48,6 +48,20 @@ def test_parse_prusa_metrics_with_layer_fallback_and_support_paths() -> None:
+     assert metrics.support_material is True
+ 
+ 
++def test_parse_prusa_zero_sentinels_as_unset_optional_settings() -> None:
++    gcode = """; generated by PrusaSlicer 2.4.0
++; filament_density = 0
++; filament_max_volumetric_speed = 0
++; nozzle_diameter = 0.4
++"""
++
++    settings = parse_gcode_metrics(gcode).settings
++
++    assert settings.filament_density_g_cm3 is None
++    assert settings.filament_max_volumetric_speed_mm3_s is None
++    assert settings.nozzle_diameter_mm == 0.4
++
++
+ def test_out_of_bed_detection_uses_diagnostics_not_start_gcode_comments() -> None:
+     gcode = "; generated by OrcaSlicer 2.3.0\nG1 Y-3 ; go outside print area\n"
+ 
+diff --git a/tests/unit/test_bambu_profile_resolver.py b/tests/unit/test_bambu_profile_resolver.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..08d557cece0b693908ef30b4969f0dcba04e0681
+--- /dev/null
++++ b/tests/unit/test_bambu_profile_resolver.py
+@@ -0,0 +1,42 @@
++from __future__ import annotations
++
++import importlib.util
++import json
++from pathlib import Path
++from types import ModuleType
++
++
++def _load_resolver() -> ModuleType:
++    path = Path(__file__).parents[2] / "scripts" / "resolve_bambu_profiles.py"
++    spec = importlib.util.spec_from_file_location("resolve_bambu_profiles", path)
++    assert spec is not None and spec.loader is not None
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    return module
++
++
++def _write(path: Path, payload: dict) -> None:
++    path.parent.mkdir(parents=True, exist_ok=True)
++    path.write_text(json.dumps(payload), encoding="utf-8")
++
++
++def test_resolver_merges_parent_then_include_then_child(tmp_path: Path) -> None:
++    root = tmp_path / "BBL"
++    _write(root / "machine" / "parent.json", {"name": "parent", "a": 1, "shared": "parent"})
++    _write(root / "machine" / "fragment.json", {"name": "fragment", "b": 2, "shared": "include"})
++    _write(
++        root / "machine" / "child.json",
++        {
++            "name": "child",
++            "inherits": "parent",
++            "include": ["fragment"],
++            "shared": "child",
++        },
++    )
++    module = _load_resolver()
++
++    resolved = module.resolve("child", module.load_index(root))
++
++    assert resolved["a"] == 1
++    assert resolved["b"] == 2
++    assert resolved["shared"] == "child"
+diff --git a/tests/unit/test_manufacturing_gate.py b/tests/unit/test_manufacturing_gate.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..06eeba86303a5b258977665d82fe7adb95277e28
+--- /dev/null
++++ b/tests/unit/test_manufacturing_gate.py
+@@ -0,0 +1,65 @@
++from topoforge.validation.manufacturing import evaluate_bambu_p2s_release_gate
++
++
++def _result() -> dict:
++    return {
++        "status": "succeeded",
++        "slicer": {"name": "BambuStudio", "version": "02.07.01.62"},
++        "exit_code": 0,
++        "gcode_generated": True,
++        "metrics": {
++            "out_of_bed": False,
++            "empty_layer_warning": False,
++            "floating_region_warning": False,
++            "settings": {
++                "printer_model": "Bambu Lab P2S",
++                "printer_settings_id": "Bambu Lab P2S 0.4 nozzle",
++                "printer_variant": "0.4",
++                "nozzle_diameter_mm": 0.4,
++                "printable_width_mm": 256.0,
++                "printable_depth_mm": 256.0,
++                "printable_height_mm": 256.0,
++                "process_settings_id": "0.20mm Standard @BBL P2S",
++                "filament_settings_ids": ["Bambu PLA Basic @BBL P2S"],
++                "layer_height_mm": 0.2,
++                "initial_layer_height_mm": 0.2,
++                "wall_loops": 2,
++                "top_shell_layers": 5,
++                "bottom_shell_layers": 3,
++                "sparse_infill_density_percent": 15.0,
++                "sparse_infill_pattern": "grid",
++                "support_enabled": False,
++                "brim_type": "auto_brim",
++                "bed_type": "Textured PEI Plate",
++                "bed_temperature_c": 55.0,
++                "nozzle_temperature_c": 220.0,
++                "filament_vendor": "Bambu Lab",
++                "filament_type": "PLA",
++                "filament_density_g_cm3": 1.26,
++                "filament_diameter_mm": 1.75,
++                "filament_flow_ratio": 0.98,
++            },
++        },
++    }
++
++
++def test_official_bambu_p2s_evidence_passes_release_gate() -> None:
++    gate = evaluate_bambu_p2s_release_gate(_result(), printer_profile_id="bambu-p2s-0.4")
++
++    assert gate["parameter_checks_passed"] is True
++    assert gate["slice_checks_passed"] is True
++    assert gate["release_gate_passed"] is True
++
++
++def test_false_200_mm_p2s_and_prusa_results_are_rejected() -> None:
++    wrong_bed = _result()
++    wrong_bed["metrics"]["settings"]["printable_width_mm"] = 200.0
++    prusa = _result()
++    prusa["slicer"]["name"] = "PrusaSlicer"
++
++    assert not evaluate_bambu_p2s_release_gate(wrong_bed, printer_profile_id="bambu-p2s-0.4")[
++        "release_gate_passed"
++    ]
++    assert not evaluate_bambu_p2s_release_gate(prusa, printer_profile_id="bambu-p2s-0.4")[
++        "release_gate_passed"
++    ]
+diff --git a/tests/unit/test_printer_profiles.py b/tests/unit/test_printer_profiles.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..52cacb9a9d81a8fa7a89355afd0865cff763cc1e
+--- /dev/null
++++ b/tests/unit/test_printer_profiles.py
+@@ -0,0 +1,19 @@
++from topoforge.config import DEFAULT_PRINTER_PROFILE_ID, get_printer_profile
++from topoforge.models import BuildConfig, PrinterProfile
++
++
++def test_default_printer_is_bambu_p2s(tmp_path) -> None:
++    profile = PrinterProfile()
++    config = BuildConfig(dem_path=tmp_path / "dem.tif", output_dir=tmp_path / "out")
++
++    assert DEFAULT_PRINTER_PROFILE_ID == "bambu-p2s-0.4"
++    assert profile.profile_id == DEFAULT_PRINTER_PROFILE_ID
++    assert profile.build_volume_mm == (256.0, 256.0, 256.0)
++    assert config.printer_profile.profile_id == DEFAULT_PRINTER_PROFILE_ID
++
++
++def test_generic_profile_remains_explicitly_generic() -> None:
++    profile = get_printer_profile("generic-fdm-0.4")
++
++    assert profile.profile_id == "generic-fdm-0.4"
++    assert profile.build_volume_mm == (220.0, 220.0, 250.0)

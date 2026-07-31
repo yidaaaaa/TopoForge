@@ -1,0 +1,494 @@
+{
+  "bottom_planarity_error_mm": 0.0,
+  "connected_components": 1,
+  "degenerate_faces": 0,
+  "dimension_error_mm": [
+    0.0,
+    2.866106513010891e-06,
+    0.0
+  ],
+  "dimensions_mm": [
+    180.0,
+    180.0001220703125,
+    48.0
+  ],
+  "dimensions_within_tolerance": true,
+  "downsampling_factor": 1.0,
+  "duplicate_faces": 0,
+  "estimated_memory_mb": 61.798095703125,
+  "estimated_triangle_count": 809996,
+  "expected_dimensions_mm": [
+    180.0,
+    180.000124936419,
+    48.0
+  ],
+  "finite_face_normals": true,
+  "finite_vertices": true,
+  "flat_bottom": true,
+  "height_limit_mm": 48.0,
+  "height_limit_passed": true,
+  "manifold": true,
+  "manufacturing_validation": {
+    "parameter_checks": [
+      {
+        "actual": "BambuStudio",
+        "expected": "BambuStudio",
+        "name": "slicer.name",
+        "passed": true
+      },
+      {
+        "actual": "succeeded",
+        "expected": "succeeded",
+        "name": "slice.status",
+        "passed": true
+      },
+      {
+        "actual": 0,
+        "expected": 0,
+        "name": "slice.exit_code",
+        "passed": true
+      },
+      {
+        "actual": true,
+        "expected": true,
+        "name": "slice.gcode_generated",
+        "passed": true
+      },
+      {
+        "actual": "bambu-p2s-0.4",
+        "expected": "bambu-p2s-0.4",
+        "name": "machine.internal_profile_id",
+        "passed": true
+      },
+      {
+        "actual": "Bambu Lab P2S",
+        "expected": "Bambu Lab P2S",
+        "name": "machine.printer_model",
+        "passed": true
+      },
+      {
+        "actual": "Bambu Lab P2S 0.4 nozzle",
+        "expected": "Bambu Lab P2S 0.4 nozzle",
+        "name": "machine.printer_settings_id",
+        "passed": true
+      },
+      {
+        "actual": "0.4",
+        "expected": "0.4",
+        "name": "machine.printer_variant",
+        "passed": true
+      },
+      {
+        "actual": 0.4,
+        "expected": 0.4,
+        "name": "machine.nozzle_diameter_mm",
+        "passed": true
+      },
+      {
+        "actual": 256.0,
+        "expected": 256.0,
+        "name": "machine.printable_width_mm",
+        "passed": true
+      },
+      {
+        "actual": 256.0,
+        "expected": 256.0,
+        "name": "machine.printable_depth_mm",
+        "passed": true
+      },
+      {
+        "actual": 256.0,
+        "expected": 256.0,
+        "name": "machine.printable_height_mm",
+        "passed": true
+      },
+      {
+        "actual": "0.20mm Standard @BBL P2S",
+        "expected": "0.20mm Standard @BBL P2S",
+        "name": "process.settings_id",
+        "passed": true
+      },
+      {
+        "actual": 0.2,
+        "expected": 0.2,
+        "name": "process.layer_height_mm",
+        "passed": true
+      },
+      {
+        "actual": 0.2,
+        "expected": 0.2,
+        "name": "process.initial_layer_height_mm",
+        "passed": true
+      },
+      {
+        "actual": 2,
+        "expected": 2,
+        "name": "process.wall_loops",
+        "passed": true
+      },
+      {
+        "actual": 5,
+        "expected": 5,
+        "name": "process.top_shell_layers",
+        "passed": true
+      },
+      {
+        "actual": 3,
+        "expected": 3,
+        "name": "process.bottom_shell_layers",
+        "passed": true
+      },
+      {
+        "actual": 15.0,
+        "expected": 15.0,
+        "name": "process.sparse_infill_density_percent",
+        "passed": true
+      },
+      {
+        "actual": "grid",
+        "expected": "grid",
+        "name": "process.sparse_infill_pattern",
+        "passed": true
+      },
+      {
+        "actual": false,
+        "expected": false,
+        "name": "process.support_enabled",
+        "passed": true
+      },
+      {
+        "actual": "auto_brim",
+        "expected": "auto_brim",
+        "name": "process.brim_type",
+        "passed": true
+      },
+      {
+        "actual": "Textured PEI Plate",
+        "expected": "Textured PEI Plate",
+        "name": "machine.bed_type",
+        "passed": true
+      },
+      {
+        "actual": 55.0,
+        "expected": 55.0,
+        "name": "machine.bed_temperature_c",
+        "passed": true
+      },
+      {
+        "actual": 220.0,
+        "expected": 220.0,
+        "name": "machine.nozzle_temperature_c",
+        "passed": true
+      },
+      {
+        "actual": [
+          "Bambu PLA Basic @BBL P2S"
+        ],
+        "expected": [
+          "Bambu PLA Basic @BBL P2S"
+        ],
+        "name": "filament.settings_id",
+        "passed": true
+      },
+      {
+        "actual": "Bambu Lab",
+        "expected": "Bambu Lab",
+        "name": "filament.vendor",
+        "passed": true
+      },
+      {
+        "actual": "PLA",
+        "expected": "PLA",
+        "name": "filament.type",
+        "passed": true
+      },
+      {
+        "actual": 1.26,
+        "expected": 1.26,
+        "name": "filament.density_g_cm3",
+        "passed": true
+      },
+      {
+        "actual": 1.75,
+        "expected": 1.75,
+        "name": "filament.diameter_mm",
+        "passed": true
+      },
+      {
+        "actual": 0.98,
+        "expected": 0.98,
+        "name": "filament.flow_ratio",
+        "passed": true
+      },
+      {
+        "actual": false,
+        "expected": false,
+        "name": "slice.out_of_bed",
+        "passed": true
+      },
+      {
+        "actual": false,
+        "expected": false,
+        "name": "slice.empty_layer_warning",
+        "passed": true
+      },
+      {
+        "actual": false,
+        "expected": false,
+        "name": "slice.floating_region_warning",
+        "passed": true
+      }
+    ],
+    "parameter_checks_passed": true,
+    "policy_id": "bambu-p2s-official-release-v1",
+    "printer_profile_id": "bambu-p2s-0.4",
+    "release_gate_passed": true,
+    "required": true,
+    "required_validator": "BambuStudio",
+    "slice_checks_passed": true
+  },
+  "mesh_units": "millimetres by TopoForge coordinate contract",
+  "minimum_base_thickness_mm": 3.0,
+  "minimum_base_thickness_passed": true,
+  "minimum_base_thickness_required_mm": 2.0,
+  "orientation": {
+    "coordinate_correction_only": true,
+    "east_axis": "+X = East",
+    "expected_processed_peak_mm": [
+      25.256124721603562,
+      104.63258932829702,
+      48.0
+    ],
+    "north_axis": "+Y = North",
+    "north_edge": "y=model_depth_mm",
+    "orientation_transform": "mesh_heightfield=flipud(processed_dem); source row 0 north maps to y=model_depth_mm",
+    "reopened_format_peak_coordinates_mm": {
+      "3mf": [
+        25.256124,
+        104.632592,
+        48.0
+      ],
+      "glb": [
+        25.25612449645996,
+        104.6325912475586,
+        48.0
+      ],
+      "in_memory": [
+        25.256124721603562,
+        104.63258932829703,
+        48.0
+      ],
+      "stl": [
+        25.25612449645996,
+        104.6325912475586,
+        48.0
+      ]
+    },
+    "up_axis": "+Z = Up"
+  },
+  "orientation_consistent": true,
+  "peak_elevation_loss_m": 0.0,
+  "peak_elevation_loss_threshold_m": 59.867657914178494,
+  "peak_horizontal_shift_m": 0.0,
+  "peak_horizontal_shift_threshold_m": 89.80148687126774,
+  "physical_sample_spacing_mm": 0.4008910077242973,
+  "positive_volume": true,
+  "processed_elevation_max_m": 2089.2275390625,
+  "processed_elevation_min_m": 85.61587524414062,
+  "processed_grid_shape": [
+    450,
+    450
+  ],
+  "processed_horizontal_resolution_m": 29.933828957089247,
+  "processed_peak_coordinate": {
+    "column": 63,
+    "crs": "EPSG:32620",
+    "latitude": 66.5462329977988,
+    "longitude": -65.43032257967121,
+    "row": 188,
+    "x": 392082.4475865194,
+    "y": 7382896.985983014
+  },
+  "raw_elevation_max_m": 2089.2275390625,
+  "raw_elevation_min_m": 85.61587524414062,
+  "raw_peak_coordinate": {
+    "column": 63,
+    "crs": "EPSG:32620",
+    "latitude": 66.5462329977988,
+    "longitude": -65.43032257967121,
+    "row": 188,
+    "x": 392082.4475865194,
+    "y": 7382896.985983014
+  },
+  "reference_peak_adjustment_applied": false,
+  "reference_peak_difference_m": null,
+  "reference_peak_elevation_m": null,
+  "required_checks_passed": true,
+  "sampling_decision_reasons": [
+    "source grid is 450 x 450",
+    "source samples map to 0.400891 x 0.400891 mm on the model",
+    "source-preserving mode requested every normalized source sample",
+    "effective cell limit is 500000 from max_grid_cells=500000 and max_estimated_memory_mb=768.000"
+  ],
+  "sampling_warnings": [],
+  "self_intersection_method": "No exhaustive robust self-intersection predicate is available in the Phase 1 backend.",
+  "self_intersection_status": "not_fully_checked",
+  "slicer_result": {
+    "command": [
+      "/root/autodl-tmp/bambu/TopoForge/downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage",
+      "--debug",
+      "2",
+      "--load-settings",
+      "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_p2s_machine_profile.json;/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_p2s_process_profile.json",
+      "--load-filaments",
+      "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_p2s_filament_profile.json",
+      "--load-defaultfila",
+      "--curr-bed-type",
+      "Textured PEI Plate",
+      "--normative-check",
+      "--ensure-on-bed",
+      "--arrange",
+      "1",
+      "--slice",
+      "0",
+      "--outputdir",
+      "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/.topoforge-orca-th86vlo1/output",
+      "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/model.3mf"
+    ],
+    "duration_seconds": 48.431038215756416,
+    "error": null,
+    "exit_code": 0,
+    "gcode_generated": true,
+    "gcode_size_bytes": 46330376,
+    "input_model": "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/model.3mf",
+    "metrics": {
+      "empty_layer_warning": false,
+      "estimated_time_seconds": 23758,
+      "estimated_time_text": "6h 35m 58s",
+      "filament_used_cm3": 195.12471,
+      "filament_used_g": 245.86,
+      "filament_used_mm": 81123.43,
+      "floating_region_warning": false,
+      "layer_count": 240,
+      "out_of_bed": false,
+      "settings": {
+        "bed_temperature_c": 55.0,
+        "bed_type": "Textured PEI Plate",
+        "bottom_shell_layers": 3,
+        "brim_type": "auto_brim",
+        "brim_width_mm": 5.0,
+        "filament_density_g_cm3": 1.26,
+        "filament_diameter_mm": 1.75,
+        "filament_flow_ratio": 0.98,
+        "filament_max_volumetric_speed_mm3_s": 21.0,
+        "filament_settings_ids": [
+          "Bambu PLA Basic @BBL P2S"
+        ],
+        "filament_type": "PLA",
+        "filament_vendor": "Bambu Lab",
+        "initial_layer_height_mm": 0.2,
+        "layer_height_mm": 0.2,
+        "nozzle_diameter_mm": 0.4,
+        "nozzle_temperature_c": 220.0,
+        "printable_depth_mm": 256.0,
+        "printable_height_mm": 256.0,
+        "printable_width_mm": 256.0,
+        "printer_model": "Bambu Lab P2S",
+        "printer_settings_id": "Bambu Lab P2S 0.4 nozzle",
+        "printer_variant": "0.4",
+        "process_settings_id": "0.20mm Standard @BBL P2S",
+        "sparse_infill_density_percent": 15.0,
+        "sparse_infill_pattern": "grid",
+        "support_enabled": false,
+        "support_type": "tree(auto)",
+        "top_shell_layers": 5,
+        "wall_loops": 2
+      },
+      "support_material": false,
+      "warnings": [
+        "[warning] cli mode, Current BambuStudio Version 02.07.01.62",
+        "[warning] no filament colors found in projects",
+        "[warning] Detected missing Voronoi vertex, input polygons will be rotated back and forth.",
+        "[error]   ZFiller: both point in subject : 1, 0, 87, 88",
+        "[error]   ZFiller: encounter idx from clip: 4562",
+        "[warning] tree support default to organic support",
+        "[error]   Invalid T command (T65535)."
+      ]
+    },
+    "output_gcode": "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/mount-thor-p2s.gcode",
+    "profile": "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic",
+    "slicer": {
+      "detail": null,
+      "executable": "/root/autodl-tmp/bambu/TopoForge/downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage",
+      "name": "BambuStudio",
+      "status": "available",
+      "version": "02.07.01.62"
+    },
+    "status": "succeeded",
+    "stderr": "",
+    "stdout": "[2026-07-31 11:20:32.614383] [0x00007fed569f0500] [trace]   Initializing StaticPrintConfigs\n[2026-07-31 11:20:32.632416] [0x00007fed569f0500] [warning] cli mode, Current BambuStudio Version 02.07.01.62\n[2026-07-31 11:20:34.856001] [0x00007fed569f0500] [warning] no filament colors found in projects\n[2026-07-31 11:20:59.731001] [0x00007fed2f7fd640] [warning] Detected missing Voronoi vertex, input polygons will be rotated back and forth.\n[2026-07-31 11:21:02.531102] [0x00007fed54f84640] [error]   ZFiller: both point in subject : 1, 0, 87, 88 \n[2026-07-31 11:21:02.537326] [0x00007fed54f84640] [error]   ZFiller: both point in subject : 1, 0, 87, 88 \n[2026-07-31 11:21:09.585515] [0x00007fed3ebfa640] [error]   ZFiller: encounter idx from clip: 4562\n[2026-07-31 11:21:09.766609] [0x00007fed569f0500] [warning] tree support default to organic support\n[2026-07-31 11:21:19.164445] [0x00007fed569f0500] [error]   Invalid T command (T65535).\n"
+  },
+  "source_grid_shape": [
+    450,
+    450
+  ],
+  "source_horizontal_resolution_m": 29.933828957089247,
+  "terrain_fidelity_passed": true,
+  "terrain_fidelity_status": "source-resolution-preserved",
+  "three_mf_dimensions_match": true,
+  "three_mf_round_trip": {
+    "build_item_count": 1,
+    "dimensions_mm": [
+      180.0,
+      180.000128,
+      48.0
+    ],
+    "lib3mf_version": [
+      2,
+      5,
+      0
+    ],
+    "metadata": {
+      "Application": "TopoForge",
+      "Title": "TopoForge terrain",
+      "customXMLNS0:dataset_name": "Copernicus DEM GLO-30 2021 — Mount Thor",
+      "customXMLNS0:dataset_type": "dsm",
+      "customXMLNS0:east_axis": "+X = East",
+      "customXMLNS0:horizontal_crs": "EPSG:32620",
+      "customXMLNS0:north_axis": "+Y = North",
+      "customXMLNS0:north_edge": "y=model_depth_mm",
+      "customXMLNS0:orientation_transform": "mesh_heightfield=flipud(processed_dem); source row 0 north maps to y=model_depth_mm",
+      "customXMLNS0:source_bounds": "{\"full_grid_shape\":[450,450],\"native\":[390181.65010740765,7375069.286994169,403651.8684633177,7388539.514699639],\"native_crs\":\"EPSG:32620\",\"wgs84\":[-65.47812046666786,66.4754067323374,-65.16391587479507,66.60063680450617]}",
+      "customXMLNS0:vertical_datum": "EGM2008",
+      "customXMLNS0:vertical_exaggeration": "1.68074216"
+    },
+    "object_count": 1,
+    "object_names": [
+      "TopoForge terrain"
+    ],
+    "peak_coordinate_mm": [
+      25.256124,
+      104.632592,
+      48.0
+    ],
+    "peak_coordinates_mm": [
+      [
+        25.256124,
+        104.632592,
+        48.0
+      ]
+    ],
+    "strict_warning_count": 0,
+    "triangle_count": 809996,
+    "unit": "millimeter",
+    "vertex_count": 405000
+  },
+  "triangle_budget": 1999996,
+  "triangle_budget_passed": true,
+  "triangle_count": 809996,
+  "units": "mm",
+  "validation_source": "reopened model.stl",
+  "volume_mm3": 781298.25342843,
+  "watertight": true,
+  "winding_consistent": true
+}

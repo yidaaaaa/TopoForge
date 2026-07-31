@@ -32,8 +32,9 @@ def build_rectangular_terrain_mesh(
     bottom is constructed at ``z=0``.  The caller therefore controls where a
     sea-level or custom reference plane falls in the printable solid.
 
-    Array row zero maps to ``y=0`` and column zero maps to ``x=0``.  Each grid
-    cell uses the same lower-left to upper-right diagonal.  The stable vertex
+    Array row zero is the south edge and maps to ``y=0``; column zero is the
+    west edge and maps to ``x=0``.  Thus +X is East, +Y is North, and +Z is Up.
+    Each grid cell uses the same lower-left to upper-right diagonal.  The stable vertex
     and face order makes repeated construction byte-for-byte deterministic at
     the NumPy topology level.
 
@@ -104,6 +105,10 @@ def build_rectangular_terrain_mesh(
         "base_thickness_mm": base_thickness,
         "source_elevation_min_mm": float(np.min(heights)),
         "source_elevation_max_mm": float(np.max(heights)),
+        "east_axis": "+X",
+        "north_axis": "+Y",
+        "up_axis": "+Z",
+        "south_edge_row": 0,
     }
 
     _assert_closed_positive_mesh(mesh)

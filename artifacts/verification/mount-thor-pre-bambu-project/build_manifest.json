@@ -1,0 +1,37 @@
+{
+  "artifacts": {
+    "bambu_studio_validation": "bambu_studio_validation.json",
+    "manifest": "build_manifest.json",
+    "model_3mf": "model.3mf",
+    "model_stl": "model.stl",
+    "original_nodata_mask": "original_nodata_mask.tif",
+    "preview_glb": "preview.glb",
+    "preview_png": "preview.png",
+    "processed_dem": "processed_dem.tif",
+    "provenance": "provenance.json",
+    "resolved_config": "build_config.resolved.yaml",
+    "slicer_validation": "slicer_validation.json",
+    "source_acquisition": "source_acquisition.json",
+    "validation_html": "validation.html",
+    "validation_json": "validation.json"
+  },
+  "generated_at": "2026-07-31T03:12:16.708255+00:00",
+  "resolved_config_sha256": "cecbcf2c1a2044f4387d8ac2e814f499d09b615aad5e1d9f7606e768d8a1aaf3",
+  "sha256": {
+    "bambu_studio_validation": "ce9afe6400826266ff6d6f3a5e6d840be04c3b02f51a46de665736232bbfb131",
+    "model_3mf": "33ecf0823f6d35141cc4f7941b59c26725c8f6e0e5deaa3397c4b62b57eab568",
+    "model_stl": "dadd3167a4d28e64938bef8d5c4e829772e24e497772832fa5809eba99557f35",
+    "original_nodata_mask": "e59e75c103dee1affe8486e76b513062de8559715e468f7619226fca066ac966",
+    "preview_glb": "40f703123d24150cf7df2f692bb3e608d24e36af40511df6049a8233ac9a309a",
+    "preview_png": "77fcc8ff84dcd43cc81df9d785fb44d5bb9c2b83434bf42b19c1252c86e5d76f",
+    "processed_dem": "e6d501d87def5073541171b17d6fe22e3cd194d2a810ea7313d8b82134cee954",
+    "provenance": "d444ba6031318de3f9fce4a3dd47724966c437fb87f1f40b5e3ce9ee213d26a0",
+    "resolved_config": "cecbcf2c1a2044f4387d8ac2e814f499d09b615aad5e1d9f7606e768d8a1aaf3",
+    "slicer_validation": "f51264456f9ee00631e404f4359e23906a830b73d61650e465b4fd16e6f2835b",
+    "source_acquisition": "204cfd9042f1be896636767b5607e2812ccf1164cd8bc590d37ed21914c40aa1",
+    "validation_html": "c0d4548c6c5b6d927d367cc84f52db826567e183aedc0e6867596a5cd5ae597d",
+    "validation_json": "1ec7146be24ab39dda9faa93776f095a7b1eb0cac22ce6c1b31f30fcb0581cad"
+  },
+  "source_sha256": "6c85376e74a5df5997d1cb4caf7d76727c7b83c79f1c553be7bfceab1601415e",
+  "topoforge_version": "0.1.0"
+}

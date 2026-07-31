@@ -1,0 +1,203 @@
+diff --git a/examples/real-terrain/README.md b/examples/real-terrain/README.md
+new file mode 100644
+index 0000000..6dd6365
+--- /dev/null
++++ b/examples/real-terrain/README.md
+@@ -0,0 +1,28 @@
++# Real terrain example models
++
++These examples use peak-centred, 13 km square Copernicus DEM GLO-30 DSM crops.
++They preserve the source grid, map east to `+X` and north to `+Y`, and fit the
++complete terrain relief into a `180 mm` footprint with a `48 mm` total-height
++limit and a `3 mm` printable base.
++
++```bash
++uv run topoforge build --config examples/real-terrain/great-trango-tower.yaml
++uv run topoforge build --config examples/real-terrain/mount-thor.yaml
++```
++
++The source rasters and acquisition manifests are generated with:
++
++```bash
++uv run topoforge fetch-dem \
++  --center 76.2014796 35.7574728 --radius-m 6500 \
++  --output downloads/examples/great-trango-tower-glo30.tif
++
++uv run topoforge fetch-dem \
++  --center -65.3203097 66.5380298 --radius-m 6500 \
++  --output downloads/examples/mount-thor-glo30.tif
++```
++
++The resulting bundles contain STL and 3MF manufacturing models, a GLB preview,
++a rendered PNG, the processed DEM, source NoData mask, provenance, resolved
++configuration, checksum manifest, and geometry validation reports.
++
+diff --git a/examples/real-terrain/great-trango-tower.yaml b/examples/real-terrain/great-trango-tower.yaml
+new file mode 100644
+index 0000000..754fdbd
+--- /dev/null
++++ b/examples/real-terrain/great-trango-tower.yaml
+@@ -0,0 +1,48 @@
++dem_path: downloads/examples/great-trango-tower-glo30.tif
++output_dir: outputs/great-trango-tower-example
++model_width_mm: 180.0
++model_depth_mm: null
++base_thickness_mm: 3.0
++terrain_mode: best-available
++dataset_type: dsm
++dataset_name: Copernicus DEM GLO-30 2021 — Great Trango Tower
++dataset_version: AWS mirror 2021
++acquisition_period: TanDEM-X primarily 2011-2015; Copernicus DEM 2021 release
++source_provider: copernicus-aws
++source_download_time: "2026-07-31T03:07:31.210491+00:00"
++source_urls:
++  - https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N35_00_E076_00_DEM/Copernicus_DSM_COG_10_N35_00_E076_00_DEM.tif
++source_checksums:
++  Copernicus_DSM_COG_10_N35_00_E076_00_DEM: 362c08afd374afb88ac380a34b3ac3536e750f2d339d259075f01e659073473f
++source_acquisition_manifest: downloads/examples/great-trango-tower-glo30.tif.source_acquisition.json
++vertical_crs: EPSG:3855
++vertical_datum: EGM2008
++data_license: Copernicus-DEM-GLO-30-F
++attribution: >-
++  © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018
++  provided under COPERNICUS by the European Union and ESA; all rights reserved.
++vertical_scale_mode: fit-height
++vertical_exaggeration: 1.0
++max_height_mm: 48.0
++min_vertical_exaggeration: 0.1
++max_vertical_exaggeration: 50.0
++robust_low_percentile: 0.5
++robust_high_percentile: 99.5
++baseline_mode: minimum
++nodata_max_fraction: 0.01
++nodata_max_hole_pixels: 64
++sampling_mode: source-preserving
++mesh_sampling_mm: null
++max_grid_cells: 500000
++max_estimated_memory_mb: 768.0
++printer_profile:
++  profile_id: bambu-p2s-0.4
++  build_volume_mm: [256.0, 256.0, 256.0]
++  nozzle_diameter_mm: 0.4
++  layer_height_mm: 0.2
++  minimum_feature_mm: 0.5
++  preferred_mesh_sampling_mm: 0.5
++  minimum_base_thickness_mm: 2.0
++  connector_tolerance_mm: 0.2
++output_formats: [stl, 3mf, glb]
++
+diff --git a/examples/real-terrain/mount-thor.yaml b/examples/real-terrain/mount-thor.yaml
+new file mode 100644
+index 0000000..3d1a1ae
+--- /dev/null
++++ b/examples/real-terrain/mount-thor.yaml
+@@ -0,0 +1,47 @@
++dem_path: downloads/examples/mount-thor-glo30.tif
++output_dir: outputs/mount-thor-example
++model_width_mm: 180.0
++model_depth_mm: null
++base_thickness_mm: 3.0
++terrain_mode: best-available
++dataset_type: dsm
++dataset_name: Copernicus DEM GLO-30 2021 — Mount Thor
++dataset_version: AWS mirror 2021
++acquisition_period: TanDEM-X primarily 2011-2015; Copernicus DEM 2021 release
++source_provider: copernicus-aws
++source_download_time: "2026-07-31T03:07:55.077380+00:00"
++source_urls:
++  - https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N66_00_W066_00_DEM/Copernicus_DSM_COG_10_N66_00_W066_00_DEM.tif
++source_checksums:
++  Copernicus_DSM_COG_10_N66_00_W066_00_DEM: 6418e945ca4181b599c0db8f6e346f413835ec69b034bd7e1b587eeb2ea01e12
++source_acquisition_manifest: downloads/examples/mount-thor-glo30.tif.source_acquisition.json
++vertical_crs: EPSG:3855
++vertical_datum: EGM2008
++data_license: Copernicus-DEM-GLO-30-F
++attribution: >-
++  © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018
++  provided under COPERNICUS by the European Union and ESA; all rights reserved.
++vertical_scale_mode: fit-height
++vertical_exaggeration: 1.0
++max_height_mm: 48.0
++min_vertical_exaggeration: 0.1
++max_vertical_exaggeration: 50.0
++robust_low_percentile: 0.5
++robust_high_percentile: 99.5
++baseline_mode: minimum
++nodata_max_fraction: 0.01
++nodata_max_hole_pixels: 64
++sampling_mode: source-preserving
++mesh_sampling_mm: null
++max_grid_cells: 500000
++max_estimated_memory_mb: 768.0
++printer_profile:
++  profile_id: bambu-p2s-0.4
++  build_volume_mm: [256.0, 256.0, 256.0]
++  nozzle_diameter_mm: 0.4
++  layer_height_mm: 0.2
++  minimum_feature_mm: 0.5
++  preferred_mesh_sampling_mm: 0.5
++  minimum_base_thickness_mm: 2.0
++  connector_tolerance_mm: 0.2
++output_formats: [stl, 3mf, glb]
+diff --git a/scripts/rollback-terrain-examples.sh b/scripts/rollback-terrain-examples.sh
+new file mode 100755
+index 0000000..5bebce8
+--- /dev/null
++++ b/scripts/rollback-terrain-examples.sh
+@@ -0,0 +1,56 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++mode="${1:---check}"
++if [[ "${2:-}" == "--root" && -n "${3:-}" ]]; then
++  repo_root="$(cd "$3" && pwd)"
++fi
++
++paths=(
++  examples/real-terrain
++  downloads/examples/great-trango-tower-glo30.tif
++  downloads/examples/great-trango-tower-glo30.tif.source_acquisition.json
++  downloads/examples/mount-thor-glo30.tif
++  downloads/examples/mount-thor-glo30.tif.source_acquisition.json
++  outputs/great-trango-tower-example
++  outputs/mount-thor-example
++  artifacts/slicer/great-trango-tower-p2s.gcode
++  artifacts/slicer/mount-thor-p2s.gcode
++  artifacts/verification/terrain-examples-verification.json
++  artifacts/verification/terrain-examples-summary.json
++  artifacts/verification/terrain-examples-rollback-test.txt
++  artifacts/patches/terrain-examples.patch
++  artifacts/previews/great-trango-tower-example.jpg
++  artifacts/previews/mount-thor-example.jpg
++  artifacts/previews/great-trango-tower-glo30-quicklook.jpg
++  artifacts/previews/great-trango-tower-glo30-quicklook.png
++  artifacts/previews/mount-thor-glo30-quicklook.jpg
++  artifacts/previews/mount-thor-glo30-quicklook.png
++  artifacts/logs/great-trango-tower-fetch.log
++  artifacts/logs/great-trango-tower-build.log
++  artifacts/logs/great-trango-tower-bambu-slice.log
++  artifacts/logs/mount-thor-fetch.log
++  artifacts/logs/mount-thor-build.log
++  artifacts/logs/mount-thor-bambu-slice.log
++)
++
++case "$mode" in
++  --check)
++    printf 'Rollback root: %s\n' "$repo_root"
++    for path in "${paths[@]}"; do
++      [[ -e "$repo_root/$path" ]] && printf 'present  %s\n' "$path" || printf 'absent   %s\n' "$path"
++    done
++    ;;
++  --apply)
++    for path in "${paths[@]}"; do
++      rm -rf -- "$repo_root/$path"
++    done
++    printf 'Removed terrain-example task artifacts from %s\n' "$repo_root"
++    printf 'Shared content-addressed provider cache was intentionally preserved.\n'
++    ;;
++  *)
++    printf 'Usage: %s [--check|--apply] [--root PATH]\n' "$0" >&2
++    exit 2
++    ;;
++esac

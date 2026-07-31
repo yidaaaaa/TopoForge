@@ -1,0 +1,2455 @@
+diff --git a/.agent/DECISIONS.md b/.agent/DECISIONS.md
+index 78e401f..77cd9bb 100644
+--- a/.agent/DECISIONS.md
++++ b/.agent/DECISIONS.md
+@@ -93,3 +93,18 @@
+ - **Context:** Provider and local builds need one explicit bbox/center-radius contract, including dateline, high-latitude, cross-zone, partial-overlap, and empty-result behavior.
+ - **Decision:** Normalize user input to recorded WGS84 bounds/geometry. Use UTM only for a single mid-latitude zone and local AEQD otherwise. Clip local rasters to an explicit pixel window before metric reprojection; record full/partial coverage and reject empty/NoData-only results.
+ - **Impact:** Local AOI behavior is complete and testable. Global providers must consume this contract rather than implementing a parallel download-first AOI path.
++
++
++## ADR-013 — Provider bytes are content-addressed and network requests are bounded
++
++- **Date:** 2026-07-31
++- **Context:** A no-key provider needs reproducible source identities, corruption detection, operational limits, and offline tests before global downloads enter the manufacturing engine.
++- **Decision:** Index canonical provider/dataset/version/URL requests separately from immutable SHA-256 objects; atomically publish and reopen both. Enforce timeout, bounded attempts, exponential backoff, minimum request spacing, and byte limits. Preserve ETag, Last-Modified, byte count, attempts, cache state, and content hash.
++- **Impact:** Cache hits are verified rather than trusted by filename, corrupt content is refetched, duplicate content is deduplicated, and network behavior has testable upper bounds.
++
++## ADR-014 — Copernicus AWS plans one complete product through normalized AOIs
++
++- **Date:** 2026-07-31
++- **Context:** Filename formulas do not establish coverage, partial GLO-30/GLO-90 blending obscures dataset identity, and projected AOI rectangles can contain cells outside source footprints.
++- **Decision:** Treat `tileList.txt` as coverage authority; use GLO-30 only when every required one-degree cell exists, otherwise use complete GLO-90 or report incomplete coverage. Reproject source-footprint masks independently, crop only reprojection gaps, preserve source NoData, and enter the resulting metric raster plus `source_acquisition.json` through the local build engine.
++- **Impact:** `build-global` shares local AOI/sampling/orientation/validation behavior, source product identity remains explicit, and the real Amazon tile-edge case is documented rather than filled.
+diff --git a/.agent/ISSUES.md b/.agent/ISSUES.md
+index a727bfa..0932700 100644
+--- a/.agent/ISSUES.md
++++ b/.agent/ISSUES.md
+@@ -33,12 +33,12 @@
+ ## TF-004 — Global provider and geocoding path not implemented
+ 
+ - **Severity:** High
+-- **Status:** Open
++- **Status:** Partially resolved
+ - **Reproduction:** `topoforge providers` shows global entries as `implemented: false`; `topoforge build` currently requires `--dem` or a local config.
+ - **Expected behavior:** bbox/center/place inputs can select, fetch, cache, and build real global data.
+-- **Actual behavior:** Official-source research and provider contract exist; fetch/selection/cache/AOI code is pending Phase 3.
++- **Actual behavior:** The no-key Copernicus AWS path, cache, bounded transport, normalized AOI acquisition, `fetch-dem`, `build-global`, provenance, offline tests, and a real Amazon build/slice are complete. Candidate geocoding, quality masks, additional providers, and explainable multi-provider fallback remain.
+ - **Owner:** Primary agent
+-- **Resolution:** Planned Copernicus AWS no-key provider followed by USGS/OpenTopography options.
++- **Resolution:** Copernicus AWS is now the implemented default global DSM route; continue with quality masks, provider selection/fallback, then Nominatim-compatible candidate handling.
+ 
+ ## TF-005 — Exhaustive self-intersection backend pending
+ 
+@@ -141,3 +141,13 @@
+ - **Status:** Accepted data limitation
+ - **Evidence:** The source DSM maximum is 7437.5244 m while the retained published nominal context is 7556.0 m, a 118.4756 m difference.
+ - **Resolution:** Record dataset type `dsm`, vertical datum `EGM2008`, the comparison, and `terrain_adjustment_applied=false`. No synthetic spike, sharpening, or peak-height correction is performed.
++
++
++## TF-016 — Provider AOI at COG tile edge retained a reprojection-only gap
++
++- **Severity:** High
++- **Status:** Resolved
++- **Reproduction:** Acquire Amazon bbox `[-60.02, -3.13, -60.00, -3.11]`; the east boundary is exactly the source tile boundary and the first metric acquisition contained one 74-pixel NoData column.
++- **Expected behavior:** Reprojection-only cells outside source footprints are distinguished from source NoData and excluded without interpolation or silent AOI expansion.
++- **Actual behavior:** The v1 local build correctly stopped at the NoData edge-gap gate.
++- **Resolution:** Reproject a separate all-source footprint mask, select the largest all-covered rectangle, update the transform, report the original/selected shapes and pixel window, and preserve genuine source NoData. The v2 real build and slice pass.
+diff --git a/.agent/PLANS.md b/.agent/PLANS.md
+index 24102a5..f29ee4e 100644
+--- a/.agent/PLANS.md
++++ b/.agent/PLANS.md
+@@ -66,12 +66,12 @@ Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> wi
+ - [x] Apply explicit AOI pixel-window clipping to local rasters with coverage/NoData records.
+ - [x] Implement antimeridian/high-latitude/cross-zone projection decisions and tests.
+ - [ ] Implement Nominatim-compatible geocoding with candidate handling and usage policy.
+-- [ ] Implement content-addressed cache, timeout/retry/rate-limit boundaries.
+-- [ ] Implement configurable `copernicus-aws` GLO-30/GLO-90 COG provider.
++- [x] Implement content-addressed cache, timeout/retry/rate-limit boundaries.
++- [x] Implement configurable `copernicus-aws` GLO-30/GLO-90 COG provider.
+ - [ ] Preserve Copernicus quality/editing masks when assets expose them.
+ - [ ] Implement explainable auto-selection and recorded fallback attempts.
+ - [x] Execute a real Gongga build from fetched DSM data (reference bundle complete; integrated provider automation remains pending).
+-- [ ] Execute a real Amazon low-relief build with DSM semantics visible.
++- [x] Execute a real Amazon low-relief build with DSM semantics visible; v2 provider/cache bundle and diagnostic slice completed 2026-07-31.
+ - [x] Slice at least one global-provider 3MF and publish milestone-02 evidence (official Bambu Studio P2S bundle).
+ 
+ ## Milestone 02 acceptance
+diff --git a/.agent/RUN_LOG.md b/.agent/RUN_LOG.md
+index 140cd34..679b1fb 100644
+--- a/.agent/RUN_LOG.md
++++ b/.agent/RUN_LOG.md
+@@ -160,3 +160,24 @@ Result: exit 0; Ruff `All checks passed!`; format `92 files already formatted`;
+ Command: construct an isolated copy of the pre-fidelity/P2S-hardened source tree, run `git apply --check`, apply `artifacts/patches/fidelity-aoi.patch` with `--whitespace=error-all`, compare the resulting regular-file tree with the captured post-change tree, execute `scripts/rollback-fidelity-aoi.sh --confirm-rollback`, and compare the reversed regular-file tree with the captured baseline.
+ 
+ Result: forward check/apply exited 0, the applied file tree matched the post-change tree, the rollback script exited 0, and the reversed file tree matched the baseline. Empty untracked directory shells are excluded because Git patches do not represent directories. The final patch hash, byte count, commands, and literal statuses are stored in `artifacts/verification/fidelity-aoi-patch-rollback-summary.txt`.
++
++
++### Content-addressed cache, bounded HTTP, and Copernicus AWS provider
++
++Command: focused offline cache/transport/provider tests covering canonical request identity, content-SHA objects, atomic reopen, same-content corruption recovery, timeout propagation, bounded retries/backoff, minimum request spacing, download limits, authoritative catalog parsing, GLO-30/GLO-90 whole-product fallback, antimeridian cells, source-footprint edge crop, and provider acquisition through the full local build engine.
++
++Result: all focused tests passed; Pyright reported 0 errors/0 warnings. `topoforge providers` now reports `copernicus-aws` implemented, `topoforge cache status` emits object/request/temp counts, and `fetch-dem`/`build-global` accept bbox or center-radius AOIs.
++
++Command: live `build-global` for Amazon bbox `[-60.02, -3.13, -60.00, -3.11]` using public Copernicus AWS GLO-30, 30 s timeout, four attempts, 0.25 s request interval, 250,000-cell/256 MiB build budgets.
++
++Result v1: catalog and 44,747,048-byte COG downloaded and verified; the local NoData gate stopped on a 74-pixel east-edge reprojection gap. Source, manifest, cache, and failure log were retained. No zero fill or terrain invention was applied.
++
++Result v2 after coverage fix: catalog and COG were verified cache hits. The independent source-footprint mask selected 74 x 74 from the original 74 x 75 grid and documented 74 discarded reprojection-only cells. The source and processed grids remain 74 x 74 at 29.7638 m with zero peak loss/shift. The 80 x 80.6587 x 9.7146 mm / 21,900-triangle bundle is watertight, manifold, winding-consistent, positive-volume, flat-bottom, and strict-3MF clean.
++
++Command: `uv run topoforge slice outputs/amazon-copernicus-aws-v2/model.3mf --slicer prusa --output artifacts/slicer/amazon-copernicus-aws-v2-prusa.gcode`.
++
++Result: exit 0; 2,085,508-byte G-code, 32 layers, 2h10m52s estimate, 9,085.44 mm / 21.85 cm3 filament, support false, and no floating/empty/out-of-bed warning. This is diagnostic evidence.
++
++Command: final `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, Amazon bundle preview, strict 3MF inspect, and cache status after code/documentation updates.
++
++Result: exit 0; Ruff `All checks passed!`; format `98 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `113 passed, 45 warnings in 7.34s`; Amazon bundle required checks true; strict lib3mf warnings 0; cache 2 request entries/2 content objects/45,857,948 bytes/0 temporary files.
+diff --git a/.agent/STATE.md b/.agent/STATE.md
+index 2f8a7f6..0c3015a 100644
+--- a/.agent/STATE.md
++++ b/.agent/STATE.md
+@@ -1,14 +1,14 @@
+ # Current State
+ 
+-- **Current milestone:** Milestone 02 — local AOI foundation complete; no-key global provider/cache is next.
+-- **Current branch/worktree:** main, /root/autodl-tmp/bambu/TopoForge; prior P2S release-hardening changes and the new fidelity/AOI work are present in the working tree.
+-- **Last completed task:** Implemented deterministic printer-aware sampling, +X East/+Y North orientation, bbox/center-radius normalization, explicit local AOI crop, fidelity reporting, real DSM rebuild, strict format reread, repeated-build comparison, and an actual PrusaSlicer diagnostic slice.
+-- **Current implementation status:** `print-aware`, `source-preserving`, and `custom` modes are implemented with cell/triangle/memory budgets. Provenance and validation distinguish 28.8508 m source resolution from 68.9589 m processed resolution. Local AOI bbox/center-radius inputs normalize in WGS84, handle antimeridian/high-latitude/cross-zone projection choices, crop source pixels, and report full/partial/empty/NoData behavior. Manufacturing coordinates are +X East, +Y North, +Z Up and are checked across STL/GLB/3MF.
+-- **Real reference result:** `/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-fidelity-v2`; 439 x 451, 791,952 triangles, 5.0415 m peak loss, 24.5163 m peak shift, watertight/manifold/winding/positive-volume/flat-bottom true. PrusaSlicer exit 0, 149 layers, support false, no floating/empty/out-of-bed warning.
+-- **Known failing tests:** None. Final gate: Ruff passed, format 92 files, Pyright 0 errors/0 warnings, Pytest 100 passed with 40 tracked warnings. Log: `artifacts/logs/fidelity-aoi-quality-gates-final.log`.
+-- **Patch and rollback:** Isolated forward `git apply --check`/`--whitespace=error-all` and executable rollback both pass; applied and reversed regular-file manifests match the captured post/pre trees. Record: `artifacts/verification/fidelity-aoi-patch-rollback-summary.txt`.
+-- **Current blockers:** None for offline local work. Network access/provider integration remains an external execution boundary.
+-- **Known warnings:** Rasterio/NumPy masked-array deprecation warnings remain tracked as TF-006. Exhaustive self-intersection remains `not_fully_checked` as TF-005. PrusaSlicer evidence is diagnostic and does not replace the official P2S release gate.
+-- **Next exact action:** Implement content-addressed cache/timeout/retry boundaries, then connect the configurable no-key global COG provider through the completed AOI normalization and local clipping path.
+-- **Next exact command:** `uv run pytest tests/unit/test_aoi.py tests/integration/test_aoi_clipping.py tests/providers -q && uv run topoforge providers`
+-- **Important paths:** `src/topoforge/raster/{aoi,sampling,processing}.py`, `src/topoforge/engine/build.py`, `outputs/gongga-copernicus-glo30-fidelity-v2`, `artifacts/verification/gongga-fidelity-v2-verification.json`, `outputs/gongga-copernicus-glo30-fidelity-v2/checksums.sha256`.
++- **Current milestone:** Milestone 02 — normalized local/global AOI build path and no-key Copernicus AWS provider/cache complete; quality masks, provider selection/fallback, and geocoding are next.
++- **Current branch/worktree:** main, `/root/autodl-tmp/bambu/TopoForge`; prior P2S and fidelity/AOI work remains present, with provider/cache changes layered on top.
++- **Last completed task:** Implemented request-indexed/content-SHA provider cache, atomic publication/reopen, corruption recovery, timeout/retry/backoff/rate limits, authoritative Copernicus GLO-30/GLO-90 catalog planning, AOI source-footprint crop, `fetch-dem`, `build-global`, bundle source acquisition provenance, and a real Amazon build/slice.
++- **Provider implementation:** `copernicus-aws` is `implemented: true`. Complete GLO-30 is preferred; complete GLO-90 is used only as a whole-AOI fallback. Dataset ids are not blended. Catalog/tile request identity, ETag, Last-Modified, byte length, content SHA-256, attempts, cache status, licences, and liability notices are retained.
++- **Real provider result:** `/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-v2`; source/processed 74 x 74 at 29.7638 m, model 80 x 80.6587 x 9.7146 mm, 21,900 triangles, watertight/manifold/winding/positive-volume/flat-bottom true, strict 3MF warnings 0. PrusaSlicer exit 0, 32 layers, support false, no floating/empty/out-of-bed warning.
++- **Boundary correction:** v1 exposed one 74-pixel reprojection-only column at the one-degree tile edge. v2 reprojects an independent source-footprint mask, selects the largest fully covered rectangle, reports the crop, and leaves genuine source NoData masked.
++- **Cache state:** `/root/autodl-tmp/bambu/TopoForge/cache/providers`; two verified objects (tile list and COG), 45,857,948 bytes, no temporary files. The successful v2 acquisition recorded catalog/tile cache hits.
++- **Existing mountain reference:** `/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-fidelity-v2` remains unchanged; its source DEM was not downloaded again.
++- **Known failing tests:** None. Final gate: Ruff passed, format 98 files, Pyright 0 errors/0 warnings, Pytest 113 passed with 45 tracked warnings. Log: `artifacts/logs/provider-cache-copernicus-quality-gates.log`.
++- **Known warnings:** Rasterio/NumPy masked-array deprecation remains TF-006. Exhaustive self-intersection remains TF-005. PrusaSlicer results are diagnostic rather than the official P2S release role.
++- **Next exact action:** Implement Copernicus quality/editing mask preservation, then explainable multi-provider fallback and Nominatim-compatible candidate geocoding.
++- **Important paths:** `src/topoforge/providers/{cache,transport,copernicus_aws}.py`, `outputs/amazon-copernicus-aws-v2`, `downloads/amazon-copernicus-aws-v2/copernicus-aws-aoi.tif.source_acquisition.json`.
+diff --git a/README.md b/README.md
+index 7a0e0ea..bcdba81 100644
+--- a/README.md
++++ b/README.md
+@@ -2,7 +2,7 @@
+ 
+ TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
+ 
+-**Implemented milestone:** validated local GeoTIFF/synthetic manufacturing core with printer-aware sampling, explicit bbox/center-radius AOI normalization and local clipping, +X East/+Y North orientation, deterministic 3MF/provenance, and real slicing. Global providers, geocoding, tiling/connectors, API, and Web remain on the authoritative roadmap in `.agent/PLANS.md`.
++**Implemented milestone:** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, bbox/center-radius AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, and real slicing. Geocoding, additional providers/fallback, tiling/connectors, API, and Web remain on the authoritative roadmap in `.agent/PLANS.md`.
+ 
+ ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
+ 
+@@ -62,6 +62,25 @@ The existing real source raster was reused without another download and rebuilt
+ 
+ The source is a DSM. A previously confirmed published nominal summit elevation is recorded only as context; `terrain_adjustment_applied=false`, so no synthetic spike or elevation correction is introduced. Exact checksums are in `outputs/gongga-copernicus-glo30-fidelity-v2/checksums.sha256`.
+ 
++## Verified no-key Amazon provider example
++
++A new small Amazon AOI was resolved through the public Copernicus AWS GLO-30 `tileList.txt`, fetched once, stored by SHA-256, acquired again entirely from cache, converted to the recorded local AEQD CRS, built, strict-read, and actually sliced:
++
++| Measurement | Result |
++| --- | --- |
++| AOI | `[-60.02, -3.13, -60.00, -3.11]` WGS84 |
++| Product | `copernicus-dem-glo-30-aws-2021` DSM / EGM2008 |
++| Source COG SHA-256 | `178ae62c3835b603631b5a6259f827d9cbfa2a4bfa4adcdae0adf7c4ee1516d7` |
++| Cache replay | catalog `hit`, source COG `hit`, zero temporary files |
++| Source/processed grid | `74 x 74 / 74 x 74` |
++| Source/processed spacing | `29.7638 m / 29.7638 m` |
++| Model | `80 x 80.6587 x 9.7146 mm`, `21,900` triangles |
++| Geometry | watertight/manifold/winding/positive-volume/flat-bottom `true` |
++| Strict 3MF | lib3mf `2.5.0`, zero warnings |
++| Diagnostic slice | PrusaSlicer exit `0`, 32 layers, no support/floating/empty/out-of-bed warning |
++
++The first acquisition at the exact one-degree tile edge exposed one 74-pixel reprojection-only column. The retained v1 failure was corrected by reprojecting an independent source-footprint mask and selecting the largest all-covered rectangle; genuine source NoData remains masked. The successful bundle is `outputs/amazon-copernicus-aws-v2`, and its copied immutable acquisition record is `source_acquisition.json`.
++
+ ## Install
+ 
+ ```bash
+@@ -95,6 +114,26 @@ uv run topoforge build \
+ 
+ A depth of `0` preserves the raster aspect ratio. An explicit depth that conflicts with the geographic aspect ratio is rejected rather than applying hidden horizontal distortion. `--center LON LAT --radius-m METRES` is the center-radius AOI form. AOIs are normalized in WGS84, clipped to source pixels before metric reprojection, and recorded in provenance.
+ 
++## Fetch or build from the no-key global provider
++
++```bash
++uv run topoforge fetch-dem \
++  --bbox -60.02 -3.13 -60.00 -3.11 \
++  --output downloads/amazon/source.tif \
++  --cache-dir cache/providers
++
++uv run topoforge build-global \
++  --bbox -60.02 -3.13 -60.00 -3.11 \
++  --output outputs/amazon \
++  --source-dir downloads/amazon \
++  --cache-dir cache/providers \
++  --size-mm 80 0
++
++uv run topoforge cache status --cache-dir cache/providers
++```
++
++`build-global` always uses the normalized AOI contract, authoritative product tile lists, one complete GLO-30 product or whole-AOI GLO-90 fallback, bounded HTTP attempts, and the same local raster/mesh/validation engine. It preserves ETag, Last-Modified, byte count, SHA-256, retry history, licence notices, coverage crop, and cache-hit state in `source_acquisition.json`.
++
+ ## Reproduce the synthetic milestone
+ 
+ ```bash
+@@ -161,13 +200,15 @@ Evidence is attached to `validation.json`, `provenance.json`, `build_manifest.js
+ 
+ ```text
+ topoforge build       local GeoTIFF to complete artifact bundle
++topoforge build-global no-key Copernicus AWS AOI to complete artifact bundle
++topoforge fetch-dem   cache and normalize a Copernicus AWS AOI GeoTIFF
+ topoforge synthetic   deterministic analytic GeoTIFF fixtures
+ topoforge inspect     raster/STL/GLB/3MF measurements
+ topoforge validate    reopened STL geometry report
+ topoforge slice       official Bambu Studio P2S G-code/parameter gate; optional diagnostics
+ topoforge preview     bundle verification and preview paths
+ topoforge providers   provider semantics and implementation state
+-topoforge cache       cache status
++topoforge cache       content-addressed provider cache status
+ topoforge doctor      Python/GDAL/PROJ/slicer versions
+ ```
+ 
+@@ -196,7 +237,7 @@ uv run pyright
+ uv run pytest
+ ```
+ 
+-The 100-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run.
++The 113-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run.
+ 
+ ## Documentation
+ 
+diff --git a/docs/architecture.md b/docs/architecture.md
+index 34f04a9..71f3fcb 100644
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -42,7 +42,7 @@ Builds use a sibling staging directory. Every required file is written and reope
+ - `provenance`: stable JSON and dependency-free HTML reports.
+ - `engine`: atomic orchestration and bundle verification.
+ - `cli`: Typer argument parsing and JSON presentation.
+-- `providers`: explainable provider contracts and capability registry.
++- `providers`: normalized-AOI provider contracts, Copernicus AWS catalog/tile planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
+ 
+ ## Geometry topology
+ 
+@@ -56,4 +56,4 @@ The interoperable 3MF path adds official lib3mf strict read with zero warnings,
+ 
+ ## Extension sequence
+ 
+-The local AOI and printer-aware sampling foundations are complete. The next provider step adds content-addressed caching and a configurable no-key global COG provider without bypassing AOI clipping. Geocoding, tiling, API, and Web remain consumers of the same core.
++The local AOI, printer-aware sampling, content-addressed cache, and configurable no-key Copernicus AWS GLO-30/GLO-90 provider are complete. Network acquisitions enter the existing local pipeline as a metric AOI raster plus `source_acquisition.json`; no download-first parallel geometry path exists. Next steps are quality-mask preservation, explainable multi-provider fallback, Nominatim-compatible candidate geocoding, tiling, API, and Web.
+diff --git a/docs/provenance.md b/docs/provenance.md
+index cf64366..0b8e2a8 100644
+--- a/docs/provenance.md
++++ b/docs/provenance.md
+@@ -8,3 +8,5 @@ Each build writes source checksums; dataset provider/name/version/type; distinct
+ Sampling/fidelity fields include `source_horizontal_resolution_m`, `processed_horizontal_resolution_m`, `source_grid_shape`, `processed_grid_shape`, `downsampling_factor`, `physical_sample_spacing_mm`, `estimated_triangle_count`, raw/processed elevation extrema, raw/processed peak coordinates, peak loss/shift and thresholds, `sampling_decision_reasons`, warnings, and `terrain_fidelity_status`. Published summit elevations are contextual comparisons only and always record whether any terrain adjustment was applied.
+ 
+ AOI provenance stores the exact user bbox or center-radius input, normalized WGS84 bounds/geometry, antimeridian status, selected local metric CRS, source pixel window, full/selected grid shape, pixel bounds, and full/partial coverage status. Orientation provenance and 3MF metadata store `east_axis`, `north_axis`, `north_edge`, `source_bounds`, and `orientation_transform`.
++
++Network builds add `source_acquisition.json` as a checksummed bundle role. It records canonical request keys, authoritative catalog and tile URLs, dataset id, product-wide fallback decisions, ETag, Last-Modified, response bytes/status, content SHA-256, cache hit/miss/corrupt state, bounded network attempts, user and normalized AOI, source-footprint crop, licence URL, attribution, liability notice, and the SHA-256 of the acquired metric raster. The same object is embedded in `provenance.json`; the resolved config records the provider and acquisition-manifest path.
+diff --git a/docs/provider-development.md b/docs/provider-development.md
+index cfc9ab2..cf877c0 100644
+--- a/docs/provider-development.md
++++ b/docs/provider-development.md
+@@ -2,6 +2,12 @@
+ 
+ A provider exposes an identifier, coverage probe, dataset metadata, and fetch operation. Selection weighs semantic match (DTM/DSM/bathymetry), coverage completeness, actual resolution, license mode, credentials, expected bytes, vertical datum compatibility, recency, and observed reliability; resolution alone never decides.
+ 
++## Implemented Copernicus AWS boundary
++
++`copernicus-aws` is implemented with configurable GLO-30/GLO-90 endpoints. It downloads and caches authoritative `tileList.txt` records, selects GLO-30 only when every AOI cell is present, falls back to a complete GLO-90 plan rather than blending dataset identities, stores immutable bytes by content SHA-256, and indexes canonical provider/dataset/version/URL requests atomically. The HTTP client enforces timeout, bounded attempts, exponential backoff, minimum request interval, declared/streamed byte limits, and a descriptive User-Agent.
++
++Acquisition writes a metric AOI GeoTIFF and `source_acquisition.json` containing the exact user/normalized AOI, plan decisions, URL, ETag, Last-Modified, bytes, SHA-256, cache status, attempts, licence/liability records, and source-footprint coverage crop. Reprojection-only gaps are removed using an independently reprojected coverage mask; source NoData remains masked. `build-global` then reuses the local processing, sampling, orientation, export, validation, and bundle-verification path.
++
+ A production provider must:
+ 
+ 1. Use configurable official endpoints, a descriptive User-Agent, timeouts, bounded retries, and polite concurrency.
+diff --git a/scripts/rollback-provider-cache-copernicus.sh b/scripts/rollback-provider-cache-copernicus.sh
+new file mode 100755
+index 0000000..1aa5a92
+--- /dev/null
++++ b/scripts/rollback-provider-cache-copernicus.sh
+@@ -0,0 +1,55 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++if [[ "${1:-}" != "--confirm-rollback" ]]; then
++  echo "usage: $0 --confirm-rollback [--remove-generated] [--remove-cache] [--patch PATH]" >&2
++  exit 2
++fi
++shift
++remove_generated=false
++remove_cache=false
++patch="artifacts/patches/provider-cache-copernicus.patch"
++while [[ $# -gt 0 ]]; do
++  case "$1" in
++    --remove-generated)
++      remove_generated=true
++      shift
++      ;;
++    --remove-cache)
++      remove_cache=true
++      shift
++      ;;
++    --patch)
++      patch="$2"
++      shift 2
++      ;;
++    *)
++      echo "unknown argument: $1" >&2
++      exit 2
++      ;;
++  esac
++done
++
++repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++cd "$repo_root"
++patch="$(realpath "$patch")"
++git apply --reverse --check "$patch"
++git apply --reverse "$patch"
++
++if [[ "$remove_generated" == true ]]; then
++  rm -rf \
++    outputs/amazon-copernicus-aws-v2 \
++    downloads/amazon-copernicus-aws-v1 \
++    downloads/amazon-copernicus-aws-v2 \
++    artifacts/slicer/amazon-copernicus-aws-v2-prusa.gcode \
++    artifacts/logs/amazon-copernicus-aws-v1-build.log \
++    artifacts/logs/amazon-copernicus-aws-v2-build.log \
++    artifacts/logs/amazon-copernicus-aws-v2-prusa-slice.log \
++    artifacts/logs/provider-cache-copernicus-quality-gates.log \
++    artifacts/verification/amazon-copernicus-aws-v2-verification.json
++fi
++if [[ "$remove_cache" == true ]]; then
++  rm -rf cache/providers
++fi
++
++echo "provider/cache/Copernicus source patch reversed"
+diff --git a/src/topoforge/cli/app.py b/src/topoforge/cli/app.py
+index 8f219bd..f99f234 100644
+--- a/src/topoforge/cli/app.py
++++ b/src/topoforge/cli/app.py
+@@ -28,7 +28,13 @@ from topoforge.models import (
+     SamplingMode,
+     VerticalScaleMode,
+ )
+-from topoforge.providers import list_provider_descriptors
++from topoforge.providers import (
++    CachingHttpClient,
++    ContentAddressedCache,
++    CopernicusAwsProvider,
++    HttpTransportConfig,
++    list_provider_descriptors,
++)
+ from topoforge.raster import SyntheticTerrain, create_synthetic_geotiff
+ from topoforge.util import sha256_file
+ from topoforge.validation import validate_mesh
+@@ -339,6 +345,187 @@ def providers() -> None:
+     _emit([item.model_dump(mode="json") for item in list_provider_descriptors()])
+ 
+ 
++@app.command("fetch-dem")
++def fetch_dem(
++    output: Annotated[Path, typer.Option("--output", "-o", help="New provider GeoTIFF path.")],
++    bbox: Annotated[
++        tuple[float, float, float, float] | None,
++        typer.Option("--bbox", metavar="WEST SOUTH EAST NORTH", help="WGS84 AOI bbox."),
++    ] = None,
++    center: Annotated[
++        tuple[float, float] | None,
++        typer.Option("--center", metavar="LON LAT", help="WGS84 AOI center."),
++    ] = None,
++    radius_m: Annotated[
++        float | None, typer.Option("--radius-m", min=0.001, help="Geodesic AOI radius.")
++    ] = None,
++    provider: Annotated[str, typer.Option("--provider")] = "copernicus-aws",
++    cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path("cache/providers"),
++    timeout_seconds: Annotated[float, typer.Option("--timeout-seconds", min=0.1)] = 30.0,
++    max_attempts: Annotated[int, typer.Option("--max-attempts", min=1, max=10)] = 4,
++    min_request_interval_seconds: Annotated[
++        float, typer.Option("--min-request-interval-seconds", min=0.0)
++    ] = 0.2,
++) -> None:
++    """Fetch, cache, verify, and AOI-crop a no-key global DEM."""
++    try:
++        if provider != "copernicus-aws":
++            raise ValueError("--provider currently supports copernicus-aws")
++        request = AreaOfInterestInput(
++            bbox_wgs84=bbox,
++            center_wgs84=center,
++            radius_m=radius_m,
++        )
++        from topoforge.raster import normalize_area_of_interest
++
++        normalized = normalize_area_of_interest(request)
++        cache_store = ContentAddressedCache(cache_dir)
++        client = CachingHttpClient(
++            cache_store,
++            HttpTransportConfig(
++                timeout_seconds=timeout_seconds,
++                max_attempts=max_attempts,
++                min_request_interval_seconds=min_request_interval_seconds,
++            ),
++        )
++        acquisition = CopernicusAwsProvider(client).acquire(normalized, output)
++        _emit(
++            {
++                "status": "completed",
++                "provider": acquisition.provider_id,
++                "dataset": acquisition.dataset.model_dump(mode="json"),
++                "aoi": acquisition.aoi,
++                "plan": acquisition.plan.model_dump(mode="json"),
++                "raster": str(acquisition.raster_path),
++                "source_acquisition": str(acquisition.acquisition_manifest_path),
++                "cache": cache_store.summary().model_dump(mode="json"),
++            }
++        )
++    except (TopoForgeError, ValueError, OSError) as exc:
++        _fail(exc)
++
++
++@app.command("build-global")
++def build_global(
++    output: Annotated[
++        Path, typer.Option("--output", "-o", help="New complete terrain bundle directory.")
++    ],
++    bbox: Annotated[
++        tuple[float, float, float, float] | None,
++        typer.Option("--bbox", metavar="WEST SOUTH EAST NORTH", help="WGS84 AOI bbox."),
++    ] = None,
++    center: Annotated[
++        tuple[float, float] | None,
++        typer.Option("--center", metavar="LON LAT", help="WGS84 AOI center."),
++    ] = None,
++    radius_m: Annotated[
++        float | None, typer.Option("--radius-m", min=0.001, help="Geodesic AOI radius.")
++    ] = None,
++    source_dir: Annotated[
++        Path | None,
++        typer.Option("--source-dir", help="New directory for acquired source evidence."),
++    ] = None,
++    cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path("cache/providers"),
++    size_mm: Annotated[tuple[float, float], typer.Option("--size-mm", metavar="WIDTH DEPTH")] = (
++        180.0,
++        0.0,
++    ),
++    base_mm: Annotated[float, typer.Option("--base-mm", min=0.01)] = 3.0,
++    max_height_mm: Annotated[float, typer.Option("--max-height-mm", min=0.01)] = 45.0,
++    printer_profile: Annotated[str, typer.Option("--printer-profile")] = (
++        DEFAULT_PRINTER_PROFILE_ID
++    ),
++    sampling_mode: Annotated[SamplingMode, typer.Option("--sampling-mode")] = (
++        SamplingMode.PRINT_AWARE
++    ),
++    mesh_sampling_mm: Annotated[float | None, typer.Option("--mesh-sampling-mm", min=0.001)] = None,
++    max_grid_cells: Annotated[int, typer.Option("--max-grid-cells", min=16)] = 1_500_000,
++    max_estimated_memory_mb: Annotated[
++        float, typer.Option("--max-estimated-memory-mb", min=1.0)
++    ] = 1024.0,
++    timeout_seconds: Annotated[float, typer.Option("--timeout-seconds", min=0.1)] = 30.0,
++    max_attempts: Annotated[int, typer.Option("--max-attempts", min=1, max=10)] = 4,
++    min_request_interval_seconds: Annotated[
++        float, typer.Option("--min-request-interval-seconds", min=0.0)
++    ] = 0.2,
++) -> None:
++    """Acquire a no-key global DSM and run the existing validated build pipeline."""
++    try:
++        if output.exists():
++            raise ValueError(f"output already exists; preserve it and choose a new path: {output}")
++        request = AreaOfInterestInput(
++            bbox_wgs84=bbox,
++            center_wgs84=center,
++            radius_m=radius_m,
++        )
++        from topoforge.raster import normalize_area_of_interest
++
++        normalized = normalize_area_of_interest(request)
++        source_root = (
++            source_dir if source_dir is not None else output.parent / f"{output.name}-source"
++        ).resolve()
++        if source_root.exists():
++            raise ValueError(
++                f"source evidence directory already exists; choose a new path: {source_root}"
++            )
++        source_raster = source_root / "copernicus-aws-aoi.tif"
++        cache_store = ContentAddressedCache(cache_dir)
++        client = CachingHttpClient(
++            cache_store,
++            HttpTransportConfig(
++                timeout_seconds=timeout_seconds,
++                max_attempts=max_attempts,
++                min_request_interval_seconds=min_request_interval_seconds,
++            ),
++        )
++        acquisition = CopernicusAwsProvider(client).acquire(normalized, source_raster)
++        dataset = acquisition.dataset
++        resolved = BuildConfig(
++            dem_path=acquisition.raster_path,
++            output_dir=output,
++            model_width_mm=size_mm[0],
++            model_depth_mm=size_mm[1] if size_mm[1] > 0 else None,
++            base_thickness_mm=base_mm,
++            max_height_mm=max_height_mm,
++            printer_profile=get_printer_profile(printer_profile),
++            sampling_mode=sampling_mode,
++            mesh_sampling_mm=mesh_sampling_mm,
++            max_grid_cells=max_grid_cells,
++            max_estimated_memory_mb=max_estimated_memory_mb,
++            aoi=request,
++            dataset_type=dataset.dataset_type,
++            dataset_name=dataset.dataset_name,
++            dataset_version=dataset.dataset_version,
++            acquisition_period=dataset.acquisition_period,
++            source_urls=dataset.source_urls,
++            vertical_crs=dataset.vertical_crs,
++            vertical_datum=dataset.vertical_datum,
++            data_license=dataset.license,
++            attribution=dataset.attribution,
++            source_provider=dataset.provider,
++            source_download_time=dataset.download_time,
++            source_checksums=dataset.checksums,
++            source_acquisition_manifest=acquisition.acquisition_manifest_path,
++        )
++        result = build_local_terrain(resolved)
++        _emit(
++            {
++                "status": "completed",
++                "provider": dataset.provider,
++                "dataset": dataset.model_dump(mode="json"),
++                "source_raster": str(acquisition.raster_path),
++                "source_acquisition": str(acquisition.acquisition_manifest_path),
++                "output_dir": str(result.output_dir),
++                "required_checks_passed": result.validation["required_checks_passed"],
++                "dimensions_mm": result.validation["dimensions_mm"],
++                "artifacts": {key: str(path) for key, path in result.artifacts.items()},
++                "cache": cache_store.summary().model_dump(mode="json"),
++            }
++        )
++    except (TopoForgeError, ValueError, OSError) as exc:
++        _fail(exc)
++
++
+ @app.command()
+ def doctor() -> None:
+     """Report the exact local runtime and external manufacturing tools."""
+@@ -368,18 +555,13 @@ def doctor() -> None:
+ 
+ @app.command()
+ def cache(
+-    action: Annotated[str, typer.Argument(help="Currently supported action: status")] = "status",
++    action: Annotated[str, typer.Argument(help="Supported action: status")] = "status",
++    cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path("cache/providers"),
+ ) -> None:
+-    """Inspect the local provider cache state."""
++    """Inspect the content-addressed provider cache state."""
+     if action != "status":
+-        _fail(ValueError("Only 'topoforge cache status' is implemented in Phase 1"))
+-    cache_dir = Path("cache").resolve()
+-    size = (
+-        sum(path.stat().st_size for path in cache_dir.rglob("*") if path.is_file())
+-        if cache_dir.exists()
+-        else 0
+-    )
+-    _emit({"path": str(cache_dir), "exists": cache_dir.exists(), "bytes": size})
++        _fail(ValueError("cache action must be status"))
++    _emit(ContentAddressedCache(cache_dir).summary().model_dump(mode="json"))
+ 
+ 
+ @app.command()
+diff --git a/src/topoforge/engine/build.py b/src/topoforge/engine/build.py
+index c7b5921..be6e445 100644
+--- a/src/topoforge/engine/build.py
++++ b/src/topoforge/engine/build.py
+@@ -171,7 +171,26 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+     stage_config = config.model_copy(update={"dem_path": source, "output_dir": stage})
+     resolved_config = config.model_copy(update={"dem_path": source, "output_dir": output})
+     artifacts = _artifact_map(stage, config.output_formats)
++    source_acquisition: dict[str, Any] | None = None
++    if resolved_config.source_acquisition_manifest is not None:
++        source_acquisition_path = resolved_config.source_acquisition_manifest.expanduser().resolve()
++        if not source_acquisition_path.is_file():
++            raise ConfigurationError(
++                f"Source acquisition manifest does not exist: {source_acquisition_path}"
++            )
++        try:
++            loaded_acquisition = json.loads(source_acquisition_path.read_text(encoding="utf-8"))
++        except (OSError, json.JSONDecodeError) as exc:
++            raise ConfigurationError(
++                f"Source acquisition manifest is not valid JSON: {source_acquisition_path}"
++            ) from exc
++        if not isinstance(loaded_acquisition, dict):
++            raise ConfigurationError("Source acquisition manifest root must be a JSON object")
++        source_acquisition = loaded_acquisition
++        artifacts["source_acquisition"] = stage / "source_acquisition.json"
+     try:
++        if source_acquisition is not None:
++            write_json(artifacts["source_acquisition"], source_acquisition)
+         processed = process_local_raster(stage_config)
+         scaling = resolve_scaling(processed.elevations_m, processed.report, resolved_config)
+         top_z_mm = apply_vertical_scale(processed.elevations_m, scaling)
+@@ -371,14 +390,35 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+             "topoforge_version": __version__,
+             "generated_at": generated_at,
+             "provider_selection": {
+-                "selected": "local",
+-                "reason": [
+-                    "user supplied a local elevation raster",
+-                    "local inputs have priority over network providers",
+-                    "no provider fallback was required",
++                "selected": processed.report.metadata.provider,
++                "reason": (
++                    [
++                        "user supplied a local elevation raster",
++                        "local inputs have priority over network providers",
++                        "no provider fallback was required",
++                    ]
++                    if processed.report.metadata.provider == "local"
++                    else list(
++                        (source_acquisition or {})
++                        .get("plan", {})
++                        .get(
++                            "decisions",
++                            ["provider acquisition manifest selected this cached raster"],
++                        )
++                    )
++                ),
++                "attempted_providers": [
++                    {
++                        "provider": processed.report.metadata.provider,
++                        "status": "selected",
++                        "dataset": processed.report.metadata.dataset_name,
++                    }
+                 ],
+-                "attempted_providers": [{"provider": "local", "status": "selected"}],
++                "source_acquisition_artifact": (
++                    "source_acquisition.json" if source_acquisition is not None else None
++                ),
+             },
++            "source_acquisition": source_acquisition,
+             "dataset": processed.report.metadata.model_dump(mode="json"),
+             "source_file_checksums": processed.report.metadata.checksums,
+             "elevation_reference_comparison": {
+diff --git a/src/topoforge/exceptions.py b/src/topoforge/exceptions.py
+index bc20642..bf513c2 100644
+--- a/src/topoforge/exceptions.py
++++ b/src/topoforge/exceptions.py
+@@ -17,5 +17,9 @@ class MeshValidationError(TopoForgeError):
+     """Raised when generated geometry fails a required invariant."""
+ 
+ 
++class ProviderFetchError(TopoForgeError):
++    """Raised when a provider asset cannot be fetched and verified within bounds."""
++
++
+ class SlicerError(TopoForgeError):
+     """Raised when an external slicer invocation fails."""
+diff --git a/src/topoforge/models/domain.py b/src/topoforge/models/domain.py
+index 6e3a8fa..7e1b991 100644
+--- a/src/topoforge/models/domain.py
++++ b/src/topoforge/models/domain.py
+@@ -146,6 +146,10 @@ class BuildConfig(BaseModel):
+     vertical_datum: str = "unknown"
+     data_license: str = "user-supplied; verify source terms"
+     attribution: str = "Provided by the user"
++    source_provider: str = "local"
++    source_download_time: str = "not-applicable-local-input"
++    source_checksums: dict[str, str] = Field(default_factory=dict)
++    source_acquisition_manifest: Path | None = None
+     reference_peak_elevation_m: float | None = None
+     reference_peak_elevation_note: str | None = None
+     vertical_scale_mode: VerticalScaleMode = VerticalScaleMode.AUTO_PERCEPTUAL
+diff --git a/src/topoforge/providers/__init__.py b/src/topoforge/providers/__init__.py
+index d8203c9..98a6bbf 100644
+--- a/src/topoforge/providers/__init__.py
++++ b/src/topoforge/providers/__init__.py
+@@ -1,11 +1,55 @@
+-"""Elevation provider protocol and provider registry."""
++"""Elevation provider protocol, cache, transport, and registry."""
+ 
++from topoforge.providers.cache import (
++    CacheEntry,
++    CacheIdentity,
++    CacheLookup,
++    CacheStatus,
++    CacheSummary,
++    ContentAddressedCache,
++)
++from topoforge.providers.copernicus_aws import (
++    CopernicusAwsConfig,
++    CopernicusAwsProvider,
++    CopernicusPlan,
++    CopernicusProduct,
++    CopernicusTile,
++    ProviderAcquisition,
++    parse_tile_list,
++    required_tile_coordinates,
++    tile_id,
++)
+ from topoforge.providers.protocol import CoverageInfo, ElevationProvider, ProviderDescriptor
+ from topoforge.providers.registry import list_provider_descriptors
++from topoforge.providers.transport import (
++    CachingHttpClient,
++    DownloadResult,
++    HttpTransportConfig,
++    NetworkAttempt,
++)
+ 
+ __all__ = [
++    "CacheEntry",
++    "CacheIdentity",
++    "CacheLookup",
++    "CacheStatus",
++    "CacheSummary",
++    "CachingHttpClient",
++    "ContentAddressedCache",
++    "CopernicusAwsConfig",
++    "CopernicusAwsProvider",
++    "CopernicusPlan",
++    "CopernicusProduct",
++    "CopernicusTile",
+     "CoverageInfo",
++    "DownloadResult",
+     "ElevationProvider",
++    "HttpTransportConfig",
++    "NetworkAttempt",
++    "ProviderAcquisition",
+     "ProviderDescriptor",
+     "list_provider_descriptors",
++    "parse_tile_list",
++    "required_tile_coordinates",
++    "tile_id",
+ ]
+diff --git a/src/topoforge/providers/cache.py b/src/topoforge/providers/cache.py
+new file mode 100644
+index 0000000..f7085e5
+--- /dev/null
++++ b/src/topoforge/providers/cache.py
+@@ -0,0 +1,293 @@
++"""Content-addressed provider cache with atomic indexes and checksum verification."""
++
++from __future__ import annotations
++
++import json
++import os
++import shutil
++import tempfile
++from enum import StrEnum
++from pathlib import Path
++from typing import Any
++
++from pydantic import BaseModel, ConfigDict, Field, model_validator
++
++from topoforge.util import sha256_bytes, sha256_file
++
++
++class CacheStatus(StrEnum):
++    """Result of resolving one immutable provider request."""
++
++    HIT = "hit"
++    MISS = "miss"
++    CORRUPT = "corrupt"
++
++
++class CacheIdentity(BaseModel):
++    """Stable identity of one immutable provider object request."""
++
++    model_config = ConfigDict(extra="forbid", frozen=True)
++
++    provider_id: str = Field(min_length=1)
++    dataset_id: str = Field(min_length=1)
++    dataset_version: str = Field(min_length=1)
++    url: str = Field(min_length=1)
++
++    @model_validator(mode="after")
++    def validate_url(self) -> CacheIdentity:
++        if not self.url.startswith(("http://", "https://")):
++            raise ValueError("provider cache URLs must use http or https")
++        return self
++
++    @property
++    def request_key(self) -> str:
++        payload = json.dumps(
++            self.model_dump(mode="json"),
++            sort_keys=True,
++            separators=(",", ":"),
++            ensure_ascii=True,
++        ).encode("utf-8")
++        return sha256_bytes(payload)
++
++
++class CacheEntry(BaseModel):
++    """Verified request index pointing to an immutable content object."""
++
++    model_config = ConfigDict(extra="forbid", frozen=True)
++
++    schema_version: int = 1
++    request_key: str = Field(pattern=r"^[0-9a-f]{64}$")
++    provider_id: str
++    dataset_id: str
++    dataset_version: str
++    url: str
++    object_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
++    object_size_bytes: int = Field(ge=0)
++    object_relpath: str
++    etag: str | None = None
++    last_modified: str | None = None
++    media_type: str | None = None
++    response_status: int = Field(ge=100, le=599)
++    fetched_at: str
++    attempts: int = Field(ge=1)
++
++    def matches(self, identity: CacheIdentity) -> bool:
++        return (
++            self.request_key == identity.request_key
++            and self.provider_id == identity.provider_id
++            and self.dataset_id == identity.dataset_id
++            and self.dataset_version == identity.dataset_version
++            and self.url == identity.url
++        )
++
++
++class CacheLookup(BaseModel):
++    """Cache lookup outcome with a reason for miss/corruption."""
++
++    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
++
++    status: CacheStatus
++    entry: CacheEntry | None = None
++    path: Path | None = None
++    reason: str
++
++
++class CacheSummary(BaseModel):
++    """Measured cache state for CLI/status evidence."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    root: str
++    exists: bool
++    request_entries: int = Field(ge=0)
++    content_objects: int = Field(ge=0)
++    content_bytes: int = Field(ge=0)
++    temporary_files: int = Field(ge=0)
++
++
++class ContentAddressedCache:
++    """Store immutable bytes by SHA-256 and request indexes by canonical identity."""
++
++    def __init__(self, root: Path) -> None:
++        self.root = root.resolve()
++        self.objects_dir = self.root / "objects"
++        self.requests_dir = self.root / "requests"
++        self.temporary_dir = self.root / "tmp"
++
++    def _ensure_layout(self) -> None:
++        for path in (self.objects_dir, self.requests_dir, self.temporary_dir):
++            path.mkdir(parents=True, exist_ok=True)
++
++    def request_path(self, identity: CacheIdentity) -> Path:
++        key = identity.request_key
++        return self.requests_dir / key[:2] / f"{key}.json"
++
++    def object_path(self, sha256: str) -> Path:
++        return self.objects_dir / sha256[:2] / sha256
++
++    def temporary_path(self, prefix: str = "download-") -> Path:
++        self._ensure_layout()
++        descriptor, raw_path = tempfile.mkstemp(prefix=prefix, dir=self.temporary_dir)
++        os.close(descriptor)
++        return Path(raw_path)
++
++    @staticmethod
++    def _write_json_atomic(path: Path, value: dict[str, Any]) -> None:
++        path.parent.mkdir(parents=True, exist_ok=True)
++        descriptor, raw_path = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
++        temporary = Path(raw_path)
++        try:
++            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
++                json.dump(value, stream, indent=2, sort_keys=True, ensure_ascii=False)
++                stream.write("\n")
++                stream.flush()
++                os.fsync(stream.fileno())
++            os.replace(temporary, path)
++        finally:
++            temporary.unlink(missing_ok=True)
++
++    def lookup(self, identity: CacheIdentity) -> CacheLookup:
++        index_path = self.request_path(identity)
++        if not index_path.is_file():
++            return CacheLookup(status=CacheStatus.MISS, reason="request index is absent")
++        try:
++            entry = CacheEntry.model_validate_json(index_path.read_text(encoding="utf-8"))
++        except (OSError, ValueError) as exc:
++            return CacheLookup(
++                status=CacheStatus.CORRUPT,
++                reason=f"request index is invalid: {type(exc).__name__}",
++            )
++        if not entry.matches(identity):
++            return CacheLookup(status=CacheStatus.CORRUPT, entry=entry, reason="identity mismatch")
++        expected_relpath = self.object_path(entry.object_sha256).relative_to(self.root).as_posix()
++        if entry.object_relpath != expected_relpath:
++            return CacheLookup(
++                status=CacheStatus.CORRUPT,
++                entry=entry,
++                reason="object path is not canonical for its content hash",
++            )
++        object_path = self.root / entry.object_relpath
++        if not object_path.is_file():
++            return CacheLookup(
++                status=CacheStatus.CORRUPT,
++                entry=entry,
++                reason="content object is absent",
++            )
++        if object_path.stat().st_size != entry.object_size_bytes:
++            return CacheLookup(
++                status=CacheStatus.CORRUPT,
++                entry=entry,
++                path=object_path,
++                reason="content length differs from request index",
++            )
++        if sha256_file(object_path) != entry.object_sha256:
++            return CacheLookup(
++                status=CacheStatus.CORRUPT,
++                entry=entry,
++                path=object_path,
++                reason="content SHA-256 differs from request index",
++            )
++        return CacheLookup(
++            status=CacheStatus.HIT,
++            entry=entry,
++            path=object_path,
++            reason="request index and content SHA-256 verified",
++        )
++
++    def invalidate(self, identity: CacheIdentity) -> None:
++        """Remove only the mutable request index; immutable objects remain deduplicated."""
++        self.request_path(identity).unlink(missing_ok=True)
++
++    def store(
++        self,
++        identity: CacheIdentity,
++        source: Path,
++        *,
++        etag: str | None,
++        last_modified: str | None,
++        media_type: str | None,
++        response_status: int,
++        fetched_at: str,
++        attempts: int,
++    ) -> CacheLookup:
++        self._ensure_layout()
++        content_sha256 = sha256_file(source)
++        content_size = source.stat().st_size
++        object_path = self.object_path(content_sha256)
++        object_path.parent.mkdir(parents=True, exist_ok=True)
++        if object_path.exists() and (
++            object_path.stat().st_size != content_size or sha256_file(object_path) != content_sha256
++        ):
++            object_path.unlink()
++        if not object_path.exists():
++            temporary = self.temporary_path(prefix="publish-")
++            try:
++                with source.open("rb") as input_stream, temporary.open("wb") as output_stream:
++                    shutil.copyfileobj(input_stream, output_stream, length=1024 * 1024)
++                    output_stream.flush()
++                    os.fsync(output_stream.fileno())
++                if sha256_file(temporary) != content_sha256:
++                    raise OSError("cache publication changed content bytes")
++                os.replace(temporary, object_path)
++            finally:
++                temporary.unlink(missing_ok=True)
++        entry = CacheEntry(
++            request_key=identity.request_key,
++            provider_id=identity.provider_id,
++            dataset_id=identity.dataset_id,
++            dataset_version=identity.dataset_version,
++            url=identity.url,
++            object_sha256=content_sha256,
++            object_size_bytes=content_size,
++            object_relpath=object_path.relative_to(self.root).as_posix(),
++            etag=etag,
++            last_modified=last_modified,
++            media_type=media_type,
++            response_status=response_status,
++            fetched_at=fetched_at,
++            attempts=attempts,
++        )
++        self._write_json_atomic(self.request_path(identity), entry.model_dump(mode="json"))
++        return self.lookup(identity)
++
++    def materialize(self, entry: CacheEntry, destination: Path) -> Path:
++        source = self.root / entry.object_relpath
++        if not source.is_file() or sha256_file(source) != entry.object_sha256:
++            raise OSError("cache object failed verification before materialization")
++        destination = destination.resolve()
++        destination.parent.mkdir(parents=True, exist_ok=True)
++        descriptor, raw_path = tempfile.mkstemp(
++            prefix=f".{destination.name}.", dir=destination.parent
++        )
++        os.close(descriptor)
++        temporary = Path(raw_path)
++        try:
++            shutil.copyfile(source, temporary)
++            if sha256_file(temporary) != entry.object_sha256:
++                raise OSError("materialized cache object failed SHA-256 verification")
++            os.replace(temporary, destination)
++        finally:
++            temporary.unlink(missing_ok=True)
++        return destination
++
++    def summary(self) -> CacheSummary:
++        if not self.root.exists():
++            return CacheSummary(
++                root=str(self.root),
++                exists=False,
++                request_entries=0,
++                content_objects=0,
++                content_bytes=0,
++                temporary_files=0,
++            )
++        request_entries = sum(1 for path in self.requests_dir.rglob("*.json") if path.is_file())
++        objects = [path for path in self.objects_dir.rglob("*") if path.is_file()]
++        temporary_files = sum(1 for path in self.temporary_dir.rglob("*") if path.is_file())
++        return CacheSummary(
++            root=str(self.root),
++            exists=True,
++            request_entries=request_entries,
++            content_objects=len(objects),
++            content_bytes=sum(path.stat().st_size for path in objects),
++            temporary_files=temporary_files,
++        )
+diff --git a/src/topoforge/providers/copernicus_aws.py b/src/topoforge/providers/copernicus_aws.py
+new file mode 100644
+index 0000000..2e40cc9
+--- /dev/null
++++ b/src/topoforge/providers/copernicus_aws.py
+@@ -0,0 +1,532 @@
++"""No-key Copernicus DEM AWS 2021 COG provider using normalized AOIs."""
++
++from __future__ import annotations
++
++import json
++import math
++import re
++from dataclasses import dataclass, replace
++from datetime import UTC, datetime
++from enum import StrEnum
++from pathlib import Path
++from typing import Any
++
++import numpy as np
++import rasterio
++from affine import Affine
++from pydantic import BaseModel, ConfigDict, Field
++from pyproj import CRS, Transformer
++from rasterio.enums import Resampling
++from rasterio.errors import RasterioError
++from rasterio.transform import from_bounds
++from rasterio.warp import reproject
++from shapely.geometry import shape
++from shapely.ops import transform as transform_geometry
++
++from topoforge.exceptions import ProviderFetchError
++from topoforge.models import AreaOfInterest, DatasetMetadata, DatasetType
++from topoforge.providers.cache import CacheIdentity
++from topoforge.providers.protocol import CoverageInfo
++from topoforge.providers.transport import CachingHttpClient, DownloadResult
++from topoforge.raster.aoi import aoi_provenance
++from topoforge.raster.processing import largest_true_rectangle
++from topoforge.util import sha256_file
++
++_LICENSE_URL = (
++    "https://dataspace.copernicus.eu/sites/default/files/media/files/2025-06/"
++    "copernicus_contributing_mission_data_access_v2_cop_dem_licenses.pdf"
++)
++_ATTRIBUTION = (
++    "© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 "
++    "provided under COPERNICUS by the European Union and ESA; all rights reserved."
++)
++_TILE_PATTERN = re.compile(r"Copernicus_DSM_COG_(?:10|30)_[NS]\d{2}_00_[EW]\d{3}_00_DEM")
++
++
++class CopernicusProduct(StrEnum):
++    """AWS mirror product identifiers kept distinct in provenance."""
++
++    GLO_30 = "glo-30"
++    GLO_90 = "glo-90"
++
++
++@dataclass(frozen=True, slots=True)
++class _ProductSpec:
++    product: CopernicusProduct
++    dataset_id: str
++    dataset_name: str
++    resolution_m: float
++    cog_code: str
++    base_url: str
++    tile_list_url: str
++    license_id: str
++    liability_notice: str
++
++
++_DEFAULT_SPECS = {
++    CopernicusProduct.GLO_30: _ProductSpec(
++        product=CopernicusProduct.GLO_30,
++        dataset_id="copernicus-dem-glo-30-aws-2021",
++        dataset_name="Copernicus DEM GLO-30 AWS 2021",
++        resolution_m=30.0,
++        cog_code="10",
++        base_url="https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com",
++        tile_list_url="https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/tileList.txt",
++        license_id="Copernicus-DEM-GLO-30-F",
++        liability_notice=(
++            "The organisations in charge of the Copernicus programme by law or by "
++            "delegation do not incur any liability for any use of the Copernicus WorldDEM-30."
++        ),
++    ),
++    CopernicusProduct.GLO_90: _ProductSpec(
++        product=CopernicusProduct.GLO_90,
++        dataset_id="copernicus-dem-glo-90-aws-2021",
++        dataset_name="Copernicus DEM GLO-90 AWS 2021",
++        resolution_m=90.0,
++        cog_code="30",
++        base_url="https://copernicus-dem-90m.s3.eu-central-1.amazonaws.com",
++        tile_list_url="https://copernicus-dem-90m.s3.eu-central-1.amazonaws.com/tileList.txt",
++        license_id="Copernicus-DEM-GLO-90-F",
++        liability_notice=(
++            "The organisations in charge of the Copernicus programme by law or by "
++            "delegation do not incur any liability for any use of the Copernicus WorldDEM™-90."
++        ),
++    ),
++}
++
++
++class CopernicusAwsConfig(BaseModel):
++    """Configurable mirror endpoints and local acquisition resource bounds."""
++
++    model_config = ConfigDict(extra="forbid", frozen=True)
++
++    glo30_base_url: str = _DEFAULT_SPECS[CopernicusProduct.GLO_30].base_url
++    glo30_tile_list_url: str = _DEFAULT_SPECS[CopernicusProduct.GLO_30].tile_list_url
++    glo90_base_url: str = _DEFAULT_SPECS[CopernicusProduct.GLO_90].base_url
++    glo90_tile_list_url: str = _DEFAULT_SPECS[CopernicusProduct.GLO_90].tile_list_url
++    max_aoi_area_m2: float = Field(default=25_000_000_000.0, gt=0)
++    max_output_cells: int = Field(default=25_000_000, ge=16)
++
++
++class CopernicusTile(BaseModel):
++    """One immutable COG source tile selected by an authoritative tile list."""
++
++    model_config = ConfigDict(extra="forbid", frozen=True)
++
++    product: CopernicusProduct
++    latitude_degree: int
++    longitude_degree: int
++    tile_id: str
++    url: str
++
++
++class CopernicusPlan(BaseModel):
++    """Single-product complete-coverage plan; products are never silently blended."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    product: CopernicusProduct
++    dataset_id: str
++    horizontal_resolution_m: float
++    tiles: list[CopernicusTile]
++    decisions: list[str]
++    missing_glo30_tiles: list[str] = Field(default_factory=list)
++
++
++class ProviderAcquisition(BaseModel):
++    """Local metric raster and complete source/cache provenance for a normalized AOI."""
++
++    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
++
++    provider_id: str
++    raster_path: Path
++    acquisition_manifest_path: Path
++    dataset: DatasetMetadata
++    aoi: dict[str, Any]
++    plan: CopernicusPlan
++    catalog_downloads: list[dict[str, Any]]
++    tile_downloads: list[dict[str, Any]]
++    generated_at: str
++
++
++def _specs(config: CopernicusAwsConfig) -> dict[CopernicusProduct, _ProductSpec]:
++    return {
++        CopernicusProduct.GLO_30: replace(
++            _DEFAULT_SPECS[CopernicusProduct.GLO_30],
++            base_url=config.glo30_base_url.rstrip("/"),
++            tile_list_url=config.glo30_tile_list_url,
++        ),
++        CopernicusProduct.GLO_90: replace(
++            _DEFAULT_SPECS[CopernicusProduct.GLO_90],
++            base_url=config.glo90_base_url.rstrip("/"),
++            tile_list_url=config.glo90_tile_list_url,
++        ),
++    }
++
++
++def _integer_cells(start: float, stop: float) -> range:
++    first = math.floor(start)
++    last = math.floor(math.nextafter(stop, -math.inf))
++    return range(first, last + 1)
++
++
++def required_tile_coordinates(aoi: AreaOfInterest) -> list[tuple[int, int]]:
++    """Enumerate latitude/longitude degree cells without expanding the AOI."""
++    west, south, east, north = aoi.bounds_wgs84
++    latitudes = _integer_cells(max(-90.0, south), min(90.0, north))
++    longitude_ranges = (
++        [_integer_cells(west, 180.0), _integer_cells(-180.0, east)]
++        if aoi.crosses_antimeridian
++        else [_integer_cells(west, east)]
++    )
++    coordinates = {
++        (latitude, longitude)
++        for latitude in latitudes
++        for longitudes in longitude_ranges
++        for longitude in longitudes
++    }
++    return sorted(coordinates)
++
++
++def tile_id(product: CopernicusProduct, latitude: int, longitude: int) -> str:
++    spec = _DEFAULT_SPECS[product]
++    latitude_label = f"{'N' if latitude >= 0 else 'S'}{abs(latitude):02d}_00"
++    longitude_label = f"{'E' if longitude >= 0 else 'W'}{abs(longitude):03d}_00"
++    return f"Copernicus_DSM_COG_{spec.cog_code}_{latitude_label}_{longitude_label}_DEM"
++
++
++def parse_tile_list(payload: bytes) -> set[str]:
++    """Extract authoritative tile ids from either bare ids or full object paths."""
++    text = payload.decode("utf-8-sig")
++    return set(_TILE_PATTERN.findall(text))
++
++
++def _download_evidence(result: DownloadResult) -> dict[str, Any]:
++    return {
++        "url": result.cache_entry.url,
++        "request_key": result.cache_entry.request_key,
++        "cache_status": result.cache_status.value,
++        "cache_lookup_reason": result.cache_lookup_reason,
++        "sha256": result.cache_entry.object_sha256,
++        "bytes": result.cache_entry.object_size_bytes,
++        "etag": result.cache_entry.etag,
++        "last_modified": result.cache_entry.last_modified,
++        "media_type": result.cache_entry.media_type,
++        "fetched_at": result.cache_entry.fetched_at,
++        "attempts": [item.model_dump(mode="json") for item in result.attempts],
++    }
++
++
++class CopernicusAwsProvider:
++    """Plan, cache, verify, and mosaic no-key Copernicus AWS COG assets."""
++
++    provider_id = "copernicus-aws"
++
++    def __init__(
++        self,
++        client: CachingHttpClient,
++        config: CopernicusAwsConfig | None = None,
++    ) -> None:
++        self.client = client
++        self.config = config or CopernicusAwsConfig()
++        self._specs = _specs(self.config)
++
++    def _catalog_identity(self, spec: _ProductSpec) -> CacheIdentity:
++        return CacheIdentity(
++            provider_id=self.provider_id,
++            dataset_id=spec.dataset_id,
++            dataset_version="AWS mirror 2021 catalog",
++            url=spec.tile_list_url,
++        )
++
++    def _tile_identity(self, spec: _ProductSpec, tile: CopernicusTile) -> CacheIdentity:
++        return CacheIdentity(
++            provider_id=self.provider_id,
++            dataset_id=spec.dataset_id,
++            dataset_version="AWS mirror 2021",
++            url=tile.url,
++        )
++
++    def _download_catalog(self, spec: _ProductSpec) -> tuple[set[str], DownloadResult]:
++        result = self.client.download(self._catalog_identity(spec))
++        tile_ids = parse_tile_list(result.path.read_bytes())
++        if not tile_ids:
++            raise ProviderFetchError(
++                f"Copernicus tile list contained no recognized ids: {spec.tile_list_url}"
++            )
++        return tile_ids, result
++
++    def plan(self, aoi: AreaOfInterest) -> tuple[CopernicusPlan, list[DownloadResult]]:
++        if aoi.area_m2 > self.config.max_aoi_area_m2:
++            raise ProviderFetchError(
++                f"AOI area {aoi.area_m2:.0f} m² exceeds provider limit "
++                f"{self.config.max_aoi_area_m2:.0f} m²; split the AOI explicitly"
++            )
++        coordinates = required_tile_coordinates(aoi)
++        if not coordinates:
++            raise ProviderFetchError("normalized AOI intersects no one-degree source cells")
++        catalogs: list[DownloadResult] = []
++        missing_glo30: list[str] = []
++        for product in (CopernicusProduct.GLO_30, CopernicusProduct.GLO_90):
++            spec = self._specs[product]
++            available, catalog_result = self._download_catalog(spec)
++            catalogs.append(catalog_result)
++            expected = [
++                tile_id(product, latitude, longitude) for latitude, longitude in coordinates
++            ]
++            missing = sorted(set(expected) - available)
++            if not missing:
++                tiles = [
++                    CopernicusTile(
++                        product=product,
++                        latitude_degree=latitude,
++                        longitude_degree=longitude,
++                        tile_id=identifier,
++                        url=f"{spec.base_url}/{identifier}/{identifier}.tif",
++                    )
++                    for (latitude, longitude), identifier in zip(coordinates, expected, strict=True)
++                ]
++                decisions = [
++                    f"normalized AOI requires {len(coordinates)} one-degree source cell(s)",
++                    f"{product.value} authoritative tileList.txt covers every required cell",
++                    f"selected one dataset id {spec.dataset_id}; GLO-30/GLO-90 are not blended",
++                ]
++                if product is CopernicusProduct.GLO_90:
++                    decisions.insert(
++                        1,
++                        f"GLO-30 lacked {len(missing_glo30)} required tile(s); "
++                        "used complete GLO-90",
++                    )
++                return (
++                    CopernicusPlan(
++                        product=product,
++                        dataset_id=spec.dataset_id,
++                        horizontal_resolution_m=spec.resolution_m,
++                        tiles=tiles,
++                        decisions=decisions,
++                        missing_glo30_tiles=missing_glo30,
++                    ),
++                    catalogs,
++                )
++            if product is CopernicusProduct.GLO_30:
++                missing_glo30 = missing
++        raise ProviderFetchError(
++            "AOI is not completely covered by authoritative GLO-30 or GLO-90 tile lists; "
++            "absent coastal/ocean cells remain NoData rather than being synthesized"
++        )
++
++    def metadata(self, product: CopernicusProduct = CopernicusProduct.GLO_30) -> DatasetMetadata:
++        spec = self._specs[product]
++        return DatasetMetadata(
++            provider=self.provider_id,
++            dataset_name=spec.dataset_name,
++            dataset_version="AWS mirror 2021",
++            dataset_type=DatasetType.DSM,
++            horizontal_resolution_m=spec.resolution_m,
++            horizontal_crs=(
++                "EPSG:4326 source COGs; normalized AOI raster uses its recorded metric CRS"
++            ),
++            vertical_crs="EPSG:3855",
++            vertical_datum="EGM2008",
++            license=spec.license_id,
++            attribution=_ATTRIBUTION,
++            acquisition_period="TanDEM-X primarily 2011-2015; Copernicus DEM 2021 release",
++            source_urls=[],
++            checksums={},
++        )
++
++    def probe(self, aoi: AreaOfInterest) -> CoverageInfo:
++        try:
++            plan, _ = self.plan(aoi)
++        except ProviderFetchError as exc:
++            return CoverageInfo(
++                covered=False,
++                complete=False,
++                dataset_type=DatasetType.DSM,
++                requires_api_key=False,
++                failure_probability="coverage-or-network-dependent",
++                reason=[str(exc)],
++            )
++        return CoverageInfo(
++            covered=True,
++            complete=True,
++            dataset_type=DatasetType.DSM,
++            horizontal_resolution_m=plan.horizontal_resolution_m,
++            requires_api_key=False,
++            failure_probability="AWS mirror has no application-specific SLA",
++            reason=plan.decisions,
++        )
++
++    def _target_grid(self, aoi: AreaOfInterest, resolution_m: float) -> tuple[CRS, Any, int, int]:
++        target_crs = CRS.from_user_input(aoi.target_local_crs)
++        transformer = Transformer.from_crs("EPSG:4326", target_crs, always_xy=True)
++        geometry = shape(aoi.normalized_geometry_geojson)
++        projected = transform_geometry(transformer.transform, geometry)
++        left, bottom, right, top = projected.bounds
++        width = max(2, math.ceil((right - left) / resolution_m))
++        height = max(2, math.ceil((top - bottom) / resolution_m))
++        if width * height > self.config.max_output_cells:
++            raise ProviderFetchError(
++                f"normalized provider raster would contain {width * height} cells, exceeding "
++                f"max_output_cells={self.config.max_output_cells}; split the AOI"
++            )
++        return target_crs, from_bounds(left, bottom, right, top, width, height), height, width
++
++    def acquire(self, aoi: AreaOfInterest, destination: Path) -> ProviderAcquisition:
++        """Cache complete source COGs and write one AOI-bounded metric GeoTIFF."""
++        destination = destination.resolve()
++        if destination.exists():
++            raise ProviderFetchError(f"provider destination already exists: {destination}")
++        manifest_path = destination.with_suffix(destination.suffix + ".source_acquisition.json")
++        if manifest_path.exists():
++            raise ProviderFetchError(
++                f"provider acquisition manifest already exists: {manifest_path}"
++            )
++        plan, catalogs = self.plan(aoi)
++        spec = self._specs[plan.product]
++        target_crs, target_transform, height, width = self._target_grid(
++            aoi, plan.horizontal_resolution_m
++        )
++        destination_values = np.full((height, width), np.nan, dtype=np.float32)
++        destination_coverage = np.zeros((height, width), dtype=np.uint8)
++        tile_results: list[DownloadResult] = []
++        for index, tile in enumerate(plan.tiles):
++            result = self.client.download(self._tile_identity(spec, tile))
++            tile_results.append(result)
++            try:
++                with rasterio.open(result.path) as source:
++                    if source.count != 1 or source.crs is None:
++                        raise ProviderFetchError(
++                            f"source COG is not a one-band georeferenced raster: {tile.url}"
++                        )
++                    reproject(
++                        source=rasterio.band(source, 1),
++                        destination=destination_values,
++                        src_transform=source.transform,
++                        src_crs=source.crs,
++                        src_nodata=source.nodata,
++                        dst_transform=target_transform,
++                        dst_crs=target_crs,
++                        dst_nodata=np.nan,
++                        resampling=Resampling.bilinear,
++                        init_dest_nodata=index == 0,
++                    )
++                    reproject(
++                        source=np.ones((source.height, source.width), dtype=np.uint8),
++                        destination=destination_coverage,
++                        src_transform=source.transform,
++                        src_crs=source.crs,
++                        src_nodata=0,
++                        dst_transform=target_transform,
++                        dst_crs=target_crs,
++                        dst_nodata=0,
++                        resampling=Resampling.nearest,
++                        init_dest_nodata=index == 0,
++                    )
++            except RasterioError as exc:
++                raise ProviderFetchError(f"cached source COG did not reopen: {tile.url}") from exc
++        if not bool(np.any(destination_coverage)):
++            raise ProviderFetchError("provider source footprints do not cover the normalized AOI")
++        original_shape = (height, width)
++        top, bottom, left, right = largest_true_rectangle(destination_coverage.astype(bool))
++        if bottom - top < 2 or right - left < 2:
++            raise ProviderFetchError("provider source coverage left fewer than 2 x 2 AOI cells")
++        destination_values = destination_values[top:bottom, left:right]
++        target_transform = target_transform * Affine.translation(left, top)
++        height, width = destination_values.shape
++        if not bool(np.any(np.isfinite(destination_values))):
++            raise ProviderFetchError("provider acquisition produced no finite elevation samples")
++        coverage_crop = {
++            "original_grid_shape": list(original_shape),
++            "selected_grid_shape": [height, width],
++            "pixel_window": {
++                "row_start": top,
++                "row_stop": bottom,
++                "column_start": left,
++                "column_stop": right,
++            },
++            "discarded_reprojection_gap_cells": (
++                original_shape[0] * original_shape[1] - height * width
++            ),
++            "method": (
++                "largest all-source-footprint rectangle; source NoData remains masked and is not "
++                "filled by provider acquisition"
++            ),
++        }
++
++        generated_at = datetime.now(UTC).isoformat()
++        destination.parent.mkdir(parents=True, exist_ok=True)
++        with rasterio.open(
++            destination,
++            "w",
++            driver="GTiff",
++            height=height,
++            width=width,
++            count=1,
++            dtype="float32",
++            crs=target_crs,
++            transform=target_transform,
++            nodata=np.nan,
++            compress="deflate",
++            predictor=3,
++        ) as output:
++            output.write(destination_values, 1)
++            output.update_tags(
++                PROVIDER=self.provider_id,
++                DATASET_ID=spec.dataset_id,
++                DATASET_VERSION="AWS mirror 2021",
++                DATASET_TYPE="dsm",
++                VERTICAL_CRS="EPSG:3855",
++                VERTICAL_DATUM="EGM2008",
++                LICENSE=spec.license_id,
++                LICENSE_URL=_LICENSE_URL,
++                ATTRIBUTION=_ATTRIBUTION,
++                LIABILITY_NOTICE=spec.liability_notice,
++                ACQUISITION_PERIOD="TanDEM-X primarily 2011-2015; Copernicus DEM 2021 release",
++                DOWNLOAD_TIME=generated_at,
++                SOURCE_URLS=json.dumps([tile.url for tile in plan.tiles], separators=(",", ":")),
++                NORMALIZED_AOI=json.dumps(
++                    aoi_provenance(aoi), sort_keys=True, separators=(",", ":")
++                ),
++            )
++        if not destination.is_file():
++            raise ProviderFetchError("provider raster was not published")
++
++        dataset = self.metadata(plan.product).model_copy(
++            update={
++                "download_time": generated_at,
++                "source_urls": [tile.url for tile in plan.tiles],
++                "checksums": {
++                    tile.tile_id: result.cache_entry.object_sha256
++                    for tile, result in zip(plan.tiles, tile_results, strict=True)
++                },
++            }
++        )
++        acquisition = ProviderAcquisition(
++            provider_id=self.provider_id,
++            raster_path=destination,
++            acquisition_manifest_path=manifest_path,
++            dataset=dataset,
++            aoi=aoi_provenance(aoi),
++            plan=plan,
++            catalog_downloads=[_download_evidence(result) for result in catalogs],
++            tile_downloads=[_download_evidence(result) for result in tile_results],
++            generated_at=generated_at,
++        )
++        manifest = acquisition.model_dump(mode="json")
++        manifest["coverage_crop"] = coverage_crop
++        manifest["output_source_nodata_pixels"] = int(
++            np.count_nonzero(~np.isfinite(destination_values))
++        )
++        manifest["output_raster_sha256"] = sha256_file(destination)
++        manifest["license_url"] = _LICENSE_URL
++        manifest["liability_notice"] = spec.liability_notice
++        manifest_path.write_text(
++            json.dumps(manifest, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
++            encoding="utf-8",
++        )
++        return acquisition
++
++    def fetch(self, aoi: AreaOfInterest, destination: Path) -> ProviderAcquisition:
++        """Protocol-compatible alias for normalized AOI acquisition."""
++        return self.acquire(aoi, destination)
+diff --git a/src/topoforge/providers/protocol.py b/src/topoforge/providers/protocol.py
+index 3f5641f..05fab16 100644
+--- a/src/topoforge/providers/protocol.py
++++ b/src/topoforge/providers/protocol.py
+@@ -7,7 +7,7 @@ from typing import Protocol, runtime_checkable
+ 
+ from pydantic import BaseModel, ConfigDict, Field
+ 
+-from topoforge.models import DatasetMetadata, DatasetType
++from topoforge.models import AreaOfInterest, DatasetMetadata, DatasetType
+ 
+ 
+ class CoverageInfo(BaseModel):
+@@ -42,14 +42,14 @@ class ElevationProvider(Protocol):
+ 
+     provider_id: str
+ 
+-    def probe(self, bounds_wgs84: tuple[float, float, float, float]) -> CoverageInfo:
+-        """Return explainable coverage for longitude/latitude bounds."""
++    def probe(self, aoi: AreaOfInterest) -> CoverageInfo:
++        """Return explainable coverage for a normalized AOI."""
+         ...
+ 
+     def metadata(self) -> DatasetMetadata:
+-        """Return current dataset semantics and license metadata."""
++        """Return default dataset semantics and license metadata."""
+         ...
+ 
+-    def fetch(self, destination: Path) -> Path:
+-        """Fetch or copy provider data into a cache-controlled path."""
++    def fetch(self, aoi: AreaOfInterest, destination: Path) -> object:
++        """Fetch a normalized AOI into a cache-controlled local raster."""
+         ...
+diff --git a/src/topoforge/providers/registry.py b/src/topoforge/providers/registry.py
+index 6e8dfae..2b81fcc 100644
+--- a/src/topoforge/providers/registry.py
++++ b/src/topoforge/providers/registry.py
+@@ -18,12 +18,13 @@ def list_provider_descriptors() -> list[ProviderDescriptor]:
+         ProviderDescriptor(
+             provider_id="copernicus-aws",
+             name="Copernicus DEM GLO-30/GLO-90 AWS COG mirror",
+-            implemented=False,
++            implemented=True,
+             requires_api_key=False,
+             dataset_types=[DatasetType.DSM],
+             notes=(
+-                "Planned Phase 3 no-key route; configurable 2021 COG endpoints and "
+-                "dataset-specific GLO-30/GLO-90 attribution."
++                "No-key configurable 2021 COG route with authoritative tile lists, "
++                "GLO-30-first whole-product fallback, SHA-256 cache, timeout/retry/rate limits, "
++                "and normalized-AOI metric raster acquisition."
+             ),
+         ),
+         ProviderDescriptor(
+diff --git a/src/topoforge/providers/transport.py b/src/topoforge/providers/transport.py
+new file mode 100644
+index 0000000..fec6767
+--- /dev/null
++++ b/src/topoforge/providers/transport.py
+@@ -0,0 +1,255 @@
++"""Bounded HTTP transport with cache, timeout, retry, backoff, and rate limiting."""
++
++from __future__ import annotations
++
++import os
++import socket
++import threading
++import time
++from collections.abc import Callable
++from datetime import UTC, datetime
++from pathlib import Path
++from typing import Any, Protocol, cast
++from urllib.error import HTTPError, URLError
++from urllib.request import Request, urlopen
++
++from pydantic import BaseModel, ConfigDict, Field
++
++from topoforge.exceptions import ProviderFetchError
++from topoforge.providers.cache import (
++    CacheEntry,
++    CacheIdentity,
++    CacheStatus,
++    ContentAddressedCache,
++)
++
++_RETRYABLE_HTTP_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
++
++
++class HttpTransportConfig(BaseModel):
++    """Operational HTTP limits; every network operation is bounded."""
++
++    model_config = ConfigDict(extra="forbid", frozen=True)
++
++    timeout_seconds: float = Field(default=30.0, gt=0)
++    max_attempts: int = Field(default=4, ge=1, le=10)
++    backoff_base_seconds: float = Field(default=0.5, ge=0)
++    max_backoff_seconds: float = Field(default=8.0, ge=0)
++    min_request_interval_seconds: float = Field(default=0.2, ge=0)
++    max_download_bytes: int = Field(default=2_000_000_000, gt=0)
++    chunk_size_bytes: int = Field(default=1024 * 1024, ge=4096)
++    user_agent: str = "TopoForge/0.1 (+https://github.com/topoforge/topoforge)"
++
++
++class NetworkAttempt(BaseModel):
++    """One literal network attempt for provenance and retry tests."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    attempt: int = Field(ge=1)
++    status: str
++    status_code: int | None = None
++    error: str | None = None
++    retry_delay_seconds: float = Field(default=0.0, ge=0)
++
++
++class DownloadResult(BaseModel):
++    """Verified cached bytes plus complete acquisition attempt evidence."""
++
++    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
++
++    path: Path
++    cache_entry: CacheEntry
++    cache_status: CacheStatus
++    cache_lookup_reason: str
++    attempts: list[NetworkAttempt]
++
++
++class _Response(Protocol):
++    headers: Any
++    status: int
++
++    def read(self, amount: int = -1) -> bytes: ...
++
++    def close(self) -> None: ...
++
++
++OpenUrl = Callable[[Request, float], _Response]
++
++
++def _open_url(request: Request, timeout_seconds: float) -> _Response:
++    return cast(_Response, urlopen(request, timeout=timeout_seconds))
++
++
++def _header(headers: Any, name: str) -> str | None:
++    value = headers.get(name) if hasattr(headers, "get") else None
++    return str(value) if value is not None else None
++
++
++class CachingHttpClient:
++    """Download immutable provider assets once and verify every subsequent use."""
++
++    def __init__(
++        self,
++        cache: ContentAddressedCache,
++        config: HttpTransportConfig | None = None,
++        *,
++        open_url: OpenUrl = _open_url,
++        sleep: Callable[[float], None] = time.sleep,
++        monotonic: Callable[[], float] = time.monotonic,
++    ) -> None:
++        self.cache = cache
++        self.config = config or HttpTransportConfig()
++        self._open_url = open_url
++        self._sleep = sleep
++        self._monotonic = monotonic
++        self._rate_lock = threading.Lock()
++        self._last_request_started: float | None = None
++
++    def _wait_for_rate_limit(self) -> None:
++        with self._rate_lock:
++            now = self._monotonic()
++            if self._last_request_started is not None:
++                remaining = self.config.min_request_interval_seconds - (
++                    now - self._last_request_started
++                )
++                if remaining > 0:
++                    self._sleep(remaining)
++                    now = self._monotonic()
++            self._last_request_started = now
++
++    def _retry_delay(self, attempt: int, error: Exception) -> float:
++        if isinstance(error, HTTPError):
++            retry_after = _header(error.headers, "Retry-After")
++            if retry_after is not None:
++                try:
++                    return min(self.config.max_backoff_seconds, max(0.0, float(retry_after)))
++                except ValueError:
++                    pass
++        delay = self.config.backoff_base_seconds * (2 ** (attempt - 1))
++        return min(self.config.max_backoff_seconds, delay)
++
++    @staticmethod
++    def _retryable(error: Exception) -> bool:
++        if isinstance(error, HTTPError):
++            return error.code in _RETRYABLE_HTTP_STATUS
++        return isinstance(error, (URLError, TimeoutError, socket.timeout, OSError))
++
++    def download(self, identity: CacheIdentity) -> DownloadResult:
++        lookup = self.cache.lookup(identity)
++        if lookup.status is CacheStatus.HIT:
++            assert lookup.entry is not None and lookup.path is not None
++            return DownloadResult(
++                path=lookup.path,
++                cache_entry=lookup.entry,
++                cache_status=CacheStatus.HIT,
++                cache_lookup_reason=lookup.reason,
++                attempts=[],
++            )
++        initial_status = lookup.status
++        initial_reason = lookup.reason
++        if lookup.status is CacheStatus.CORRUPT:
++            self.cache.invalidate(identity)
++
++        attempts: list[NetworkAttempt] = []
++        for attempt_number in range(1, self.config.max_attempts + 1):
++            response: _Response | None = None
++            temporary: Path | None = None
++            try:
++                self._wait_for_rate_limit()
++                request = Request(
++                    identity.url,
++                    headers={"User-Agent": self.config.user_agent, "Accept-Encoding": "identity"},
++                    method="GET",
++                )
++                response = self._open_url(request, self.config.timeout_seconds)
++                status_code = int(getattr(response, "status", 200))
++                if status_code < 200 or status_code >= 300:
++                    raise HTTPError(
++                        identity.url, status_code, "unexpected response", response.headers, None
++                    )
++                content_length_text = _header(response.headers, "Content-Length")
++                expected_length = int(content_length_text) if content_length_text else None
++                if expected_length is not None and expected_length > self.config.max_download_bytes:
++                    raise ProviderFetchError(
++                        f"Content-Length {expected_length} exceeds max_download_bytes="
++                        f"{self.config.max_download_bytes}"
++                    )
++                temporary = self.cache.temporary_path()
++                received = 0
++                with temporary.open("wb") as stream:
++                    while chunk := response.read(self.config.chunk_size_bytes):
++                        received += len(chunk)
++                        if received > self.config.max_download_bytes:
++                            raise ProviderFetchError(
++                                "download exceeded max_download_bytes="
++                                f"{self.config.max_download_bytes}"
++                            )
++                        stream.write(chunk)
++                    stream.flush()
++                    os.fsync(stream.fileno())
++                if expected_length is not None and received != expected_length:
++                    raise OSError(
++                        f"received {received} bytes but Content-Length declared {expected_length}"
++                    )
++                stored = self.cache.store(
++                    identity,
++                    temporary,
++                    etag=_header(response.headers, "ETag"),
++                    last_modified=_header(response.headers, "Last-Modified"),
++                    media_type=_header(response.headers, "Content-Type"),
++                    response_status=status_code,
++                    fetched_at=datetime.now(UTC).isoformat(),
++                    attempts=attempt_number,
++                )
++                if (
++                    stored.status is not CacheStatus.HIT
++                    or stored.entry is None
++                    or stored.path is None
++                ):
++                    raise OSError(f"published cache entry did not verify: {stored.reason}")
++                attempts.append(
++                    NetworkAttempt(
++                        attempt=attempt_number, status="succeeded", status_code=status_code
++                    )
++                )
++                return DownloadResult(
++                    path=stored.path,
++                    cache_entry=stored.entry,
++                    cache_status=initial_status,
++                    cache_lookup_reason=initial_reason,
++                    attempts=attempts,
++                )
++            except ProviderFetchError:
++                raise
++            except Exception as exc:
++                retryable = self._retryable(exc)
++                last_attempt = attempt_number >= self.config.max_attempts
++                delay = (
++                    self._retry_delay(attempt_number, exc)
++                    if retryable and not last_attempt
++                    else 0.0
++                )
++                attempts.append(
++                    NetworkAttempt(
++                        attempt=attempt_number,
++                        status="retrying" if delay > 0 else "failed",
++                        status_code=exc.code if isinstance(exc, HTTPError) else None,
++                        error=f"{type(exc).__name__}: {exc}",
++                        retry_delay_seconds=delay,
++                    )
++                )
++                if not retryable or last_attempt:
++                    detail = "; ".join(item.error or item.status for item in attempts)
++                    raise ProviderFetchError(
++                        f"download failed after {attempt_number} attempt(s) for "
++                        f"{identity.url}: {detail}"
++                    ) from exc
++                if delay > 0:
++                    self._sleep(delay)
++            finally:
++                if response is not None:
++                    response.close()
++                if temporary is not None:
++                    temporary.unlink(missing_ok=True)
++        raise AssertionError("bounded retry loop terminated without a result")
+diff --git a/src/topoforge/raster/__init__.py b/src/topoforge/raster/__init__.py
+index bd3091b..8a27cdd 100644
+--- a/src/topoforge/raster/__init__.py
++++ b/src/topoforge/raster/__init__.py
+@@ -1,7 +1,11 @@
+ """Elevation raster ingestion, processing, AOI normalization, and fixtures."""
+ 
+ from topoforge.raster.aoi import normalize_area_of_interest, select_local_metric_crs
+-from topoforge.raster.processing import ProcessedRaster, process_local_raster
++from topoforge.raster.processing import (
++    ProcessedRaster,
++    largest_true_rectangle,
++    process_local_raster,
++)
+ from topoforge.raster.sampling import (
+     SamplingDecision,
+     resolve_sampling_decision,
+@@ -14,6 +18,7 @@ __all__ = [
+     "SamplingDecision",
+     "SyntheticTerrain",
+     "create_synthetic_geotiff",
++    "largest_true_rectangle",
+     "normalize_area_of_interest",
+     "process_local_raster",
+     "resolve_sampling_decision",
+diff --git a/src/topoforge/raster/processing.py b/src/topoforge/raster/processing.py
+index e2ce11d..d0cc423 100644
+--- a/src/topoforge/raster/processing.py
++++ b/src/topoforge/raster/processing.py
+@@ -2,6 +2,7 @@
+ 
+ from __future__ import annotations
+ 
++import json
+ from dataclasses import dataclass
+ from pathlib import Path
+ from typing import Any, cast
+@@ -92,7 +93,7 @@ def _choose_metric_crs(source_crs: CRS, bounds: tuple[float, float, float, float
+     )
+ 
+ 
+-def _largest_true_rectangle(mask: BoolArray) -> tuple[int, int, int, int]:
++def largest_true_rectangle(mask: BoolArray) -> tuple[int, int, int, int]:
+     """Return top, bottom, left, right for the largest all-true rectangle."""
+     rows, columns = mask.shape
+     heights = np.zeros(columns, dtype=np.int64)
+@@ -126,7 +127,7 @@ def _crop_to_source_coverage(
+     """Remove reprojection-only corner gaps using the largest covered rectangle."""
+     if bool(np.all(coverage)):
+         return elevations, transform
+-    top, bottom, left, right = _largest_true_rectangle(coverage)
++    top, bottom, left, right = largest_true_rectangle(coverage)
+     if bottom - top < 2 or right - left < 2:
+         raise RasterProcessingError("Metric reprojection left fewer than 2 x 2 covered cells")
+     cropped = elevations[top:bottom, left:right]
+@@ -586,8 +587,22 @@ def process_local_raster(config: BuildConfig) -> ProcessedRaster:
+         terrain_fidelity_status = "source-resolution-preserved"
+ 
+     tags = source.tags
++    tagged_source_urls: list[str] = []
++    if tags.get("SOURCE_URLS"):
++        try:
++            parsed_urls = json.loads(tags["SOURCE_URLS"])
++            if isinstance(parsed_urls, list) and all(
++                isinstance(value, str) for value in parsed_urls
++            ):
++                tagged_source_urls = parsed_urls
++        except json.JSONDecodeError:
++            tagged_source_urls = []
+     metadata = DatasetMetadata(
+-        provider="local",
++        provider=(
++            config.source_provider
++            if config.source_provider != "local"
++            else tags.get("PROVIDER", "local")
++        ),
+         dataset_name=config.dataset_name or source_path.stem,
+         dataset_version=(
+             config.dataset_version
+@@ -622,15 +637,25 @@ def process_local_raster(config: BuildConfig) -> ProcessedRaster:
+             if config.acquisition_period != "unknown"
+             else tags.get("ACQUISITION_PERIOD", "unknown")
+         ),
+-        download_time="not-applicable-local-input",
++        download_time=(
++            config.source_download_time
++            if config.source_download_time != "not-applicable-local-input"
++            else tags.get("DOWNLOAD_TIME", "not-applicable-local-input")
++        ),
+         source_urls=(
+             config.source_urls
+             if config.source_urls
++            else tagged_source_urls
++            if tagged_source_urls
+             else [tags["SOURCE_URL"]]
+             if tags.get("SOURCE_URL")
+             else []
+         ),
+-        checksums={source_path.name: sha256_file(source_path)},
++        checksums=(
++            config.source_checksums
++            if config.source_checksums
++            else {source_path.name: sha256_file(source_path)}
++        ),
+     )
+     physical_spacing = sum(decision.physical_spacing_xy_mm) / 2.0
+     report = RasterResult(
+diff --git a/tests/providers/test_cache.py b/tests/providers/test_cache.py
+new file mode 100644
+index 0000000..20322e6
+--- /dev/null
++++ b/tests/providers/test_cache.py
+@@ -0,0 +1,76 @@
++from pathlib import Path
++
++from topoforge.providers.cache import CacheIdentity, CacheStatus, ContentAddressedCache
++
++
++def identity(url: str = "https://example.test/object.tif") -> CacheIdentity:
++    return CacheIdentity(
++        provider_id="fixture",
++        dataset_id="fixture-dem",
++        dataset_version="2026",
++        url=url,
++    )
++
++
++def test_cache_stores_by_content_hash_and_reopens_verified_entry(tmp_path: Path) -> None:
++    cache = ContentAddressedCache(tmp_path / "cache")
++    source = tmp_path / "object.tif"
++    source.write_bytes(b"deterministic fixture bytes")
++    request = identity()
++
++    stored = cache.store(
++        request,
++        source,
++        etag='"fixture-etag"',
++        last_modified="Thu, 31 Jul 2026 00:00:00 GMT",
++        media_type="image/tiff",
++        response_status=200,
++        fetched_at="2026-07-31T00:00:00+00:00",
++        attempts=1,
++    )
++    reopened = cache.lookup(request)
++
++    assert stored.status is CacheStatus.HIT
++    assert reopened.status is CacheStatus.HIT
++    assert reopened.path is not None and reopened.path.read_bytes() == source.read_bytes()
++    assert reopened.entry is not None
++    assert reopened.entry.object_relpath == (
++        f"objects/{reopened.entry.object_sha256[:2]}/{reopened.entry.object_sha256}"
++    )
++    assert reopened.entry.etag == '"fixture-etag"'
++    assert cache.summary().content_objects == 1
++
++
++def test_corrupt_object_is_reported_and_request_can_be_recovered(tmp_path: Path) -> None:
++    cache = ContentAddressedCache(tmp_path / "cache")
++    source = tmp_path / "object.bin"
++    source.write_bytes(b"first bytes")
++    request = identity()
++    stored = cache.store(
++        request,
++        source,
++        etag=None,
++        last_modified=None,
++        media_type=None,
++        response_status=200,
++        fetched_at="2026-07-31T00:00:00+00:00",
++        attempts=1,
++    )
++    assert stored.path is not None
++    stored.path.write_bytes(b"corrupt")
++
++    corrupt = cache.lookup(request)
++    assert corrupt.status is CacheStatus.CORRUPT
++    assert "length" in corrupt.reason or "SHA-256" in corrupt.reason
++
++    cache.invalidate(request)
++    assert cache.lookup(request).status is CacheStatus.MISS
++
++
++def test_request_identity_is_deterministic_and_separates_versions() -> None:
++    first = identity()
++    same = identity()
++    newer = first.model_copy(update={"dataset_version": "2027"})
++
++    assert first.request_key == same.request_key
++    assert first.request_key != newer.request_key
+diff --git a/tests/providers/test_copernicus_aws.py b/tests/providers/test_copernicus_aws.py
+new file mode 100644
+index 0000000..e697f91
+--- /dev/null
++++ b/tests/providers/test_copernicus_aws.py
+@@ -0,0 +1,224 @@
++from __future__ import annotations
++
++from email.message import Message
++from io import BytesIO
++from pathlib import Path
++
++import numpy as np
++import rasterio
++from rasterio.io import MemoryFile
++from rasterio.transform import from_bounds
++
++from topoforge.models import AreaOfInterestInput
++from topoforge.providers.cache import ContentAddressedCache
++from topoforge.providers.copernicus_aws import (
++    CopernicusAwsConfig,
++    CopernicusAwsProvider,
++    CopernicusProduct,
++    required_tile_coordinates,
++    tile_id,
++)
++from topoforge.providers.transport import CachingHttpClient, HttpTransportConfig
++from topoforge.raster import normalize_area_of_interest
++
++
++class FakeResponse:
++    def __init__(self, payload: bytes, media_type: str) -> None:
++        self.status = 200
++        self._stream = BytesIO(payload)
++        self.headers = Message()
++        self.headers["Content-Length"] = str(len(payload))
++        self.headers["Content-Type"] = media_type
++        self.headers["ETag"] = '"fixture"'
++
++    def read(self, amount: int = -1) -> bytes:
++        return self._stream.read(amount)
++
++    def close(self) -> None:
++        pass
++
++
++def tiny_geotiff(*, right: float = 102.0) -> bytes:
++    values = np.arange(64, dtype=np.float32).reshape(8, 8) + 1000
++    with MemoryFile() as memory:
++        with memory.open(
++            driver="GTiff",
++            height=8,
++            width=8,
++            count=1,
++            dtype="float32",
++            crs="EPSG:4326",
++            transform=from_bounds(101, 29, right, 30, 8, 8),
++            nodata=-9999.0,
++        ) as dataset:
++            dataset.write(values, 1)
++        return memory.read()
++
++
++def provider(tmp_path: Path, responses: dict[str, bytes]) -> CopernicusAwsProvider:
++    def opener(request: object, _timeout: float) -> FakeResponse:
++        url = request.full_url  # type: ignore[attr-defined]
++        payload = responses[url]
++        media_type = "image/tiff" if url.endswith(".tif") else "text/plain"
++        return FakeResponse(payload, media_type)
++
++    client = CachingHttpClient(
++        ContentAddressedCache(tmp_path / "cache"),
++        HttpTransportConfig(
++            timeout_seconds=1,
++            max_attempts=2,
++            backoff_base_seconds=0,
++            max_backoff_seconds=0,
++            min_request_interval_seconds=0,
++            max_download_bytes=1_000_000,
++        ),
++        open_url=opener,  # type: ignore[arg-type]
++    )
++    return CopernicusAwsProvider(
++        client,
++        CopernicusAwsConfig(
++            glo30_base_url="https://fixture.test/glo30",
++            glo30_tile_list_url="https://fixture.test/glo30/tileList.txt",
++            glo90_base_url="https://fixture.test/glo90",
++            glo90_tile_list_url="https://fixture.test/glo90/tileList.txt",
++            max_output_cells=1_000_000,
++        ),
++    )
++
++
++def test_tile_enumeration_handles_antimeridian_without_expansion() -> None:
++    aoi = normalize_area_of_interest(AreaOfInterestInput(bbox_wgs84=(179.5, -1.0, -179.5, 1.0)))
++
++    assert required_tile_coordinates(aoi) == [
++        (-1, -180),
++        (-1, 179),
++        (0, -180),
++        (0, 179),
++    ]
++    assert tile_id(CopernicusProduct.GLO_30, -1, -180).endswith("S01_00_W180_00_DEM")
++
++
++def test_plan_uses_authoritative_glo30_catalog_when_complete(tmp_path: Path) -> None:
++    identifier = tile_id(CopernicusProduct.GLO_30, 29, 101)
++    source_url = f"https://fixture.test/glo30/{identifier}/{identifier}.tif"
++    responses = {
++        "https://fixture.test/glo30/tileList.txt": f"{identifier}/{identifier}.tif\n".encode(),
++        source_url: tiny_geotiff(),
++    }
++    instance = provider(tmp_path, responses)
++    aoi = normalize_area_of_interest(AreaOfInterestInput(bbox_wgs84=(101.2, 29.2, 101.3, 29.3)))
++
++    plan, catalogs = instance.plan(aoi)
++
++    assert plan.product is CopernicusProduct.GLO_30
++    assert [tile.tile_id for tile in plan.tiles] == [identifier]
++    assert len(catalogs) == 1
++
++
++def test_plan_falls_back_wholly_to_glo90_instead_of_blending(tmp_path: Path) -> None:
++    identifier90 = tile_id(CopernicusProduct.GLO_90, 29, 101)
++    responses = {
++        "https://fixture.test/glo30/tileList.txt": b"Copernicus_DSM_COG_10_N28_00_E101_00_DEM\n",
++        "https://fixture.test/glo90/tileList.txt": f"{identifier90}\n".encode(),
++    }
++    instance = provider(tmp_path, responses)
++    aoi = normalize_area_of_interest(AreaOfInterestInput(bbox_wgs84=(101.2, 29.2, 101.3, 29.3)))
++
++    plan, catalogs = instance.plan(aoi)
++
++    assert plan.product is CopernicusProduct.GLO_90
++    assert plan.missing_glo30_tiles == [tile_id(CopernicusProduct.GLO_30, 29, 101)]
++    assert len(catalogs) == 2
++    assert "not blended" in plan.decisions[-1]
++
++
++def test_acquire_writes_metric_aoi_raster_and_source_manifest(tmp_path: Path) -> None:
++    identifier = tile_id(CopernicusProduct.GLO_30, 29, 101)
++    source_url = f"https://fixture.test/glo30/{identifier}/{identifier}.tif"
++    responses = {
++        "https://fixture.test/glo30/tileList.txt": f"{identifier}\n".encode(),
++        source_url: tiny_geotiff(),
++    }
++    instance = provider(tmp_path, responses)
++    aoi = normalize_area_of_interest(AreaOfInterestInput(bbox_wgs84=(101.2, 29.2, 101.3, 29.3)))
++    destination = tmp_path / "acquired.tif"
++
++    result = instance.acquire(aoi, destination)
++
++    assert result.dataset.provider == "copernicus-aws"
++    assert result.dataset.dataset_type.value == "dsm"
++    assert result.acquisition_manifest_path.is_file()
++    with rasterio.open(result.raster_path) as dataset:
++        assert dataset.crs is not None and dataset.crs.is_projected
++        assert dataset.tags()["DATASET_ID"] == "copernicus-dem-glo-30-aws-2021"
++        assert np.count_nonzero(np.isfinite(dataset.read(1))) > 0
++    assert instance.client.cache.summary().content_objects == 2
++
++
++def test_provider_acquisition_reuses_local_build_and_enters_provenance(tmp_path: Path) -> None:
++    from topoforge.engine import build_local_terrain
++    from topoforge.models import BuildConfig
++
++    identifier = tile_id(CopernicusProduct.GLO_30, 29, 101)
++    source_url = f"https://fixture.test/glo30/{identifier}/{identifier}.tif"
++    responses = {
++        "https://fixture.test/glo30/tileList.txt": f"{identifier}\n".encode(),
++        source_url: tiny_geotiff(),
++    }
++    instance = provider(tmp_path, responses)
++    request = AreaOfInterestInput(bbox_wgs84=(101.2, 29.2, 101.21, 29.21))
++    aoi = normalize_area_of_interest(request)
++    acquisition = instance.acquire(aoi, tmp_path / "source" / "dem.tif")
++    dataset = acquisition.dataset
++
++    result = build_local_terrain(
++        BuildConfig(
++            dem_path=acquisition.raster_path,
++            output_dir=tmp_path / "bundle",
++            model_width_mm=80,
++            max_height_mm=30,
++            max_grid_cells=100_000,
++            aoi=request,
++            dataset_type=dataset.dataset_type,
++            dataset_name=dataset.dataset_name,
++            dataset_version=dataset.dataset_version,
++            acquisition_period=dataset.acquisition_period,
++            source_urls=dataset.source_urls,
++            vertical_crs=dataset.vertical_crs,
++            vertical_datum=dataset.vertical_datum,
++            data_license=dataset.license,
++            attribution=dataset.attribution,
++            source_provider=dataset.provider,
++            source_download_time=dataset.download_time,
++            source_checksums=dataset.checksums,
++            source_acquisition_manifest=acquisition.acquisition_manifest_path,
++        )
++    )
++
++    assert result.validation["required_checks_passed"] is True
++    assert result.provenance["provider_selection"]["selected"] == "copernicus-aws"
++    assert result.provenance["source_acquisition"]["plan"]["dataset_id"] == (
++        "copernicus-dem-glo-30-aws-2021"
++    )
++    assert result.artifacts["source_acquisition"].is_file()
++
++
++def test_acquire_crops_reprojection_only_gap_at_source_tile_edge(tmp_path: Path) -> None:
++    identifier = tile_id(CopernicusProduct.GLO_30, 29, 101)
++    source_url = f"https://fixture.test/glo30/{identifier}/{identifier}.tif"
++    responses = {
++        "https://fixture.test/glo30/tileList.txt": f"{identifier}\n".encode(),
++        source_url: tiny_geotiff(right=101.995),
++    }
++    instance = provider(tmp_path, responses)
++    aoi = normalize_area_of_interest(AreaOfInterestInput(bbox_wgs84=(101.98, 29.2, 102.0, 29.22)))
++
++    result = instance.acquire(aoi, tmp_path / "edge.tif")
++
++    with rasterio.open(result.raster_path) as dataset:
++        assert np.all(np.isfinite(dataset.read(1)))
++    import json
++
++    manifest = json.loads(result.acquisition_manifest_path.read_text(encoding="utf-8"))
++    assert manifest["coverage_crop"]["discarded_reprojection_gap_cells"] > 0
++    assert manifest["output_source_nodata_pixels"] == 0
+diff --git a/tests/providers/test_registry.py b/tests/providers/test_registry.py
+index 169d102..fb5f86f 100644
+--- a/tests/providers/test_registry.py
++++ b/tests/providers/test_registry.py
+@@ -6,7 +6,7 @@ def test_copernicus_aws_is_the_explicit_no_key_global_route() -> None:
+ 
+     aws = descriptors["copernicus-aws"]
+     assert aws.requires_api_key is False
+-    assert aws.implemented is False
++    assert aws.implemented is True
+     assert "GLO-30/GLO-90" in aws.name
+ 
+     cdse = descriptors["copernicus-cdse"]
+diff --git a/tests/providers/test_transport.py b/tests/providers/test_transport.py
+new file mode 100644
+index 0000000..4abad64
+--- /dev/null
++++ b/tests/providers/test_transport.py
+@@ -0,0 +1,135 @@
++from __future__ import annotations
++
++from email.message import Message
++from io import BytesIO
++from pathlib import Path
++from urllib.error import URLError
++
++import pytest
++
++from topoforge.exceptions import ProviderFetchError
++from topoforge.providers.cache import CacheIdentity, CacheStatus, ContentAddressedCache
++from topoforge.providers.transport import CachingHttpClient, HttpTransportConfig
++
++
++class FakeResponse:
++    def __init__(self, payload: bytes, *, status: int = 200) -> None:
++        self.status = status
++        self._stream = BytesIO(payload)
++        self.headers = Message()
++        self.headers["Content-Length"] = str(len(payload))
++        self.headers["Content-Type"] = "image/tiff"
++        self.headers["ETag"] = '"fixture"'
++        self.closed = False
++
++    def read(self, amount: int = -1) -> bytes:
++        return self._stream.read(amount)
++
++    def close(self) -> None:
++        self.closed = True
++
++
++def request() -> CacheIdentity:
++    return CacheIdentity(
++        provider_id="fixture",
++        dataset_id="fixture-dem",
++        dataset_version="2026",
++        url="https://example.test/dem.tif",
++    )
++
++
++def config(**updates: object) -> HttpTransportConfig:
++    values: dict[str, object] = {
++        "timeout_seconds": 3,
++        "max_attempts": 3,
++        "backoff_base_seconds": 0.25,
++        "max_backoff_seconds": 1,
++        "min_request_interval_seconds": 0,
++        "max_download_bytes": 1024,
++        "chunk_size_bytes": 4096,
++    }
++    values.update(updates)
++    return HttpTransportConfig.model_validate(values)
++
++
++def test_transport_retries_then_uses_verified_cache(tmp_path: Path) -> None:
++    calls: list[float] = []
++    sleeps: list[float] = []
++
++    def opener(_request: object, timeout: float) -> FakeResponse:
++        calls.append(timeout)
++        if len(calls) == 1:
++            raise URLError("fixture timeout")
++        return FakeResponse(b"valid raster fixture")
++
++    client = CachingHttpClient(
++        ContentAddressedCache(tmp_path / "cache"),
++        config(),
++        open_url=opener,  # type: ignore[arg-type]
++        sleep=sleeps.append,
++    )
++    first = client.download(request())
++    second = client.download(request())
++
++    assert first.cache_status is CacheStatus.MISS
++    assert [item.status for item in first.attempts] == ["retrying", "succeeded"]
++    assert sleeps == [0.25]
++    assert calls == [3.0, 3.0]
++    assert first.path.read_bytes() == b"valid raster fixture"
++    assert second.cache_status is CacheStatus.HIT
++    assert second.attempts == []
++    assert calls == [3.0, 3.0]
++
++
++def test_transport_recovers_corrupt_cache_by_refetching(tmp_path: Path) -> None:
++    payloads = [b"same bytes", b"same bytes"]
++
++    def opener(_request: object, _timeout: float) -> FakeResponse:
++        return FakeResponse(payloads.pop(0))
++
++    client = CachingHttpClient(
++        ContentAddressedCache(tmp_path / "cache"),
++        config(),
++        open_url=opener,  # type: ignore[arg-type]
++    )
++    first = client.download(request())
++    first.path.write_bytes(b"bad")
++    recovered = client.download(request())
++
++    assert recovered.cache_status is CacheStatus.CORRUPT
++    assert recovered.path.read_bytes() == b"same bytes"
++
++
++def test_transport_enforces_download_limit(tmp_path: Path) -> None:
++    client = CachingHttpClient(
++        ContentAddressedCache(tmp_path / "cache"),
++        config(max_download_bytes=4),
++        open_url=lambda _request, _timeout: FakeResponse(b"too large"),  # type: ignore[arg-type]
++    )
++
++    with pytest.raises(ProviderFetchError, match="Content-Length"):
++        client.download(request())
++
++
++def test_transport_enforces_minimum_request_interval(tmp_path: Path) -> None:
++    now = [0.0]
++    sleeps: list[float] = []
++
++    def monotonic() -> float:
++        return now[0]
++
++    def sleep(seconds: float) -> None:
++        sleeps.append(seconds)
++        now[0] += seconds
++
++    client = CachingHttpClient(
++        ContentAddressedCache(tmp_path / "cache"),
++        config(min_request_interval_seconds=1),
++        open_url=lambda _request, _timeout: FakeResponse(b"fixture"),  # type: ignore[arg-type]
++        sleep=sleep,
++        monotonic=monotonic,
++    )
++    client.download(request())
++    client.download(request().model_copy(update={"url": "https://example.test/second.tif"}))
++
++    assert sleeps == [1.0]

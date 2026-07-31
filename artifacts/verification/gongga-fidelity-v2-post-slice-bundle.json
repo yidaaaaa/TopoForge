@@ -1,0 +1,13 @@
+{
+  "raster_shape": [
+    439,
+    451
+  ],
+  "raster_crs": "EPSG:32647",
+  "required_checks_passed": true,
+  "dataset_name": "Copernicus DEM GLO-30 2021 — Mount Gongga",
+  "resolved_output_dir": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-fidelity-v2",
+  "manifest_artifact_count": 13,
+  "preview_png": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-fidelity-v2/preview.png",
+  "preview_glb": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-fidelity-v2/preview.glb"
+}

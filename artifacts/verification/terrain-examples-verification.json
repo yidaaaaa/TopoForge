@@ -1,0 +1,403 @@
+{
+  "schema": "topoforge-terrain-examples-verification-v2",
+  "generated_at": "2026-07-31T03:28:32.519857+00:00",
+  "baseline_role": "source GeoTIFF reopened with topoforge inspect",
+  "modified_role": "generated 3MF/STL bundle reopened with inspect, validate, preview manifest verification, and official Bambu Studio slicing",
+  "patch_role": "/root/autodl-tmp/bambu/TopoForge/artifacts/patches/terrain-examples.patch",
+  "rollback_role": "/root/autodl-tmp/bambu/TopoForge/scripts/rollback-terrain-examples.sh",
+  "examples": [
+    {
+      "slug": "great-trango-tower",
+      "source_raster": "/root/autodl-tmp/bambu/TopoForge/downloads/examples/great-trango-tower-glo30.tif",
+      "bundle": "/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example",
+      "artifacts": {
+        "model.stl": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/model.stl",
+          "sha256": "61abf332ea91e41e1b9a8e88a8b9d849833bc299d70bdc6aebd22a6cb8ccd701",
+          "bytes": 38544084
+        },
+        "model.3mf": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/model.3mf",
+          "sha256": "73f2c1a94aa16fccb827165bda9a1eb2031e952034430bc9f1dd1eca524ccb41",
+          "bytes": 9921052
+        },
+        "preview.glb": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/preview.glb",
+          "sha256": "edf2eb775d9f5645026d717bf911d8b27f1e68e8589460dc72628a6e9a384247",
+          "bytes": 13876912
+        },
+        "preview.png": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/preview.png",
+          "sha256": "201ac864fd7b2148efe5fafe685df0241caf8ee10fead357b840266eee1d6a44",
+          "bytes": 742363
+        },
+        "validation.json": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/validation.json",
+          "sha256": "26f29379099d1eea4c6222ec1c4993e806d0529ec471a7ee32a932d941262ed6",
+          "bytes": 16369
+        },
+        "provenance.json": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/provenance.json",
+          "sha256": "83119a14a764bcc79efae3b39058c8f372450117cfe4842b7c85357e8cdfc908",
+          "bytes": 23129
+        },
+        "slicer_validation.json": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/slicer_validation.json",
+          "sha256": "457255feb40bac6372b299dbdae873b921106dc8afe6e107aef590c14559f32d",
+          "bytes": 5651
+        },
+        "bambu_studio_validation.json": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/bambu_studio_validation.json",
+          "sha256": "eeb6bb89a9871adb1fad4cc769cd955301622f97e86793cea67e83d7bed13866",
+          "bytes": 11001
+        }
+      },
+      "source_sha256": "7539ad8dcaf2300658f6e945e63baf42d7185924322cab149d3c3ec1e0734833",
+      "geometry": {
+        "dimensions_mm": [
+          180.0,
+          180.00015258789062,
+          48.0
+        ],
+        "triangle_count": 770880,
+        "watertight": true,
+        "manifold": true,
+        "winding_consistent": true,
+        "positive_volume": true,
+        "connected_components": 1,
+        "degenerate_faces": 0,
+        "duplicate_faces": 0,
+        "bottom_planarity_error_mm": 0.0,
+        "required_checks_passed": true
+      },
+      "fidelity": {
+        "source_grid_shape": [
+          439,
+          439
+        ],
+        "processed_grid_shape": [
+          439,
+          439
+        ],
+        "source_horizontal_resolution_m": 29.96579087860559,
+        "processed_horizontal_resolution_m": 29.96579087860559,
+        "physical_sample_spacing_mm": 0.41095907098848705,
+        "raw_elevation_min_m": 3512.917236328125,
+        "raw_elevation_max_m": 6690.2646484375,
+        "processed_elevation_min_m": 3512.917236328125,
+        "processed_elevation_max_m": 6690.2646484375,
+        "peak_elevation_loss_m": 0.0,
+        "peak_horizontal_shift_m": 0.0,
+        "terrain_fidelity_status": "source-resolution-preserved"
+      },
+      "scaling": {
+        "base_thickness_mm": 3.0,
+        "baseline_elevation_m": 3512.917236328125,
+        "height_limit_applied": true,
+        "height_limit_mm": 48.0,
+        "horizontal_scale_mm_per_m": 0.013683034337491308,
+        "model_depth_mm": 180.0001461859147,
+        "model_width_mm": 180.0,
+        "policy_vertical_exaggeration": 1.177521798615933,
+        "predicted_max_z_mm": 48.00000000000001,
+        "predicted_min_z_mm": 3.0,
+        "robust_high_elevation_m": 6438.435546875,
+        "robust_low_elevation_m": 3645.49853515625,
+        "scale_mode": "fit-height",
+        "vertical_exaggeration": 1.0350596856126422
+      },
+      "official_slice": {
+        "status": "succeeded",
+        "slicer": {
+          "detail": null,
+          "executable": "/root/autodl-tmp/bambu/TopoForge/downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage",
+          "name": "BambuStudio",
+          "status": "available",
+          "version": "02.07.01.62"
+        },
+        "profile": "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic",
+        "exit_code": 0,
+        "gcode": "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/great-trango-tower-p2s.gcode",
+        "gcode_size_bytes": 51185238,
+        "estimated_time_text": "6h 17m 18s",
+        "filament_used_g": 215.13,
+        "layer_count": 240,
+        "support_material": false,
+        "out_of_bed": false,
+        "empty_layer_warning": false,
+        "floating_region_warning": false,
+        "release_gate_passed": true
+      },
+      "verification_runs": [
+        {
+          "command": [
+            "uv",
+            "run",
+            "topoforge",
+            "inspect",
+            "downloads/examples/great-trango-tower-glo30.tif"
+          ],
+          "input": "downloads/examples/great-trango-tower-glo30.tif",
+          "stdout": "{\n  \"path\": \"/root/autodl-tmp/bambu/TopoForge/downloads/examples/great-trango-tower-glo30.tif\",\n  \"driver\": \"GTiff\",\n  \"shape\": [\n    439,\n    439\n  ],\n  \"crs\": \"EPSG:32643\",\n  \"transform\": [\n    29.965778710342338,\n    0.0,\n    602046.8808337685,\n    0.0,\n    -29.96580304686884,\n    3964294.6750394246\n  ],\n  \"nodata\": NaN,\n  \"valid_fraction\": 1.0,\n  \"elevation_min\": 3512.917236328125,\n  \"elevation_max\": 6690.2646484375,\n  \"tags\": {\n    \"ACQUISITION_PERIOD\": \"TanDEM-X primarily 2011-2015; Copernicus DEM 2021 release\",\n    \"ATTRIBUTION\": \"© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved.\",\n    \"DATASET_ID\": \"copernicus-dem-glo-30-aws-2021\",\n    \"DATASET_TYPE\": \"dsm\",\n    \"DATASET_VERSION\": \"AWS mirror 2021\",\n    \"DOWNLOAD_TIME\": \"2026-07-31T03:07:31.210491+00:00\",\n    \"LIABILITY_NOTICE\": \"The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30.\",\n    \"LICENSE\": \"Copernicus-DEM-GLO-30-F\",\n    \"LICENSE_URL\": \"https://dataspace.copernicus.eu/sites/default/files/media/files/2025-06/copernicus_contributing_mission_data_access_v2_cop_dem_licenses.pdf\",\n    \"NORMALIZED_AOI\": \"{\\\"area_m2\\\":168999938.5105896,\\\"bounds_wgs84\\\":[76.12960792255495,35.698889947963785,76.27335127744504,35.816055080289075],\\\"crosses_antimeridian\\\":false,\\\"kind\\\":\\\"center-radius\\\",\\\"normalization_method\\\":\\\"geodesic 5-degree bearing envelope normalized to explicit WGS84 pixel-crop bounds\\\",\\\"normalized_geometry_geojson\\\":{\\\"coordinates\\\":[[[76.27335127744504,35.698889947963785],[76.27335127744504,35.816055080289075],[76.12960792255495,35.816055080289075],[76.12960792255495,35.698889947963785],[76.27335127744504,35.698889947963785]]],\\\"type\\\":\\\"Polygon\\\"},\\\"target_local_crs\\\":\\\"EPSG:32643\\\",\\\"user_input\\\":{\\\"center_wgs84\\\":[76.2014796,35.7574728],\\\"radius_m\\\":6500.0}}\",\n    \"PROVIDER\": \"copernicus-aws\",\n    \"SOURCE_URLS\": \"[\\\"https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N35_00_E076_00_DEM/Copernicus_DSM_COG_10_N35_00_E076_00_DEM.tif\\\"]\",\n    \"VERTICAL_CRS\": \"EPSG:3855\",\n    \"VERTICAL_DATUM\": \"EGM2008\",\n    \"AREA_OR_POINT\": \"Area\"\n  },\n  \"sha256\": \"7539ad8dcaf2300658f6e945e63baf42d7185924322cab149d3c3ec1e0734833\"\n}\n",
+          "stderr": "",
+          "exit_status": 0
+        },
+        {
+          "command": [
+            "uv",
+            "run",
+            "topoforge",
+            "inspect",
+            "outputs/great-trango-tower-example/model.3mf"
+          ],
+          "input": "outputs/great-trango-tower-example/model.3mf",
+          "stdout": "{\n  \"unit\": \"millimeter\",\n  \"object_count\": 1,\n  \"build_item_count\": 1,\n  \"vertex_count\": 385442,\n  \"triangle_count\": 770880,\n  \"dimensions_mm\": [\n    180.0,\n    180.00016,\n    48.0\n  ],\n  \"peak_coordinate_mm\": [\n    134.383568,\n    161.917936,\n    48.0\n  ],\n  \"peak_coordinates_mm\": [\n    [\n      134.383568,\n      161.917936,\n      48.0\n    ]\n  ],\n  \"metadata\": {\n    \"Title\": \"TopoForge terrain\",\n    \"Application\": \"TopoForge\",\n    \"customXMLNS0:dataset_name\": \"Copernicus DEM GLO-30 2021 — Great Trango Tower\",\n    \"customXMLNS0:dataset_type\": \"dsm\",\n    \"customXMLNS0:east_axis\": \"+X = East\",\n    \"customXMLNS0:horizontal_crs\": \"EPSG:32643\",\n    \"customXMLNS0:north_axis\": \"+Y = North\",\n    \"customXMLNS0:north_edge\": \"y=model_depth_mm\",\n    \"customXMLNS0:orientation_transform\": \"mesh_heightfield=flipud(processed_dem); source row 0 north maps to y=model_depth_mm\",\n    \"customXMLNS0:source_bounds\": \"{\\\"full_grid_shape\\\":[439,439],\\\"native\\\":[602046.8808337685,3951139.687501849,615201.8576876088,3964294.6750394246],\\\"native_crs\\\":\\\"EPSG:32643\\\",\\\"wgs84\\\":[76.12795310051114,35.697455245259476,76.27521941076505,35.81749180146379]}\",\n    \"customXMLNS0:vertical_datum\": \"EGM2008\",\n    \"customXMLNS0:vertical_exaggeration\": \"1.03505969\"\n  },\n  \"object_names\": [\n    \"TopoForge terrain\"\n  ],\n  \"strict_warning_count\": 0,\n  \"lib3mf_version\": [\n    2,\n    5,\n    0\n  ]\n}\n",
+          "stderr": "",
+          "exit_status": 0
+        },
+        {
+          "command": [
+            "uv",
+            "run",
+            "topoforge",
+            "validate",
+            "outputs/great-trango-tower-example/model.stl"
+          ],
+          "input": "outputs/great-trango-tower-example/model.stl",
+          "stdout": "{\n  \"units\": \"mm\",\n  \"dimensions_mm\": [\n    180.0,\n    180.00015258789062,\n    48.0\n  ],\n  \"expected_dimensions_mm\": null,\n  \"dimension_error_mm\": null,\n  \"dimensions_within_tolerance\": null,\n  \"finite_vertices\": true,\n  \"finite_face_normals\": true,\n  \"watertight\": true,\n  \"winding_consistent\": true,\n  \"manifold\": true,\n  \"positive_volume\": true,\n  \"volume_mm3\": 647779.9530453328,\n  \"connected_components\": 1,\n  \"degenerate_faces\": 0,\n  \"duplicate_faces\": 0,\n  \"flat_bottom\": true,\n  \"bottom_planarity_error_mm\": 0.0,\n  \"minimum_base_thickness_mm\": 3.0,\n  \"triangle_count\": 770880,\n  \"self_intersection_status\": \"not_fully_checked\",\n  \"self_intersection_method\": \"No exhaustive robust self-intersection predicate is available in the Phase 1 backend.\"\n}\n",
+          "stderr": "",
+          "exit_status": 0
+        },
+        {
+          "command": [
+            "uv",
+            "run",
+            "topoforge",
+            "preview",
+            "outputs/great-trango-tower-example"
+          ],
+          "input": "outputs/great-trango-tower-example",
+          "stdout": "{\n  \"raster_shape\": [\n    439,\n    439\n  ],\n  \"raster_crs\": \"EPSG:32643\",\n  \"required_checks_passed\": true,\n  \"dataset_name\": \"Copernicus DEM GLO-30 2021 — Great Trango Tower\",\n  \"resolved_output_dir\": \"/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example\",\n  \"manifest_artifact_count\": 14,\n  \"preview_png\": \"/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/preview.png\",\n  \"preview_glb\": \"/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/preview.glb\"\n}\n",
+          "stderr": "",
+          "exit_status": 0
+        }
+      ]
+    },
+    {
+      "slug": "mount-thor",
+      "source_raster": "/root/autodl-tmp/bambu/TopoForge/downloads/examples/mount-thor-glo30.tif",
+      "bundle": "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example",
+      "artifacts": {
+        "model.stl": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/model.stl",
+          "sha256": "dadd3167a4d28e64938bef8d5c4e829772e24e497772832fa5809eba99557f35",
+          "bytes": 40499884
+        },
+        "model.3mf": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/model.3mf",
+          "sha256": "33ecf0823f6d35141cc4f7941b59c26725c8f6e0e5deaa3397c4b62b57eab568",
+          "bytes": 10080191
+        },
+        "preview.glb": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/preview.glb",
+          "sha256": "40f703123d24150cf7df2f692bb3e608d24e36af40511df6049a8233ac9a309a",
+          "bytes": 14580984
+        },
+        "preview.png": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/preview.png",
+          "sha256": "77fcc8ff84dcd43cc81df9d785fb44d5bb9c2b83434bf42b19c1252c86e5d76f",
+          "bytes": 636018
+        },
+        "validation.json": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/validation.json",
+          "sha256": "1ec7146be24ab39dda9faa93776f095a7b1eb0cac22ce6c1b31f30fcb0581cad",
+          "bytes": 15136
+        },
+        "provenance.json": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/provenance.json",
+          "sha256": "d444ba6031318de3f9fce4a3dd47724966c437fb87f1f40b5e3ce9ee213d26a0",
+          "bytes": 22843
+        },
+        "slicer_validation.json": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/slicer_validation.json",
+          "sha256": "f51264456f9ee00631e404f4359e23906a830b73d61650e465b4fd16e6f2835b",
+          "bytes": 4499
+        },
+        "bambu_studio_validation.json": {
+          "path": "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/bambu_studio_validation.json",
+          "sha256": "ce9afe6400826266ff6d6f3a5e6d840be04c3b02f51a46de665736232bbfb131",
+          "bytes": 9841
+        }
+      },
+      "source_sha256": "6c85376e74a5df5997d1cb4caf7d76727c7b83c79f1c553be7bfceab1601415e",
+      "geometry": {
+        "dimensions_mm": [
+          180.0,
+          180.0001220703125,
+          48.0
+        ],
+        "triangle_count": 809996,
+        "watertight": true,
+        "manifold": true,
+        "winding_consistent": true,
+        "positive_volume": true,
+        "connected_components": 1,
+        "degenerate_faces": 0,
+        "duplicate_faces": 0,
+        "bottom_planarity_error_mm": 0.0,
+        "required_checks_passed": true
+      },
+      "fidelity": {
+        "source_grid_shape": [
+          450,
+          450
+        ],
+        "processed_grid_shape": [
+          450,
+          450
+        ],
+        "source_horizontal_resolution_m": 29.933828957089247,
+        "processed_horizontal_resolution_m": 29.933828957089247,
+        "physical_sample_spacing_mm": 0.4008910077242973,
+        "raw_elevation_min_m": 85.61587524414062,
+        "raw_elevation_max_m": 2089.2275390625,
+        "processed_elevation_min_m": 85.61587524414062,
+        "processed_elevation_max_m": 2089.2275390625,
+        "peak_elevation_loss_m": 0.0,
+        "peak_horizontal_shift_m": 0.0,
+        "terrain_fidelity_status": "source-resolution-preserved"
+      },
+      "scaling": {
+        "base_thickness_mm": 3.0,
+        "baseline_elevation_m": 85.61587524414062,
+        "height_limit_applied": true,
+        "height_limit_mm": 48.0,
+        "horizontal_scale_mm_per_m": 0.013362812334888787,
+        "model_depth_mm": 180.000124936419,
+        "model_width_mm": 180.0,
+        "policy_vertical_exaggeration": 1.9547442713996124,
+        "predicted_max_z_mm": 48.0,
+        "predicted_min_z_mm": 3.0,
+        "robust_high_elevation_m": 1830.9974365234375,
+        "robust_low_elevation_m": 108.2377700805664,
+        "scale_mode": "fit-height",
+        "vertical_exaggeration": 1.6807421566711345
+      },
+      "official_slice": {
+        "status": "succeeded",
+        "slicer": {
+          "detail": null,
+          "executable": "/root/autodl-tmp/bambu/TopoForge/downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage",
+          "name": "BambuStudio",
+          "status": "available",
+          "version": "02.07.01.62"
+        },
+        "profile": "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic",
+        "exit_code": 0,
+        "gcode": "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/mount-thor-p2s.gcode",
+        "gcode_size_bytes": 46330376,
+        "estimated_time_text": "6h 35m 58s",
+        "filament_used_g": 245.86,
+        "layer_count": 240,
+        "support_material": false,
+        "out_of_bed": false,
+        "empty_layer_warning": false,
+        "floating_region_warning": false,
+        "release_gate_passed": true
+      },
+      "verification_runs": [
+        {
+          "command": [
+            "uv",
+            "run",
+            "topoforge",
+            "inspect",
+            "downloads/examples/mount-thor-glo30.tif"
+          ],
+          "input": "downloads/examples/mount-thor-glo30.tif",
+          "stdout": "{\n  \"path\": \"/root/autodl-tmp/bambu/TopoForge/downloads/examples/mount-thor-glo30.tif\",\n  \"driver\": \"GTiff\",\n  \"shape\": [\n    450,\n    450\n  ],\n  \"crs\": \"EPSG:32620\",\n  \"transform\": [\n    29.933818568688974,\n    0.0,\n    390181.65010740765,\n    0.0,\n    -29.933839345489524,\n    7388539.514699639\n  ],\n  \"nodata\": NaN,\n  \"valid_fraction\": 1.0,\n  \"elevation_min\": 85.61587524414062,\n  \"elevation_max\": 2089.2275390625,\n  \"tags\": {\n    \"ACQUISITION_PERIOD\": \"TanDEM-X primarily 2011-2015; Copernicus DEM 2021 release\",\n    \"ATTRIBUTION\": \"© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved.\",\n    \"DATASET_ID\": \"copernicus-dem-glo-30-aws-2021\",\n    \"DATASET_TYPE\": \"dsm\",\n    \"DATASET_VERSION\": \"AWS mirror 2021\",\n    \"DOWNLOAD_TIME\": \"2026-07-31T03:07:55.077380+00:00\",\n    \"LIABILITY_NOTICE\": \"The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30.\",\n    \"LICENSE\": \"Copernicus-DEM-GLO-30-F\",\n    \"LICENSE_URL\": \"https://dataspace.copernicus.eu/sites/default/files/media/files/2025-06/copernicus_contributing_mission_data_access_v2_cop_dem_licenses.pdf\",\n    \"NORMALIZED_AOI\": \"{\\\"area_m2\\\":168999102.62332153,\\\"bounds_wgs84\\\":[-65.4665538596351,66.47974157953497,-65.1740655403649,66.5963175830641],\\\"crosses_antimeridian\\\":false,\\\"kind\\\":\\\"center-radius\\\",\\\"normalization_method\\\":\\\"geodesic 5-degree bearing envelope normalized to explicit WGS84 pixel-crop bounds\\\",\\\"normalized_geometry_geojson\\\":{\\\"coordinates\\\":[[[-65.1740655403649,66.47974157953497],[-65.1740655403649,66.5963175830641],[-65.4665538596351,66.5963175830641],[-65.4665538596351,66.47974157953497],[-65.1740655403649,66.47974157953497]]],\\\"type\\\":\\\"Polygon\\\"},\\\"target_local_crs\\\":\\\"EPSG:32620\\\",\\\"user_input\\\":{\\\"center_wgs84\\\":[-65.3203097,66.5380298],\\\"radius_m\\\":6500.0}}\",\n    \"PROVIDER\": \"copernicus-aws\",\n    \"SOURCE_URLS\": \"[\\\"https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N66_00_W066_00_DEM/Copernicus_DSM_COG_10_N66_00_W066_00_DEM.tif\\\"]\",\n    \"VERTICAL_CRS\": \"EPSG:3855\",\n    \"VERTICAL_DATUM\": \"EGM2008\",\n    \"AREA_OR_POINT\": \"Area\"\n  },\n  \"sha256\": \"6c85376e74a5df5997d1cb4caf7d76727c7b83c79f1c553be7bfceab1601415e\"\n}\n",
+          "stderr": "",
+          "exit_status": 0
+        },
+        {
+          "command": [
+            "uv",
+            "run",
+            "topoforge",
+            "inspect",
+            "outputs/mount-thor-example/model.3mf"
+          ],
+          "input": "outputs/mount-thor-example/model.3mf",
+          "stdout": "{\n  \"unit\": \"millimeter\",\n  \"object_count\": 1,\n  \"build_item_count\": 1,\n  \"vertex_count\": 405000,\n  \"triangle_count\": 809996,\n  \"dimensions_mm\": [\n    180.0,\n    180.000128,\n    48.0\n  ],\n  \"peak_coordinate_mm\": [\n    25.256124,\n    104.632592,\n    48.0\n  ],\n  \"peak_coordinates_mm\": [\n    [\n      25.256124,\n      104.632592,\n      48.0\n    ]\n  ],\n  \"metadata\": {\n    \"Title\": \"TopoForge terrain\",\n    \"Application\": \"TopoForge\",\n    \"customXMLNS0:dataset_name\": \"Copernicus DEM GLO-30 2021 — Mount Thor\",\n    \"customXMLNS0:dataset_type\": \"dsm\",\n    \"customXMLNS0:east_axis\": \"+X = East\",\n    \"customXMLNS0:horizontal_crs\": \"EPSG:32620\",\n    \"customXMLNS0:north_axis\": \"+Y = North\",\n    \"customXMLNS0:north_edge\": \"y=model_depth_mm\",\n    \"customXMLNS0:orientation_transform\": \"mesh_heightfield=flipud(processed_dem); source row 0 north maps to y=model_depth_mm\",\n    \"customXMLNS0:source_bounds\": \"{\\\"full_grid_shape\\\":[450,450],\\\"native\\\":[390181.65010740765,7375069.286994169,403651.8684633177,7388539.514699639],\\\"native_crs\\\":\\\"EPSG:32620\\\",\\\"wgs84\\\":[-65.47812046666786,66.4754067323374,-65.16391587479507,66.60063680450617]}\",\n    \"customXMLNS0:vertical_datum\": \"EGM2008\",\n    \"customXMLNS0:vertical_exaggeration\": \"1.68074216\"\n  },\n  \"object_names\": [\n    \"TopoForge terrain\"\n  ],\n  \"strict_warning_count\": 0,\n  \"lib3mf_version\": [\n    2,\n    5,\n    0\n  ]\n}\n",
+          "stderr": "",
+          "exit_status": 0
+        },
+        {
+          "command": [
+            "uv",
+            "run",
+            "topoforge",
+            "validate",
+            "outputs/mount-thor-example/model.stl"
+          ],
+          "input": "outputs/mount-thor-example/model.stl",
+          "stdout": "{\n  \"units\": \"mm\",\n  \"dimensions_mm\": [\n    180.0,\n    180.0001220703125,\n    48.0\n  ],\n  \"expected_dimensions_mm\": null,\n  \"dimension_error_mm\": null,\n  \"dimensions_within_tolerance\": null,\n  \"finite_vertices\": true,\n  \"finite_face_normals\": true,\n  \"watertight\": true,\n  \"winding_consistent\": true,\n  \"manifold\": true,\n  \"positive_volume\": true,\n  \"volume_mm3\": 781298.25342843,\n  \"connected_components\": 1,\n  \"degenerate_faces\": 0,\n  \"duplicate_faces\": 0,\n  \"flat_bottom\": true,\n  \"bottom_planarity_error_mm\": 0.0,\n  \"minimum_base_thickness_mm\": 3.0,\n  \"triangle_count\": 809996,\n  \"self_intersection_status\": \"not_fully_checked\",\n  \"self_intersection_method\": \"No exhaustive robust self-intersection predicate is available in the Phase 1 backend.\"\n}\n",
+          "stderr": "",
+          "exit_status": 0
+        },
+        {
+          "command": [
+            "uv",
+            "run",
+            "topoforge",
+            "preview",
+            "outputs/mount-thor-example"
+          ],
+          "input": "outputs/mount-thor-example",
+          "stdout": "{\n  \"raster_shape\": [\n    450,\n    450\n  ],\n  \"raster_crs\": \"EPSG:32620\",\n  \"required_checks_passed\": true,\n  \"dataset_name\": \"Copernicus DEM GLO-30 2021 — Mount Thor\",\n  \"resolved_output_dir\": \"/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example\",\n  \"manifest_artifact_count\": 14,\n  \"preview_png\": \"/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/preview.png\",\n  \"preview_glb\": \"/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/preview.glb\"\n}\n",
+          "stderr": "",
+          "exit_status": 0
+        }
+      ]
+    }
+  ],
+  "meta_verification_runs": [
+    {
+      "command": [
+        "git",
+        "apply",
+        "--check",
+        "--reverse",
+        "artifacts/patches/terrain-examples.patch"
+      ],
+      "input": "artifacts/patches/terrain-examples.patch",
+      "stdout": "",
+      "stderr": "",
+      "exit_status": 0
+    },
+    {
+      "command": [
+        "scripts/rollback-terrain-examples.sh",
+        "--check"
+      ],
+      "input": "--check",
+      "stdout": "Rollback root: /root/autodl-tmp/bambu/TopoForge\npresent  examples/real-terrain\npresent  downloads/examples/great-trango-tower-glo30.tif\npresent  downloads/examples/great-trango-tower-glo30.tif.source_acquisition.json\npresent  downloads/examples/mount-thor-glo30.tif\npresent  downloads/examples/mount-thor-glo30.tif.source_acquisition.json\npresent  outputs/great-trango-tower-example\npresent  outputs/mount-thor-example\npresent  artifacts/slicer/great-trango-tower-p2s.gcode\npresent  artifacts/slicer/mount-thor-p2s.gcode\npresent  artifacts/verification/terrain-examples-verification.json\nabsent   artifacts/verification/terrain-examples-summary.json\nabsent   artifacts/verification/terrain-examples-rollback-test.txt\npresent  artifacts/patches/terrain-examples.patch\npresent  artifacts/previews/great-trango-tower-example.jpg\npresent  artifacts/previews/mount-thor-example.jpg\npresent  artifacts/previews/great-trango-tower-glo30-quicklook.jpg\npresent  artifacts/previews/great-trango-tower-glo30-quicklook.png\npresent  artifacts/previews/mount-thor-glo30-quicklook.jpg\npresent  artifacts/previews/mount-thor-glo30-quicklook.png\npresent  artifacts/logs/great-trango-tower-fetch.log\npresent  artifacts/logs/great-trango-tower-build.log\npresent  artifacts/logs/great-trango-tower-bambu-slice.log\npresent  artifacts/logs/mount-thor-fetch.log\npresent  artifacts/logs/mount-thor-build.log\npresent  artifacts/logs/mount-thor-bambu-slice.log\n",
+      "stderr": "",
+      "exit_status": 0
+    }
+  ],
+  "patch_sha256": "809021cd59a55ecb263031eb7dab85d0c2d37be8d0a4d4a8e8b5cf94b80212f8",
+  "rollback_sha256": "4e5fb6e7a974da62e00c7479583115d70aca6f6b099c18956e878eb92fc326c2",
+  "quality_gate_run": {
+    "command": [
+      "uv run ruff check .",
+      "uv run ruff format --check .",
+      "uv run pyright",
+      "uv run pytest"
+    ],
+    "input": ".",
+    "stdout": "$ uv run ruff check .\nAll checks passed!\n$ uv run ruff format --check .\n99 files already formatted\n$ uv run pyright\n0 errors, 0 warnings, 0 informations\n$ uv run pytest\n============================= test session starts ==============================\nplatform linux -- Python 3.12.3, pytest-8.4.2, pluggy-1.6.0\nrootdir: /root/autodl-tmp/bambu/TopoForge\nconfigfile: pyproject.toml\ntestpaths: tests\nplugins: cov-6.3.0, hypothesis-6.164.0, anyio-4.14.2\ncollected 113 items\n\ntests/cli/test_build_config_overrides.py .....                           [  4%]\ntests/geometry/test_mesh_exporters.py ...                                [  7%]\ntests/geometry/test_mesh_validation.py ...                               [  9%]\ntests/geometry/test_rectangular_terrain_mesh.py .............            [ 21%]\ntests/integration/test_aoi_clipping.py ....                              [ 24%]\ntests/integration/test_local_build.py .                                  [ 25%]\ntests/integration/test_orientation.py .                                  [ 26%]\ntests/integration/test_raster_crs_cases.py ....                          [ 30%]\ntests/integration/test_reproducible_build.py .                           [ 30%]\ntests/integration/test_sampling_fidelity.py .                            [ 31%]\ntests/integration/test_synthetic_catalog.py ...........                  [ 41%]\ntests/property/test_mesh_properties.py .                                 [ 42%]\ntests/providers/test_cache.py ...                                        [ 45%]\ntests/providers/test_copernicus_aws.py ......                            [ 50%]\ntests/providers/test_registry.py .                                       [ 51%]\ntests/providers/test_transport.py ....                                   [ 54%]\ntests/slicer/test_adapters.py ......                                     [ 60%]\ntests/slicer/test_bambu.py ..                                            [ 61%]\ntests/slicer/test_metrics.py ....                                        [ 65%]\ntests/slicer/test_real_prusa.py .                                        [ 66%]\ntests/unit/test_3mf.py ..                                                [ 68%]\ntests/unit/test_aoi.py .......                                           [ 74%]\ntests/unit/test_bambu_profile_resolver.py .                              [ 75%]\ntests/unit/test_manufacturing_gate.py ..                                 [ 76%]\ntests/unit/test_preview.py .                                             [ 77%]\ntests/unit/test_printer_profiles.py ..                                   [ 79%]\ntests/unit/test_sampling.py .....                                        [ 84%]\ntests/unit/test_scaling.py .....                                         [ 88%]\ntests/unit/test_synthetic_raster.py .............                        [100%]\n\n=============================== warnings summary ===============================\ntests/integration/test_aoi_clipping.py: 3 warnings\ntests/integration/test_local_build.py: 1 warning\ntests/integration/test_orientation.py: 1 warning\ntests/integration/test_raster_crs_cases.py: 3 warnings\ntests/integration/test_reproducible_build.py: 2 warnings\ntests/integration/test_sampling_fidelity.py: 1 warning\ntests/integration/test_synthetic_catalog.py: 11 warnings\ntests/providers/test_copernicus_aws.py: 1 warning\ntests/unit/test_synthetic_raster.py: 2 warnings\n  /root/autodl-tmp/bambu/TopoForge/.venv/lib/python3.12/site-packages/numpy/ma/core.py:3505: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    super(MaskedArray, type(self)).shape.__set__(self, shape)\n\ntests/integration/test_local_build.py::test_synthetic_geotiff_to_complete_validated_bundle\ntests/integration/test_local_build.py::test_synthetic_geotiff_to_complete_validated_bundle\ntests/integration/test_local_build.py::test_synthetic_geotiff_to_complete_validated_bundle\ntests/integration/test_orientation.py::test_asymmetric_dem_keeps_all_corners_and_peak_in_stl_glb_and_3mf\ntests/integration/test_reproducible_build.py::test_same_raster_and_settings_produce_identical_geometry\ntests/integration/test_reproducible_build.py::test_same_raster_and_settings_produce_identical_geometry\ntests/providers/test_copernicus_aws.py::test_provider_acquisition_reuses_local_build_and_enters_provenance\n  /root/autodl-tmp/bambu/TopoForge/src/topoforge/engine/build.py:611: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    if dataset.count != 1 or dataset.crs is None or not np.all(np.isfinite(dataset.read(1))):\n\ntests/integration/test_local_build.py::test_synthetic_geotiff_to_complete_validated_bundle\ntests/integration/test_local_build.py::test_synthetic_geotiff_to_complete_validated_bundle\ntests/integration/test_local_build.py::test_synthetic_geotiff_to_complete_validated_bundle\ntests/integration/test_orientation.py::test_asymmetric_dem_keeps_all_corners_and_peak_in_stl_glb_and_3mf\ntests/integration/test_reproducible_build.py::test_same_raster_and_settings_produce_identical_geometry\ntests/integration/test_reproducible_build.py::test_same_raster_and_settings_produce_identical_geometry\ntests/providers/test_copernicus_aws.py::test_provider_acquisition_reuses_local_build_and_enters_provenance\n  /root/autodl-tmp/bambu/TopoForge/src/topoforge/engine/build.py:616: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    mask_values = np.unique(dataset.read(1))\n\ntests/integration/test_reproducible_build.py::test_same_raster_and_settings_produce_identical_geometry\n  /root/autodl-tmp/bambu/TopoForge/tests/integration/test_reproducible_build.py:39: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    first_values = first_raster.read(1)\n\ntests/integration/test_reproducible_build.py::test_same_raster_and_settings_produce_identical_geometry\n  /root/autodl-tmp/bambu/TopoForge/tests/integration/test_reproducible_build.py:41: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    second_values = second_raster.read(1)\n\ntests/providers/test_copernicus_aws.py::test_acquire_writes_metric_aoi_raster_and_source_manifest\n  /root/autodl-tmp/bambu/TopoForge/tests/providers/test_copernicus_aws.py:154: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    assert np.count_nonzero(np.isfinite(dataset.read(1))) > 0\n\ntests/providers/test_copernicus_aws.py::test_acquire_crops_reprojection_only_gap_at_source_tile_edge\n  /root/autodl-tmp/bambu/TopoForge/tests/providers/test_copernicus_aws.py:219: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    assert np.all(np.isfinite(dataset.read(1)))\n\ntests/unit/test_synthetic_raster.py::test_process_metric_geotiff_and_preserve_original_nodata_mask\n  /root/autodl-tmp/bambu/TopoForge/tests/unit/test_synthetic_raster.py:50: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    assert int(np.sum(mask_dataset.read(1))) == 16\n\ntests/unit/test_synthetic_raster.py::test_large_or_edge_nodata_is_rejected\n  /root/autodl-tmp/bambu/TopoForge/tests/unit/test_synthetic_raster.py:56: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    values = dataset.read(1)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n======================= 113 passed, 45 warnings in 7.45s =======================\n",
+    "stderr": "",
+    "exit_status": 0
+  }
+}

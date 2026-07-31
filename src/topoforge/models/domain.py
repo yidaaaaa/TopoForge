@@ -46,17 +46,48 @@ class BaselineMode(StrEnum):
     LOW_PERCENTILE = "low-percentile"
 
 
-class AreaOfInterest(BaseModel):
-    """Normalized area geometry and the metric CRS selected for processing."""
+class SamplingMode(StrEnum):
+    """Policy used to select the processed terrain grid."""
+
+    PRINT_AWARE = "print-aware"
+    SOURCE_PRESERVING = "source-preserving"
+    CUSTOM = "custom"
+
+
+class AreaOfInterestInput(BaseModel):
+    """User-supplied WGS84 bbox or geodesic center-radius request."""
 
     model_config = ConfigDict(extra="forbid")
 
-    geometry_geojson: dict[str, object]
-    source_crs: str
+    bbox_wgs84: tuple[float, float, float, float] | None = None
+    center_wgs84: tuple[float, float] | None = None
+    radius_m: float | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_shape(self) -> AreaOfInterestInput:
+        """Require exactly one complete AOI input form."""
+        has_bbox = self.bbox_wgs84 is not None
+        has_center = self.center_wgs84 is not None or self.radius_m is not None
+        if has_bbox == has_center:
+            raise ValueError("AOI requires exactly one of bbox_wgs84 or center_wgs84 + radius_m")
+        if has_center and (self.center_wgs84 is None or self.radius_m is None):
+            raise ValueError("center_wgs84 and radius_m must be supplied together")
+        return self
+
+
+class AreaOfInterest(BaseModel):
+    """Normalized WGS84 area geometry and metric processing CRS."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str
+    user_input: dict[str, object]
     normalized_geometry_geojson: dict[str, object]
+    bounds_wgs84: tuple[float, float, float, float]
     target_local_crs: str
     crosses_antimeridian: bool = False
     area_m2: float = Field(gt=0)
+    normalization_method: str
 
 
 class DatasetMetadata(BaseModel):
@@ -85,8 +116,8 @@ class PrinterProfile(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    profile_id: str = "generic-fdm-0.4"
-    build_volume_mm: tuple[float, float, float] = (220.0, 220.0, 250.0)
+    profile_id: str = "bambu-p2s-0.4"
+    build_volume_mm: tuple[float, float, float] = (256.0, 256.0, 256.0)
     nozzle_diameter_mm: float = Field(default=0.4, gt=0)
     layer_height_mm: float = Field(default=0.2, gt=0)
     minimum_feature_mm: float = Field(default=0.5, gt=0)
@@ -115,6 +146,12 @@ class BuildConfig(BaseModel):
     vertical_datum: str = "unknown"
     data_license: str = "user-supplied; verify source terms"
     attribution: str = "Provided by the user"
+    source_provider: str = "local"
+    source_download_time: str = "not-applicable-local-input"
+    source_checksums: dict[str, str] = Field(default_factory=dict)
+    source_acquisition_manifest: Path | None = None
+    reference_peak_elevation_m: float | None = None
+    reference_peak_elevation_note: str | None = None
     vertical_scale_mode: VerticalScaleMode = VerticalScaleMode.AUTO_PERCEPTUAL
     vertical_exaggeration: float = Field(default=1.0, gt=0)
     max_height_mm: float = Field(default=45.0, gt=0)
@@ -126,7 +163,11 @@ class BuildConfig(BaseModel):
     baseline_elevation_m: float | None = None
     nodata_max_fraction: float = Field(default=0.05, ge=0, le=1)
     nodata_max_hole_pixels: int = Field(default=256, ge=0)
+    sampling_mode: SamplingMode = SamplingMode.PRINT_AWARE
+    mesh_sampling_mm: float | None = Field(default=None, gt=0)
     max_grid_cells: int = Field(default=1_500_000, ge=16)
+    max_estimated_memory_mb: float = Field(default=1024.0, gt=0)
+    aoi: AreaOfInterestInput | None = None
     printer_profile: PrinterProfile = Field(default_factory=PrinterProfile)
     output_formats: list[str] = Field(default_factory=lambda: ["stl", "3mf", "glb"])
 
@@ -152,6 +193,9 @@ class BuildConfig(BaseModel):
         if self.max_height_mm > self.printer_profile.build_volume_mm[2]:
             msg = "max_height_mm exceeds the printer build height"
             raise ValueError(msg)
+        if self.sampling_mode is not SamplingMode.CUSTOM and self.mesh_sampling_mm is not None:
+            msg = "mesh_sampling_mm is only valid when sampling_mode is custom"
+            raise ValueError(msg)
         unknown_formats = set(self.output_formats) - {"stl", "3mf", "glb"}
         if unknown_formats:
             msg = f"unsupported output formats: {', '.join(sorted(unknown_formats))}"
@@ -167,6 +211,8 @@ class RasterResult(BaseModel):
     path: Path
     original_nodata_mask_path: Path | None = None
     array_shape: tuple[int, int]
+    source_grid_shape: tuple[int, int]
+    processed_grid_shape: tuple[int, int]
     transform: tuple[float, float, float, float, float, float]
     crs: str
     nodata: float | None
@@ -179,6 +225,29 @@ class RasterResult(BaseModel):
     original_nodata_fraction: float = Field(ge=0, le=1)
     elevation_min_m: float
     elevation_max_m: float
+    source_horizontal_resolution_m: float = Field(gt=0)
+    processed_horizontal_resolution_m: float = Field(gt=0)
+    downsampling_factor: float = Field(ge=1)
+    physical_sample_spacing_mm: float = Field(gt=0)
+    physical_sample_spacing_xy_mm: tuple[float, float]
+    estimated_triangle_count: int = Field(gt=0)
+    estimated_memory_mb: float = Field(gt=0)
+    raw_elevation_min_m: float
+    raw_elevation_max_m: float
+    processed_elevation_min_m: float
+    processed_elevation_max_m: float
+    peak_elevation_loss_m: float = Field(ge=0)
+    raw_peak_coordinate: dict[str, object]
+    processed_peak_coordinate: dict[str, object]
+    peak_horizontal_shift_m: float = Field(ge=0)
+    sampling_decision_reasons: list[str]
+    sampling_warnings: list[str] = Field(default_factory=list)
+    terrain_fidelity_status: str
+    terrain_fidelity_passed: bool
+    peak_elevation_loss_threshold_m: float = Field(gt=0)
+    peak_horizontal_shift_threshold_m: float = Field(gt=0)
+    source_bounds: dict[str, object]
+    aoi: dict[str, object] | None = None
     metadata: DatasetMetadata
 
 

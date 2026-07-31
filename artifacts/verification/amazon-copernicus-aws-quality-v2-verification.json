@@ -1,0 +1,289 @@
+{
+  "asset_catalog_cache_status": "hit",
+  "bundle": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-quality-v2",
+  "bundle_reread": {
+    "dataset_name": "Copernicus DEM GLO-30 AWS 2021",
+    "manifest_artifact_count": 18,
+    "raster_crs": "PROJCS[\"unknown\",GEOGCS[\"unknown\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Azimuthal_Equidistant\"],PARAMETER[\"latitude_of_center\",-3.12],PARAMETER[\"longitude_of_center\",-60.01],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
+    "raster_shape": [
+      74,
+      74
+    ],
+    "required_checks_passed": true,
+    "resolved_output_dir": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-quality-v2"
+  },
+  "checksums_file": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-quality-v2/checksums.sha256",
+  "checksums_file_sha256": "0319ea3132ecd7ebc87936f76d907808c82c9025f24ae44609a0b7a3533c02f0",
+  "geometry": {
+    "dimensions_mm": [
+      80.0,
+      80.65869140625,
+      9.714625358581543
+    ],
+    "flat_bottom": true,
+    "manifold": true,
+    "orientation_consistent": true,
+    "peak_elevation_loss_m": 0.0,
+    "peak_horizontal_shift_m": 0.0,
+    "positive_volume": true,
+    "processed_grid_shape": [
+      74,
+      74
+    ],
+    "processed_horizontal_resolution_m": 29.763799211548566,
+    "required_checks_passed": true,
+    "source_grid_shape": [
+      74,
+      74
+    ],
+    "source_horizontal_resolution_m": 29.763799211548566,
+    "terrain_fidelity_status": "source-resolution-preserved",
+    "triangle_count": 21900,
+    "volume_mm3": 37389.53330103921,
+    "watertight": true,
+    "winding_consistent": true
+  },
+  "manifest_artifact_sha256": {
+    "bambu_studio_validation": "9fbae778a2c7599bbcfa92edebb6a7d1f72ff7aff2bd9f89082eae56470404a7",
+    "manifest": "1e2f8e9557333d365442010eb180c8afb5f995aae0b39f2d83522bc4b59fa43a",
+    "model_3mf": "67a09bfd158769ec921fdf38fd62dce9d63999501a1f1701d17ffe10e134be11",
+    "model_stl": "e76ccd7f39b31db23512b595ff36cc31d48e008bea626548566e22da59062f9a",
+    "original_nodata_mask": "5ece74e9e42295cab147c16aa1b7c5f485e410084303a053f48ad42e33e2a4b9",
+    "preview_glb": "32f159e88b3f8e3a3f25e8a6078347edc1306882099d99fa1d02c39b1e893597",
+    "preview_png": "2ce33d9a4d759f40ee078ac6976f347d8431cc583596197c80ed8d8159335f91",
+    "processed_dem": "7e32a4bf3f9646d14f858205ca86f5f2091fe3a0b7bc088053b46d95c571553e",
+    "provenance": "a1c5f7f088960c26d05d759938eebaade70c3a31771254222976d547791d5d41",
+    "resolved_config": "c6624b1a1d7c7b6f7124948ba550cb41f4a1a6f8fb12ced7ed23ca41ba534e74",
+    "slicer_validation": "cb6e89b3241ad1d39095b3b43a196e9f282a8f573b287766b94048f638ed01b3",
+    "source_acquisition": "582a649d67a288830a8d68fdc992ff812e2c27e4a0d29838f253d947ff91ead0",
+    "source_quality_edm": "cfdbc34c57e6cbe2e3b6f2a2a865ad6f99f0f3b5d79543c5a674c03fe805fec9",
+    "source_quality_flm": "73f2a2f50c55fb3cada8a43753feabf3fbfe4705dd139011485cc58490d2dbf5",
+    "source_quality_hem": "075283b2196118d3293542d56b4d3a474f901369a2792fe54c8da7454e43dec1",
+    "source_quality_wbm": "04be91fb5946a9a2beb0f92ab485faf1f6caee57132e89e62fcb4c580b4acc7f",
+    "validation_html": "be89c085ad4e7a973ea55c52853a285f602956d5434ba695778376b8ed0f1995",
+    "validation_json": "e8e0607b8e3964266bda44655b549a50ae45c38165c54a3c20fa4e1cdbf53d0c"
+  },
+  "quality_masks": [
+    {
+      "alignment_matches_dem": true,
+      "availability": "present",
+      "bundle_artifact": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-quality-v2/source_quality_edm.tif",
+      "bundle_sha256": "cfdbc34c57e6cbe2e3b6f2a2a865ad6f99f0f3b5d79543c5a674c03fe805fec9",
+      "crs": "PROJCS[\"unknown\",GEOGCS[\"unknown\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Azimuthal_Equidistant\"],PARAMETER[\"latitude_of_center\",-3.12],PARAMETER[\"longitude_of_center\",-60.01],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
+      "dtype": "uint8",
+      "grid_shape": [
+        74,
+        74
+      ],
+      "long_name": "Editing Mask",
+      "nodata": null,
+      "raw_value_max": 4.0,
+      "raw_value_min": 1.0,
+      "role": "edm",
+      "semantics": "Indicates whether a DEM pixel was edited.",
+      "source_bytes": 725769,
+      "source_cache_status": "hit",
+      "source_etag": "\"d0c3bb687f4790f817e5ba37c3c2ce33\"",
+      "source_last_modified": "Mon, 09 May 2022 14:53:53 GMT",
+      "source_sha256": "08e13e189f2f2531199680d126965180d8237f85da36c81993475d469583fb94",
+      "source_url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_S04_00_W061_00_DEM/AUXFILES/Copernicus_DSM_COG_10_S04_00_W061_00_EDM.tif",
+      "transform": [
+        29.641769862751687,
+        0.0,
+        -1111.5663698538108,
+        0.0,
+        -29.885828560345445,
+        1105.7702718701496
+      ],
+      "value_handling": "raw source values retained; nearest-neighbour reprojection only; no flag remapping and no elevation modification"
+    },
+    {
+      "alignment_matches_dem": true,
+      "availability": "present",
+      "bundle_artifact": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-quality-v2/source_quality_flm.tif",
+      "bundle_sha256": "73f2a2f50c55fb3cada8a43753feabf3fbfe4705dd139011485cc58490d2dbf5",
+      "crs": "PROJCS[\"unknown\",GEOGCS[\"unknown\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Azimuthal_Equidistant\"],PARAMETER[\"latitude_of_center\",-3.12],PARAMETER[\"longitude_of_center\",-60.01],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
+      "dtype": "uint8",
+      "grid_shape": [
+        74,
+        74
+      ],
+      "long_name": "Filling Mask",
+      "nodata": null,
+      "raw_value_max": 2.0,
+      "raw_value_min": 1.0,
+      "role": "flm",
+      "semantics": "Indicates whether a DEM pixel was filled by an ancillary source.",
+      "source_bytes": 663100,
+      "source_cache_status": "hit",
+      "source_etag": "\"221a9850f09aabb38fe1be6f402c60d4\"",
+      "source_last_modified": "Mon, 09 May 2022 14:53:53 GMT",
+      "source_sha256": "7a5f4e2e967cee1002917a0f9eaad5f1eded6855eb0c4377484dfd6bcdc18cdb",
+      "source_url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_S04_00_W061_00_DEM/AUXFILES/Copernicus_DSM_COG_10_S04_00_W061_00_FLM.tif",
+      "transform": [
+        29.641769862751687,
+        0.0,
+        -1111.5663698538108,
+        0.0,
+        -29.885828560345445,
+        1105.7702718701496
+      ],
+      "value_handling": "raw source values retained; nearest-neighbour reprojection only; no flag remapping and no elevation modification"
+    },
+    {
+      "alignment_matches_dem": true,
+      "availability": "present",
+      "bundle_artifact": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-quality-v2/source_quality_hem.tif",
+      "bundle_sha256": "075283b2196118d3293542d56b4d3a474f901369a2792fe54c8da7454e43dec1",
+      "crs": "PROJCS[\"unknown\",GEOGCS[\"unknown\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Azimuthal_Equidistant\"],PARAMETER[\"latitude_of_center\",-3.12],PARAMETER[\"longitude_of_center\",-60.01],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
+      "dtype": "float32",
+      "grid_shape": [
+        74,
+        74
+      ],
+      "long_name": "Height Error Mask",
+      "nodata": -32767.0,
+      "raw_value_max": 5.40110969543457,
+      "raw_value_min": -32767.0,
+      "role": "hem",
+      "semantics": "Reports the corresponding height error as a standard deviation for each DEM pixel.",
+      "source_bytes": 44324281,
+      "source_cache_status": "hit",
+      "source_etag": "\"869632e50da9f04296cbc5f707ee7ebf\"",
+      "source_last_modified": "Mon, 09 May 2022 14:53:53 GMT",
+      "source_sha256": "2a9744f725e5b0ca062832b769b7663cb19b2dda7c6c9aac65576f7e62749c20",
+      "source_url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_S04_00_W061_00_DEM/AUXFILES/Copernicus_DSM_COG_10_S04_00_W061_00_HEM.tif",
+      "transform": [
+        29.641769862751687,
+        0.0,
+        -1111.5663698538108,
+        0.0,
+        -29.885828560345445,
+        1105.7702718701496
+      ],
+      "value_handling": "raw source values retained; nearest-neighbour reprojection only; no flag remapping and no elevation modification"
+    },
+    {
+      "alignment_matches_dem": true,
+      "availability": "present",
+      "bundle_artifact": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-quality-v2/source_quality_wbm.tif",
+      "bundle_sha256": "04be91fb5946a9a2beb0f92ab485faf1f6caee57132e89e62fcb4c580b4acc7f",
+      "crs": "PROJCS[\"unknown\",GEOGCS[\"unknown\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Azimuthal_Equidistant\"],PARAMETER[\"latitude_of_center\",-3.12],PARAMETER[\"longitude_of_center\",-60.01],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
+      "dtype": "uint8",
+      "grid_shape": [
+        74,
+        74
+      ],
+      "long_name": "Water Body Mask",
+      "nodata": null,
+      "raw_value_max": 0.0,
+      "raw_value_min": 0.0,
+      "role": "wbm",
+      "semantics": "Indicates whether a DEM pixel is a modified water pixel.",
+      "source_bytes": 505346,
+      "source_cache_status": "hit",
+      "source_etag": "\"7c04c14e1b710184feafa9eca8a6bac8\"",
+      "source_last_modified": "Mon, 09 May 2022 14:53:53 GMT",
+      "source_sha256": "750f117465c49ae40e212ea8b4134aa9c209a579f89d0ec368989be5e8b917f2",
+      "source_url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_S04_00_W061_00_DEM/AUXFILES/Copernicus_DSM_COG_10_S04_00_W061_00_WBM.tif",
+      "transform": [
+        29.641769862751687,
+        0.0,
+        -1111.5663698538108,
+        0.0,
+        -29.885828560345445,
+        1105.7702718701496
+      ],
+      "value_handling": "raw source values retained; nearest-neighbour reprojection only; no flag remapping and no elevation modification"
+    }
+  ],
+  "slice": {
+    "command": [
+      "/usr/bin/prusa-slicer",
+      "--export-gcode",
+      "--output",
+      "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/.amazon-copernicus-aws-quality-v2-prusa-29bbfyw2.gcode",
+      "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-quality-v2/model.3mf"
+    ],
+    "empty_layer_warning": false,
+    "exit_code": 0,
+    "floating_region_warning": false,
+    "gcode_size_bytes": 2085508,
+    "layer_count": 32,
+    "out_of_bed": false,
+    "slicer": {
+      "detail": null,
+      "executable": "/usr/bin/prusa-slicer",
+      "name": "PrusaSlicer",
+      "status": "available",
+      "version": "2.4.0"
+    },
+    "status": "succeeded",
+    "support_material": false,
+    "warnings": []
+  },
+  "source_dem_cache_status": "hit",
+  "source_dem_sha256": "178ae62c3835b603631b5a6259f827d9cbfa2a4bfa4adcdae0adf7c4ee1516d7",
+  "source_evidence_dir": "/root/autodl-tmp/bambu/TopoForge/downloads/amazon-copernicus-aws-quality-v1-build-source",
+  "strict_3mf": {
+    "dimensions_mm": [
+      80.0,
+      80.658688,
+      9.714625
+    ],
+    "metadata": {
+      "Application": "TopoForge",
+      "Title": "TopoForge terrain",
+      "customXMLNS0:dataset_name": "Copernicus DEM GLO-30 AWS 2021",
+      "customXMLNS0:dataset_type": "dsm",
+      "customXMLNS0:east_axis": "+X = East",
+      "customXMLNS0:horizontal_crs": "PROJCS[\"unknown\",GEOGCS[\"unknown\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Azimuthal_Equidistant\"],PARAMETER[\"latitude_of_center\",-3.12],PARAMETER[\"longitude_of_center\",-60.01],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
+      "customXMLNS0:north_axis": "+Y = North",
+      "customXMLNS0:north_edge": "y=model_depth_mm",
+      "customXMLNS0:orientation_transform": "mesh_heightfield=flipud(processed_dem); source row 0 north maps to y=model_depth_mm",
+      "customXMLNS0:source_bounds": "{\"full_grid_shape\":[74,74],\"native\":[-1111.5663698538108,-1105.7810415954134,1081.9245999898142,1105.7702718701496],\"native_crs\":\"PROJCS[\\\"unknown\\\",GEOGCS[\\\"unknown\\\",DATUM[\\\"WGS_1984\\\",SPHEROID[\\\"WGS 84\\\",6378137,298.257223563,AUTHORITY[\\\"EPSG\\\",\\\"7030\\\"]],AUTHORITY[\\\"EPSG\\\",\\\"6326\\\"]],PRIMEM[\\\"Greenwich\\\",0],UNIT[\\\"degree\\\",0.0174532925199433,AUTHORITY[\\\"EPSG\\\",\\\"9122\\\"]]],PROJECTION[\\\"Azimuthal_Equidistant\\\"],PARAMETER[\\\"latitude_of_center\\\",-3.12],PARAMETER[\\\"longitude_of_center\\\",-60.01],PARAMETER[\\\"false_easting\\\",0],PARAMETER[\\\"false_northing\\\",0],UNIT[\\\"metre\\\",1,AUTHORITY[\\\"EPSG\\\",\\\"9001\\\"]],AXIS[\\\"Easting\\\",EAST],AXIS[\\\"Northing\\\",NORTH]]\",\"wgs84\":[-60.02000018900119,-3.130000047787117,-60.0002664827055,-3.109999999999998]}",
+      "customXMLNS0:vertical_datum": "EGM2008",
+      "customXMLNS0:vertical_exaggeration": "2.92159673"
+    },
+    "peak_coordinate_mm": [
+      12.054794,
+      67.399728,
+      9.714625
+    ],
+    "triangle_count": 21900,
+    "warning_count": 0
+  },
+  "terrain_outputs_vs_pre_mask_bundle": {
+    "model.3mf": {
+      "byte_identical": true,
+      "prior_sha256": "67a09bfd158769ec921fdf38fd62dce9d63999501a1f1701d17ffe10e134be11",
+      "quality_v2_sha256": "67a09bfd158769ec921fdf38fd62dce9d63999501a1f1701d17ffe10e134be11"
+    },
+    "model.stl": {
+      "byte_identical": true,
+      "prior_sha256": "e76ccd7f39b31db23512b595ff36cc31d48e008bea626548566e22da59062f9a",
+      "quality_v2_sha256": "e76ccd7f39b31db23512b595ff36cc31d48e008bea626548566e22da59062f9a"
+    },
+    "original_nodata_mask.tif": {
+      "byte_identical": true,
+      "prior_sha256": "5ece74e9e42295cab147c16aa1b7c5f485e410084303a053f48ad42e33e2a4b9",
+      "quality_v2_sha256": "5ece74e9e42295cab147c16aa1b7c5f485e410084303a053f48ad42e33e2a4b9"
+    },
+    "preview.glb": {
+      "byte_identical": true,
+      "prior_sha256": "32f159e88b3f8e3a3f25e8a6078347edc1306882099d99fa1d02c39b1e893597",
+      "quality_v2_sha256": "32f159e88b3f8e3a3f25e8a6078347edc1306882099d99fa1d02c39b1e893597"
+    },
+    "preview.png": {
+      "byte_identical": true,
+      "prior_sha256": "2ce33d9a4d759f40ee078ac6976f347d8431cc583596197c80ed8d8159335f91",
+      "quality_v2_sha256": "2ce33d9a4d759f40ee078ac6976f347d8431cc583596197c80ed8d8159335f91"
+    },
+    "processed_dem.tif": {
+      "byte_identical": true,
+      "prior_sha256": "7e32a4bf3f9646d14f858205ca86f5f2091fe3a0b7bc088053b46d95c571553e",
+      "quality_v2_sha256": "7e32a4bf3f9646d14f858205ca86f5f2091fe3a0b7bc088053b46d95c571553e"
+    }
+  },
+  "topoforge_version": "0.2.0"
+}

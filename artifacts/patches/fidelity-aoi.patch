@@ -1,0 +1,2652 @@
+diff --git a/.agent/DECISIONS.md b/.agent/DECISIONS.md
+index 4fd3577..78e401f 100644
+--- a/.agent/DECISIONS.md
++++ b/.agent/DECISIONS.md
+@@ -72,3 +72,24 @@
+ - **Decision:** Default builds to bambu-p2s-0.4. Flatten official machine/process/filament presets in parent/include/child order, run official Bambu Studio with normative checks, assert resolved machine and print parameters from generated G-code, export a separate model.bambu-p2s.3mf, then reopen that project without external profiles and slice it again. Keep interoperable model.3mf unchanged as the strict lib3mf geometry source. OrcaSlicer and PrusaSlicer remain diagnostic.
+ - **Alternatives:** Keep generic FDM as default; trust leaf preset names or exit code alone; use OrcaSlicer/PrusaSlicer as release evidence; replace the Core 3MF with the Bambu project.
+ - **Impact:** P2S releases have reproducible official-tool and parameter evidence, while portability and strict Core 3MF validation remain intact. Builds store two intentional 3MF artifacts and a larger Bambu validation record.
++
++## ADR-010 — Printer-aware sampling is explicit and resource-bounded
++
++- **Date:** 2026-07-31
++- **Context:** A fixed cell budget reduced a nominal ~30 m DSM to ~89 m without enough explanation, while unconditional source preservation can create meshes finer than the printer can reproduce.
++- **Decision:** Provide `print-aware`, `source-preserving`, and `custom` modes. Resolve print-aware spacing from preferred mesh sampling, nozzle diameter, minimum feature size, source/model scale, max cells, exact triangle count, and estimated memory. Never upsample beyond source data.
++- **Impact:** The real reference resolves to 0.40018 mm physical spacing and 68.9589 m processed resolution. Source and processed claims are separate, resource limits are deterministic, and source-preserving limitations emit explicit warnings.
++
++## ADR-011 — Manufacturing axes are +X East, +Y North, +Z Up
++
++- **Date:** 2026-07-31
++- **Context:** North-up raster row 0 previously mapped to y=0, making +Y point south in viewers.
++- **Decision:** Flip the processed heightfield once before mesh construction. Record the transform/source bounds in provenance and 3MF metadata; verify asymmetric corners and peak coordinates after STL, GLB, and 3MF serialization.
++- **Impact:** North is the maximum-y edge without east/west mirroring, winding reversal, negative volume, or terrain alteration.
++
++## ADR-012 — AOIs normalize in WGS84 before source-pixel clipping
++
++- **Date:** 2026-07-31
++- **Context:** Provider and local builds need one explicit bbox/center-radius contract, including dateline, high-latitude, cross-zone, partial-overlap, and empty-result behavior.
++- **Decision:** Normalize user input to recorded WGS84 bounds/geometry. Use UTM only for a single mid-latitude zone and local AEQD otherwise. Clip local rasters to an explicit pixel window before metric reprojection; record full/partial coverage and reject empty/NoData-only results.
++- **Impact:** Local AOI behavior is complete and testable. Global providers must consume this contract rather than implementing a parallel download-first AOI path.
+diff --git a/.agent/ISSUES.md b/.agent/ISSUES.md
+index 5ba6c6e..a727bfa 100644
+--- a/.agent/ISSUES.md
++++ b/.agent/ISSUES.md
+@@ -84,12 +84,12 @@
+ ## TF-009 — Explicit local AOI crop not implemented
+ 
+ - **Severity:** High
+-- **Status:** Open
++- **Status:** Resolved
+ - **Reproduction:** `topoforge build` accepts a full local DEM but has no bbox/polygon window option.
+ - **Expected behavior:** Phase 1 supports a user AOI crop before reprojection and mesh construction.
+ - **Actual behavior:** The engine processes the full raster and only crops reprojection-only rotated coverage gaps.
+ - **Owner:** Primary agent
+-- **Resolution:** Milestone 02 begins with AOI normalization and local bbox/polygon clipping before global-provider integration.
++- **Resolution:** Added validated bbox/center-radius normalization, WGS84 antimeridian geometry, UTM/AEQD selection, explicit source-pixel crop, full/partial/empty/NoData handling, provenance, CLI inputs, and offline tests before provider integration.
+ 
+ ## TF-010 — Bambu leaf presets silently produced a generic platform
+ 
+@@ -120,3 +120,24 @@
+ - **Actual behavior:** Pydantic rejected the zero sentinels for positive optional fields.
+ - **Owner:** Primary agent
+ - **Resolution:** Parse non-positive values for positive optional settings as unset and add a focused regression; the real Prusa test and full 80-test suite pass.
++
++## TF-013 — Fixed cell budget obscured terrain resolution loss
++
++- **Severity:** High
++- **Status:** Resolved
++- **Reproduction:** Build the real DSM with `max_grid_cells: 120000`; the 1008 x 1181 source becomes 341 x 350 at 88.8177 m while dataset provenance appears to describe that as dataset resolution.
++- **Resolution:** Added explicit sampling modes and separate source/processed fields. The print-aware real rebuild is 439 x 451 at 68.9589 m, with exact physical spacing, triangle/memory estimates, 5.0415 m peak loss, and 24.5163 m peak shift.
++
++## TF-014 — Raster north edge mapped to y=0
++
++- **Severity:** High
++- **Status:** Resolved
++- **Reproduction:** Map a four-corner asymmetric north-up DEM directly into the previous heightfield constructor; row 0 appears at y=0 and +Y points south.
++- **Resolution:** Flip rows once before mesh construction, record +X East/+Y North/+Z Up, add a preview north arrow, preserve positive winding/volume, and verify all four corners plus peak coordinates in STL/GLB/3MF.
++
++## TF-015 — Published summit elevation differs from source DSM peak
++
++- **Severity:** Medium
++- **Status:** Accepted data limitation
++- **Evidence:** The source DSM maximum is 7437.5244 m while the retained published nominal context is 7556.0 m, a 118.4756 m difference.
++- **Resolution:** Record dataset type `dsm`, vertical datum `EGM2008`, the comparison, and `terrain_adjustment_applied=false`. No synthetic spike, sharpening, or peak-height correction is performed.
+diff --git a/.agent/PLANS.md b/.agent/PLANS.md
+index 18b0730..24102a5 100644
+--- a/.agent/PLANS.md
++++ b/.agent/PLANS.md
+@@ -6,10 +6,10 @@ Updated: 2026-07-31
+ 
+ - [x] Phase 0 — repository, toolchain, official-source research, architecture, fixtures. Completed 2026-07-31.
+ - [x] Milestone 01 — full-raster local GeoTIFF/synthetic manufacturing core, deterministic 3MF/provenance, validation, and real slicer evidence. Completed 2026-07-31.
+-- [ ] Phase 1 closure — explicit local AOI bbox/polygon clipping and remaining GIS edge contracts.
++- [x] Phase 1 closure — explicit local AOI bbox/center-radius clipping and GIS edge contracts. Completed 2026-07-31.
+ - [ ] Phase 2 closure — revalidate deterministic export/provenance after Phase 1 AOI closure.
+ - [ ] Phase 3 — global/high-resolution providers, AOI/geocoding, cache, selection/fallback.
+-- [ ] Phase 4 — printer-aware sampling, build-volume/resource estimation, vertical-scaling refinements.
++- [ ] Phase 4 — printer-aware sampling foundation is complete; remaining build-volume/resource UX and vertical-scaling refinements continue.
+ - [ ] Phase 5 — tiling, assembly manifest/map, labels, and verified connectors.
+ - [ ] Phase 6 — worker-backed FastAPI and React/MapLibre/Three.js Web application.
+ - [ ] Phase 7 — provenance-aware GPX/road/river/contour/label/coast overlays.
+@@ -46,14 +46,25 @@ Updated: 2026-07-31
+ - [x] Publish the real Copernicus GLO-30 Gongga P2S reference bundle and verification record.
+ - [x] Add unit, CLI, adapter, parser, and manufacturing-gate regressions; final suite is 80 passed.
+ 
++## Completed fidelity/orientation hardening
++
++- [x] Add deterministic `print-aware`, `source-preserving`, and `custom` sampling modes.
++- [x] Enforce cell/triangle/memory budgets and report source versus processed resolution.
++- [x] Report raw/processed extrema, peak loss, peak shift, thresholds, decisions, and warnings.
++- [x] Standardize manufacturing coordinates as +X East, +Y North, +Z Up.
++- [x] Cross-check asymmetric corners and peak positions in STL, GLB, and strict-read 3MF.
++- [x] Rebuild the existing real DSM without another download at 439 x 451 / 68.9589 m.
++- [x] Actual PrusaSlicer diagnostic: exit 0, 149 layers, no floating/empty/out-of-bed/support warning.
++- [x] Repeat real build: DEM/STL/3MF/GLB/PNG roles byte-identical.
++
+ ## Current milestone: Milestone 02 AOI and no-key global terrain
+ 
+ Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> windowed COG fetch -> provider selection/fallback -> real Gongga/Amazon builds -> provenance and slicer evidence.
+ 
+ - [x] Verify current official sources, access, licenses, attribution, and no-key route.
+-- [ ] Implement bbox and center-radius `AreaOfInterest` normalization.
+-- [ ] Apply explicit AOI window/polygon clipping to local rasters.
+-- [ ] Implement antimeridian/high-latitude/cross-zone projection decisions and tests.
++- [x] Implement bbox and center-radius `AreaOfInterest` normalization.
++- [x] Apply explicit AOI pixel-window clipping to local rasters with coverage/NoData records.
++- [x] Implement antimeridian/high-latitude/cross-zone projection decisions and tests.
+ - [ ] Implement Nominatim-compatible geocoding with candidate handling and usage policy.
+ - [ ] Implement content-addressed cache, timeout/retry/rate-limit boundaries.
+ - [ ] Implement configurable `copernicus-aws` GLO-30/GLO-90 COG provider.
+diff --git a/.agent/RUN_LOG.md b/.agent/RUN_LOG.md
+index d6f03b4..140cd34 100644
+--- a/.agent/RUN_LOG.md
++++ b/.agent/RUN_LOG.md
+@@ -123,3 +123,40 @@ Result: forward check/apply exited 0; Ruff passed; Pyright reported 0 errors/0 w
+ Command: bash scripts/rollback-p2s-bambu-validation.sh --confirm-rollback --patch /root/autodl-tmp/bambu/TopoForge/artifacts/patches/p2s-bambu-validation.patch
+ 
+ Result: exit 0; reverse check/apply passed, HEAD remained a9f5f5d, and git status --porcelain was empty.
++
++### Printer-aware sampling, orientation, AOI, and real fidelity rebuild
++
++Command: source DEM SHA-256 and local processing probe using `print-aware`, `max_grid_cells=600000`, `max_estimated_memory_mb=768`.
++
++Result: source SHA-256 `00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc`; source 1008 x 1181 at 28.8508136 m; processed 439 x 451 at 68.9588821 m; 0.4001816 mm physical spacing; 791,952 triangles; 60.4214 MiB estimate; 5.0415039 m peak loss; 24.5162760 m peak shift; fidelity thresholds passed.
++
++Command: `uv run topoforge build --config downloads/gongga-copernicus-glo30/build-config.fidelity-v2.yaml`.
++
++Result: exit 0; new output `/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-fidelity-v2`; 180 x 175.359116 x 45 mm; watertight/manifold/winding/positive volume/flat bottom true; +X East/+Y North/+Z Up; strict 3MF warning count 0.
++
++Command: strict `topoforge preview/inspect` for bundle, STL, GLB, 3MF plus JSON/YAML/GeoTIFF/PNG reload.
++
++Result: exit 0; STL/GLB 791,952 triangles and 639,175.1232 mm3; 3MF 395,978 vertices, 791,952 triangles, correct orientation metadata, peak 115.6 x 91.282832 x 45 mm, zero strict warnings.
++
++Command: `uv run topoforge slice outputs/gongga-copernicus-glo30-fidelity-v2/model.3mf --slicer prusa --output artifacts/slicer/gongga-fidelity-v2-prusa.gcode`.
++
++Result: exit 0; PrusaSlicer 2.4.0; 30,325,645-byte G-code; 149 layers; 15h14m17s estimate; 90,237.44 mm / 217.05 cm3 filament; support false; no floating region, empty layer, or out-of-bed warning. This is diagnostic evidence; the official P2S release gate is not claimed.
++
++Command: repeated real build to `outputs/gongga-copernicus-glo30-fidelity-v2-repeat` and SHA-256 comparison.
++
++Result: processed DEM, NoData mask, STL, 3MF, GLB, and PNG were byte-identical. Record: `artifacts/verification/gongga-fidelity-v2-determinism.txt`.
++
++Command: full quality gates.
++
++Result before fixture correction: Ruff and Pyright passed; Pytest 93 passed/5 failed because the legacy scaling fixture did not populate new required `RasterResult` evidence fields. The fixture was completed without changing assertions; focused scaling tests then reported 5 passed. Final post-documentation full gate follows.
++
++Command: final `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest` after fixture, CLI, documentation, and state updates.
++
++Result: exit 0; Ruff `All checks passed!`; format `92 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `100 passed, 40 warnings in 6.41s`. Warnings are the tracked Rasterio/NumPy deprecation issue.
++
++
++### Fidelity/AOI patch replay and rollback
++
++Command: construct an isolated copy of the pre-fidelity/P2S-hardened source tree, run `git apply --check`, apply `artifacts/patches/fidelity-aoi.patch` with `--whitespace=error-all`, compare the resulting regular-file tree with the captured post-change tree, execute `scripts/rollback-fidelity-aoi.sh --confirm-rollback`, and compare the reversed regular-file tree with the captured baseline.
++
++Result: forward check/apply exited 0, the applied file tree matched the post-change tree, the rollback script exited 0, and the reversed file tree matched the baseline. Empty untracked directory shells are excluded because Git patches do not represent directories. The final patch hash, byte count, commands, and literal statuses are stored in `artifacts/verification/fidelity-aoi-patch-rollback-summary.txt`.
+diff --git a/.agent/STATE.md b/.agent/STATE.md
+index ed63eca..2f8a7f6 100644
+--- a/.agent/STATE.md
++++ b/.agent/STATE.md
+@@ -1,12 +1,14 @@
+ # Current State
+ 
+-- **Current milestone:** Milestone 02 — AOI normalization/local clipping followed by the no-key global provider.
+-- **Current branch/worktree:** main, /root/autodl-tmp/bambu/TopoForge; P2S release-hardening changes are present in the working tree.
+-- **Last completed task:** Made Bambu Lab P2S 0.4 the default target and produced a real Copernicus GLO-30 Gongga reference package that passed official Bambu Studio 02.07.01.62 export/slice plus profile-free project reopen/reslice.
+-- **Current implementation status:** Full-raster local builds remain complete. The default printer is now bambu-p2s-0.4; official Bambu Studio is the P2S production release boundary, resolved P2S parameters are hard-checked and recorded, and bundles retain separate interoperable model.3mf and embedded-settings model.bambu-p2s.3mf roles. Explicit local AOI cropping, provider fetching, and geocoding remain next.
+-- **Known failing tests:** None. Latest full suite: 80 passed.
+-- **Current blockers:** None.
+-- **Known warnings:** 33 upstream Rasterio/NumPy masked-array deprecation warnings. The Gongga Bambu logs also retain nonfatal internal ZFiller/T65535/display diagnostics, while structured results are Success, warning messages are empty, embedded G-code MD5 passes, and independent reopen/reslice succeeds.
+-- **Next exact action:** Implement normalized bbox/center AOIs and explicit local raster clipping before connecting the configurable Copernicus AWS GLO-30/GLO-90 provider.
+-- **Next exact command:** uv run topoforge providers && uv run pytest tests/providers tests/integration -q
+-- **Important paths:** src/topoforge/validation/slicers/bambu.py, src/topoforge/validation/manufacturing.py, scripts/resolve_bambu_profiles.py, printer_profiles/bambu-p2s-0.4.yaml, outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf, outputs/gongga-copernicus-glo30-bambu-p2s/bambu_studio_validation.json, artifacts/slicer/gongga-copernicus-glo30-bambu-p2s.gcode.
++- **Current milestone:** Milestone 02 — local AOI foundation complete; no-key global provider/cache is next.
++- **Current branch/worktree:** main, /root/autodl-tmp/bambu/TopoForge; prior P2S release-hardening changes and the new fidelity/AOI work are present in the working tree.
++- **Last completed task:** Implemented deterministic printer-aware sampling, +X East/+Y North orientation, bbox/center-radius normalization, explicit local AOI crop, fidelity reporting, real DSM rebuild, strict format reread, repeated-build comparison, and an actual PrusaSlicer diagnostic slice.
++- **Current implementation status:** `print-aware`, `source-preserving`, and `custom` modes are implemented with cell/triangle/memory budgets. Provenance and validation distinguish 28.8508 m source resolution from 68.9589 m processed resolution. Local AOI bbox/center-radius inputs normalize in WGS84, handle antimeridian/high-latitude/cross-zone projection choices, crop source pixels, and report full/partial/empty/NoData behavior. Manufacturing coordinates are +X East, +Y North, +Z Up and are checked across STL/GLB/3MF.
++- **Real reference result:** `/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-fidelity-v2`; 439 x 451, 791,952 triangles, 5.0415 m peak loss, 24.5163 m peak shift, watertight/manifold/winding/positive-volume/flat-bottom true. PrusaSlicer exit 0, 149 layers, support false, no floating/empty/out-of-bed warning.
++- **Known failing tests:** None. Final gate: Ruff passed, format 92 files, Pyright 0 errors/0 warnings, Pytest 100 passed with 40 tracked warnings. Log: `artifacts/logs/fidelity-aoi-quality-gates-final.log`.
++- **Patch and rollback:** Isolated forward `git apply --check`/`--whitespace=error-all` and executable rollback both pass; applied and reversed regular-file manifests match the captured post/pre trees. Record: `artifacts/verification/fidelity-aoi-patch-rollback-summary.txt`.
++- **Current blockers:** None for offline local work. Network access/provider integration remains an external execution boundary.
++- **Known warnings:** Rasterio/NumPy masked-array deprecation warnings remain tracked as TF-006. Exhaustive self-intersection remains `not_fully_checked` as TF-005. PrusaSlicer evidence is diagnostic and does not replace the official P2S release gate.
++- **Next exact action:** Implement content-addressed cache/timeout/retry boundaries, then connect the configurable no-key global COG provider through the completed AOI normalization and local clipping path.
++- **Next exact command:** `uv run pytest tests/unit/test_aoi.py tests/integration/test_aoi_clipping.py tests/providers -q && uv run topoforge providers`
++- **Important paths:** `src/topoforge/raster/{aoi,sampling,processing}.py`, `src/topoforge/engine/build.py`, `outputs/gongga-copernicus-glo30-fidelity-v2`, `artifacts/verification/gongga-fidelity-v2-verification.json`, `outputs/gongga-copernicus-glo30-fidelity-v2/checksums.sha256`.
+diff --git a/README.md b/README.md
+index d7a3c50..7a0e0ea 100644
+--- a/README.md
++++ b/README.md
+@@ -2,7 +2,7 @@
+ 
+ TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
+ 
+-**Implemented milestone:** validated full-raster local GeoTIFF/synthetic manufacturing core, including deterministic 3MF/provenance and real slicing. Explicit AOI cropping, global providers, geocoding, tiling/connectors, API, and Web remain on the authoritative roadmap in `.agent/PLANS.md`.
++**Implemented milestone:** validated local GeoTIFF/synthetic manufacturing core with printer-aware sampling, explicit bbox/center-radius AOI normalization and local clipping, +X East/+Y North orientation, deterministic 3MF/provenance, and real slicing. Global providers, geocoding, tiling/connectors, API, and Web remain on the authoritative roadmap in `.agent/PLANS.md`.
+ 
+ ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
+ 
+@@ -45,6 +45,23 @@ A real Copernicus DEM GLO-30 Gongga terrain example has passed official Bambu St
+ 
+ This is a software-validated example, not a claim of a completed physical P2S print or vendor certification.
+ 
++## Printer-aware fidelity rebuild
++
++The existing real source raster was reused without another download and rebuilt under `outputs/gongga-copernicus-glo30-fidelity-v2`:
++
++| Measurement | Source DEM | Processed DEM / model |
++| --- | --- | --- |
++| Grid | `1008 x 1181` | `439 x 451` |
++| Horizontal resolution | `28.8508 m` | `68.9589 m` |
++| Maximum elevation | `7437.5244 m` | `7432.4829 m` |
++| Peak loss / horizontal shift | — | `5.0415 m / 24.5163 m` |
++| Physical mesh sampling | — | `0.40018 mm` |
++| Triangle count | — | `791,952` |
++| Axes | source row 0 north | `+X East, +Y North, +Z Up` |
++| Diagnostic slice | — | PrusaSlicer exit `0`, `149` layers, no floating/empty/out-of-bed/support warning |
++
++The source is a DSM. A previously confirmed published nominal summit elevation is recorded only as context; `terrain_adjustment_applied=false`, so no synthetic spike or elevation correction is introduced. Exact checksums are in `outputs/gongga-copernicus-glo30-fidelity-v2/checksums.sha256`.
++
+ ## Install
+ 
+ ```bash
+@@ -65,6 +82,10 @@ uv run topoforge build \
+   --max-height-mm 45 \
+   --base-mm 3 \
+   --printer-profile bambu-p2s-0.4 \
++  --sampling-mode print-aware \
++  --max-grid-cells 600000 \
++  --max-estimated-memory-mb 768 \
++  --bbox 101.67 29.45 101.998 29.73 \
+   --dataset-type dtm \
+   --vertical-datum unknown \
+   --data-license "DATASET LICENSE" \
+@@ -72,7 +93,7 @@ uv run topoforge build \
+   --output outputs/local-dem
+ ```
+ 
+-A depth of `0` preserves the raster aspect ratio. An explicit depth that conflicts with the geographic aspect ratio is rejected rather than applying hidden horizontal distortion.
++A depth of `0` preserves the raster aspect ratio. An explicit depth that conflicts with the geographic aspect ratio is rejected rather than applying hidden horizontal distortion. `--center LON LAT --radius-m METRES` is the center-radius AOI form. AOIs are normalized in WGS84, clipped to source pixels before metric reprojection, and recorded in provenance.
+ 
+ ## Reproduce the synthetic milestone
+ 
+@@ -152,7 +173,10 @@ topoforge doctor      Python/GDAL/PROJ/slicer versions
+ 
+ ## Correctness policy
+ 
+-- Geographic rasters are reprojected to a north-up metric CRS before mesh construction.
++- Geographic rasters are explicitly AOI-clipped, then reprojected to a north-up metric CRS before mesh construction.
++- `print-aware`, `source-preserving`, and `custom` sampling modes combine source resolution, model size, nozzle/minimum-feature limits, cell count, triangle estimate, and memory estimate.
++- Source and processed resolution, grid shape, peak loss, peak shift, and sampling reasons are reported separately; processed data is never labeled with source resolution.
++- Manufacturing axes are `+X East`, `+Y North`, `+Z Up`; source row 0 is flipped to the model north edge, and STL/GLB/3MF peak coordinates are cross-checked.
+ - Rotated raster corner gaps are cropped to the largest source-covered rectangle.
+ - Only bounded interior NoData holes are interpolated; the original binary mask is saved.
+ - Horizontal scale is aspect-preserving and explicit in `provenance.json`.
+@@ -172,7 +196,7 @@ uv run pyright
+ uv run pytest
+ ```
+ 
+-The 80-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, resource downsampling, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run.
++The 100-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run.
+ 
+ ## Documentation
+ 
+diff --git a/docs/architecture.md b/docs/architecture.md
+index 313017b..34f04a9 100644
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -9,13 +9,16 @@ TopoForge has one Python core used by CLI and future API/worker/Web adapters. Ge
+ ```text
+ BuildConfig (Pydantic)
+   -> local raster open and metadata validation
+-  -> north-up metric CRS selection/reprojection when required
++  -> bbox/center-radius WGS84 AOI normalization and explicit source-pixel clipping
++  -> north-up metric CRS selection/reprojection after clipping
+   -> source-coverage crop for rotated reprojection corners
+-  -> cell-budget average resampling
++  -> deterministic print-aware/source-preserving/custom sampling
++  -> cell/triangle/memory budget enforcement with average resampling
+   -> conservative interior-hole NoData fill + preserved binary mask
+   -> processed_dem.tif
+   -> aspect-preserving horizontal scale
+   -> natural / fit-height / auto-perceptual / custom vertical scale
++  -> row flip from raster-north row 0 to manufacturing +Y North
+   -> explicit regular-grid top + perimeter walls + flat bottom
+   -> in-memory geometry invariants
+   -> STL + lib3mf 3MF + GLB
+@@ -30,7 +33,7 @@ Builds use a sibling staging directory. Every required file is written and reope
+ ## Package responsibilities
+ 
+ - `models` and `config`: external validation, units, semantics, printer profiles, resolved YAML.
+-- `raster`: analytic fixtures, local GeoTIFF ingestion, CRS normalization, resource guard, NoData policy.
++- `raster`: AOI normalization/clipping, analytic fixtures, local GeoTIFF ingestion, CRS normalization, printer-aware sampling/resource guards, and NoData policy.
+ - `scaling`: physical horizontal scale, baseline, robust relief, vertical exaggeration.
+ - `mesh`: deterministic topology; it does not repair an incomplete solid.
+ - `exporters`: format-specific serialization only. lib3mf stable UUIDv5 values make 3MF deterministic.
+@@ -53,4 +56,4 @@ The interoperable 3MF path adds official lib3mf strict read with zero warnings,
+ 
+ ## Extension sequence
+ 
+-Phase 3 adds cached global providers and AOI/geocoding resolution without changing the build engine contract. Phase 4 makes sampling printer-aware. Tiling, API, and Web remain consumers of the same core.
++The local AOI and printer-aware sampling foundations are complete. The next provider step adds content-addressed caching and a configurable no-key global COG provider without bypassing AOI clipping. Geocoding, tiling, API, and Web remain consumers of the same core.
+diff --git a/docs/printing.md b/docs/printing.md
+index 913d2f5..f6dc7e1 100644
+--- a/docs/printing.md
++++ b/docs/printing.md
+@@ -2,6 +2,20 @@
+ 
+ Manufacturing coordinates are millimetres. STL relies on this coordinate contract; 3MF explicitly stores millimetre units. The chosen elevation baseline maps to the configured base reference above a flat `z=0` bottom. Minimum-baseline builds place the lowest terrain sample exactly there; other datum modes preserve their absolute offset and must still pass the printer-profile minimum-material gate.
+ 
++## Printer-aware mesh sampling
++
++`sampling_mode` is one of:
++
++- `print-aware` (default): selects the finest relevant printer limit from `preferred_mesh_sampling_mm`, nozzle diameter, and minimum feature size, but never upsamples beyond source data.
++- `source-preserving`: requests every normalized source sample, then applies the explicit cell and memory budgets with a recorded warning if either budget limits the request.
++- `custom`: uses `mesh_sampling_mm` directly, or uses `max_grid_cells` as the explicit control when spacing is omitted.
++
++The decision is deterministic. Reports separate source and processed resolution/grid shape, physical model spacing, downsampling factor, exact triangle estimate, memory estimate, peak elevation loss, peak horizontal shift, thresholds, reasons, and warnings. Average resampling may reduce a raster peak; that measured loss is retained instead of reconstructing or sharpening terrain that the source did not contain.
++
++## Axis and north convention
++
++Manufacturing coordinates are `+X = East`, `+Y = North`, and `+Z = Up`. A north-up raster stores its north edge in row 0, so the heightfield is flipped once before mesh construction. This is a coordinate-direction correction only. It does not mirror east/west, change elevations, reverse winding, or alter the geographic terrain. The preview includes a north arrow, 3MF metadata records the axes/source bounds/transform, and reopened STL, GLB, and 3MF peak coordinates must agree.
++
+ ## Default release target
+ 
+ TopoForge defaults to **Bambu Lab P2S with a 0.4 mm nozzle**. A production 3MF is release-ready only after official Bambu Studio completes normative checking and slicing with resolved official presets. OrcaSlicer and PrusaSlicer may provide independent diagnostic evidence but do not satisfy the P2S release gate.
+diff --git a/docs/provenance.md b/docs/provenance.md
+index 0bb4ba3..cf64366 100644
+--- a/docs/provenance.md
++++ b/docs/provenance.md
+@@ -1,5 +1,10 @@
+ # Provenance
+ 
+-Each build writes source checksums; dataset provider/name/version/type; horizontal resolution and CRS; vertical CRS/datum or `unknown`; acquisition period; license/attribution; source URLs; original NoData and interpolation percentages; projection/resampling pipeline; horizontal scale; baseline; robust elevation range; vertical exaggeration; geometry method; output format writer; validation; and slicer evidence. For the default P2S target, provenance also records the official Bambu Studio asset/version/hash, flattened machine/process/filament preset hashes, resolved print parameters, normative-check result, G-code metrics, Bambu project 3MF hash, reopen/reslice result, and the release-gate decision.
++Each build writes source checksums; dataset provider/name/version/type; distinct source and processed horizontal resolution/grid shape; vertical CRS/datum or `unknown`; acquisition period; license/attribution; source URLs; original NoData and interpolation percentages; projection/resampling pipeline; horizontal scale; baseline; robust elevation range; vertical exaggeration; geometry method; output format writer; validation; and slicer evidence. For the default P2S target, provenance also records the official Bambu Studio asset/version/hash, flattened machine/process/filament preset hashes, resolved print parameters, normative-check result, G-code metrics, Bambu project 3MF hash, reopen/reslice result, and the release-gate decision.
+ 
+ `build_manifest.json` binds artifacts to SHA-256 values. `build_config.resolved.yaml` records all defaults and CLI overrides. `original_nodata_mask.tif` preserves the pre-interpolation mask. Dataset rights are not replaced by the Apache-2.0 code license.
++
++
++Sampling/fidelity fields include `source_horizontal_resolution_m`, `processed_horizontal_resolution_m`, `source_grid_shape`, `processed_grid_shape`, `downsampling_factor`, `physical_sample_spacing_mm`, `estimated_triangle_count`, raw/processed elevation extrema, raw/processed peak coordinates, peak loss/shift and thresholds, `sampling_decision_reasons`, warnings, and `terrain_fidelity_status`. Published summit elevations are contextual comparisons only and always record whether any terrain adjustment was applied.
++
++AOI provenance stores the exact user bbox or center-radius input, normalized WGS84 bounds/geometry, antimeridian status, selected local metric CRS, source pixel window, full/selected grid shape, pixel bounds, and full/partial coverage status. Orientation provenance and 3MF metadata store `east_axis`, `north_axis`, `north_edge`, `source_bounds`, and `orientation_transform`.
+diff --git a/downloads/gongga-copernicus-glo30/build-config.fidelity-v2.yaml b/downloads/gongga-copernicus-glo30/build-config.fidelity-v2.yaml
+new file mode 100644
+index 0000000..13d4a7d
+--- /dev/null
++++ b/downloads/gongga-copernicus-glo30/build-config.fidelity-v2.yaml
+@@ -0,0 +1,55 @@
++dem_path: downloads/gongga-copernicus-glo30/gongga-copernicus-glo30-crop.tif
++output_dir: outputs/gongga-copernicus-glo30-fidelity-v2
++model_width_mm: 180.0
++model_depth_mm: null
++base_thickness_mm: 3.0
++terrain_mode: best-available
++dataset_type: dsm
++dataset_name: Copernicus DEM GLO-30 2021 — Mount Gongga
++dataset_version: AWS mirror 2021
++acquisition_period: TanDEM-X primarily 2011-2015; Copernicus DEM 2021 release
++source_urls:
++- https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N29_00_E101_00_DEM/Copernicus_DSM_COG_10_N29_00_E101_00_DEM.tif
++- https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/tileList.txt
++- https://dataspace.copernicus.eu/sites/default/files/media/files/2025-06/copernicus_contributing_mission_data_access_v2_cop_dem_licenses.pdf
++vertical_crs: EPSG:3855
++vertical_datum: EGM2008
++data_license: Copernicus-DEM-GLO-30-F
++attribution: produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus
++  Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union
++  and ESA; all rights reserved
++vertical_scale_mode: fit-height
++vertical_exaggeration: 1.0
++max_height_mm: 45.0
++min_vertical_exaggeration: 0.1
++max_vertical_exaggeration: 50.0
++robust_low_percentile: 0.5
++robust_high_percentile: 99.5
++baseline_mode: minimum
++baseline_elevation_m: null
++nodata_max_fraction: 0.01
++nodata_max_hole_pixels: 64
++max_grid_cells: 600000
++printer_profile:
++  profile_id: bambu-p2s-0.4
++  build_volume_mm:
++  - 256.0
++  - 256.0
++  - 256.0
++  nozzle_diameter_mm: 0.4
++  layer_height_mm: 0.2
++  minimum_feature_mm: 0.5
++  preferred_mesh_sampling_mm: 0.5
++  minimum_base_thickness_mm: 2.0
++  connector_tolerance_mm: 0.2
++output_formats:
++- stl
++- 3mf
++- glb
++sampling_mode: print-aware
++mesh_sampling_mm: null
++max_estimated_memory_mb: 768.0
++reference_peak_elevation_m: 7556.0
++reference_peak_elevation_note: Previously confirmed independent published nominal
++  summit elevation; retained only as context for the source DSM limitation and not
++  used to alter terrain.
+diff --git a/scripts/rollback-fidelity-aoi.sh b/scripts/rollback-fidelity-aoi.sh
+new file mode 100755
+index 0000000..1315502
+--- /dev/null
++++ b/scripts/rollback-fidelity-aoi.sh
+@@ -0,0 +1,50 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++if [[ "${1:-}" != "--confirm-rollback" ]]; then
++  echo "usage: $0 --confirm-rollback [--remove-generated] [--patch PATH]" >&2
++  exit 2
++fi
++shift
++remove_generated=false
++patch="artifacts/patches/fidelity-aoi.patch"
++while [[ $# -gt 0 ]]; do
++  case "$1" in
++    --remove-generated)
++      remove_generated=true
++      shift
++      ;;
++    --patch)
++      patch="$2"
++      shift 2
++      ;;
++    *)
++      echo "unknown argument: $1" >&2
++      exit 2
++      ;;
++  esac
++done
++
++repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++cd "$repo_root"
++patch="$(realpath "$patch")"
++git apply --reverse --check "$patch"
++git apply --reverse "$patch"
++
++if [[ "$remove_generated" == true ]]; then
++  rm -rf \
++    outputs/gongga-copernicus-glo30-fidelity-v2 \
++    outputs/gongga-copernicus-glo30-fidelity-v2-repeat \
++    artifacts/slicer/gongga-fidelity-v2-prusa.gcode \
++    artifacts/logs/gongga-fidelity-v2-build.log \
++    artifacts/logs/gongga-fidelity-v2-repeat-build.log \
++    artifacts/logs/gongga-fidelity-v2-prusa-slice.log \
++    artifacts/logs/fidelity-aoi-quality-gates.log \
++    artifacts/logs/fidelity-aoi-quality-gates-final.log \
++    artifacts/verification/gongga-fidelity-v2-reread.txt \
++    artifacts/verification/gongga-fidelity-v2-determinism.txt \
++    artifacts/verification/gongga-fidelity-v2-verification.json \
++    artifacts/verification/gongga-fidelity-v2-post-slice-bundle.json
++fi
++
++echo "fidelity/AOI source patch reversed"
+diff --git a/src/topoforge/cli/app.py b/src/topoforge/cli/app.py
+index 5f0c973..8f219bd 100644
+--- a/src/topoforge/cli/app.py
++++ b/src/topoforge/cli/app.py
+@@ -21,7 +21,13 @@ from topoforge.config import DEFAULT_PRINTER_PROFILE_ID, get_printer_profile, lo
+ from topoforge.engine import build_local_terrain, record_slice_validation, verify_artifact_bundle
+ from topoforge.exceptions import TopoForgeError
+ from topoforge.exporters.three_mf import inspect_3mf
+-from topoforge.models import BuildConfig, DatasetType, VerticalScaleMode
++from topoforge.models import (
++    AreaOfInterestInput,
++    BuildConfig,
++    DatasetType,
++    SamplingMode,
++    VerticalScaleMode,
++)
+ from topoforge.providers import list_provider_descriptors
+ from topoforge.raster import SyntheticTerrain, create_synthetic_geotiff
+ from topoforge.util import sha256_file
+@@ -80,6 +86,33 @@ def build(
+             help="Manufacturing profile; defaults to Bambu Lab P2S with a 0.4 mm nozzle.",
+         ),
+     ] = DEFAULT_PRINTER_PROFILE_ID,
++    sampling_mode: Annotated[
++        SamplingMode,
++        typer.Option("--sampling-mode", help="print-aware, source-preserving, or custom."),
++    ] = SamplingMode.PRINT_AWARE,
++    mesh_sampling_mm: Annotated[
++        float | None,
++        typer.Option("--mesh-sampling-mm", min=0.001, help="Custom physical mesh spacing."),
++    ] = None,
++    max_grid_cells: Annotated[
++        int, typer.Option("--max-grid-cells", min=16, help="Hard processed-grid cell budget.")
++    ] = 1_500_000,
++    max_estimated_memory_mb: Annotated[
++        float,
++        typer.Option("--max-estimated-memory-mb", min=1.0, help="Estimated mesh memory budget."),
++    ] = 1024.0,
++    bbox: Annotated[
++        tuple[float, float, float, float] | None,
++        typer.Option("--bbox", metavar="WEST SOUTH EAST NORTH", help="WGS84 AOI bbox."),
++    ] = None,
++    center: Annotated[
++        tuple[float, float] | None,
++        typer.Option("--center", metavar="LON LAT", help="WGS84 AOI center."),
++    ] = None,
++    radius_m: Annotated[
++        float | None,
++        typer.Option("--radius-m", min=0.001, help="Geodesic center AOI radius."),
++    ] = None,
+     dataset_type: Annotated[DatasetType, typer.Option("--dataset-type")] = DatasetType.UNKNOWN,
+     dataset_name: Annotated[str | None, typer.Option("--dataset-name")] = None,
+     dataset_version: Annotated[str, typer.Option("--dataset-version")] = "unknown",
+@@ -109,6 +142,13 @@ def build(
+                 "max_height_mm": ("max_height_mm", max_height_mm),
+                 "vertical_scale": ("vertical_scale_mode", vertical_scale),
+                 "vertical_exaggeration": ("vertical_exaggeration", vertical_exaggeration),
++                "sampling_mode": ("sampling_mode", sampling_mode),
++                "mesh_sampling_mm": ("mesh_sampling_mm", mesh_sampling_mm),
++                "max_grid_cells": ("max_grid_cells", max_grid_cells),
++                "max_estimated_memory_mb": (
++                    "max_estimated_memory_mb",
++                    max_estimated_memory_mb,
++                ),
+                 "dataset_type": ("dataset_type", dataset_type),
+                 "dataset_name": ("dataset_name", dataset_name),
+                 "dataset_version": ("dataset_version", dataset_version),
+@@ -127,6 +167,12 @@ def build(
+                 overrides["model_depth_mm"] = size_mm[1] if size_mm[1] > 0 else None
+             if _was_provided(ctx, "printer_profile"):
+                 overrides["printer_profile"] = get_printer_profile(printer_profile)
++            if any(_was_provided(ctx, name) for name in ("bbox", "center", "radius_m")):
++                overrides["aoi"] = AreaOfInterestInput(
++                    bbox_wgs84=bbox,
++                    center_wgs84=center,
++                    radius_m=radius_m,
++                )
+             resolved = load_build_config(config, overrides)
+         else:
+             if dem is None:
+@@ -142,6 +188,19 @@ def build(
+                 vertical_scale_mode=vertical_scale,
+                 vertical_exaggeration=vertical_exaggeration,
+                 printer_profile=profile,
++                sampling_mode=sampling_mode,
++                mesh_sampling_mm=mesh_sampling_mm,
++                max_grid_cells=max_grid_cells,
++                max_estimated_memory_mb=max_estimated_memory_mb,
++                aoi=(
++                    AreaOfInterestInput(
++                        bbox_wgs84=bbox,
++                        center_wgs84=center,
++                        radius_m=radius_m,
++                    )
++                    if bbox is not None or center is not None or radius_m is not None
++                    else None
++                ),
+                 dataset_type=dataset_type,
+                 dataset_name=dataset_name,
+                 dataset_version=dataset_version,
+@@ -159,6 +218,14 @@ def build(
+                 "output_dir": str(result.output_dir),
+                 "vertical_exaggeration": result.provenance["scaling"]["vertical_exaggeration"],
+                 "dimensions_mm": result.validation["dimensions_mm"],
++                "sampling_mode": resolved.sampling_mode.value,
++                "source_horizontal_resolution_m": result.validation.get(
++                    "source_horizontal_resolution_m"
++                ),
++                "processed_horizontal_resolution_m": result.validation.get(
++                    "processed_horizontal_resolution_m"
++                ),
++                "orientation": result.validation.get("orientation"),
+                 "watertight": result.validation["watertight"],
+                 "manifold": result.validation["manifold"],
+                 "required_checks_passed": result.validation["required_checks_passed"],
+diff --git a/src/topoforge/engine/build.py b/src/topoforge/engine/build.py
+index 29411ce..c7b5921 100644
+--- a/src/topoforge/engine/build.py
++++ b/src/topoforge/engine/build.py
+@@ -62,6 +62,59 @@ def _load_stl(path: Path) -> trimesh.Trimesh:
+     return loaded
+ 
+ 
++def _load_glb(path: Path) -> trimesh.Trimesh:
++    loaded = trimesh.load(path, file_type="glb", force="mesh", process=False)
++    if not isinstance(loaded, trimesh.Trimesh):
++        raise MeshValidationError(f"Reopened GLB is not a triangle mesh: {path}")
++    loaded.units = "mm"
++    return loaded
++
++
++def _peak_coordinate_mm(
++    mesh: trimesh.Trimesh, *, expected_xy_mm: tuple[float, float]
++) -> tuple[float, float, float]:
++    vertices = np.asarray(mesh.vertices, dtype=np.float64)
++    maximum_z = float(np.max(vertices[:, 2]))
++    candidate_indices = np.flatnonzero(np.isclose(vertices[:, 2], maximum_z, atol=1e-6, rtol=0.0))
++    candidates = vertices[candidate_indices]
++    distances = np.square(candidates[:, 0] - expected_xy_mm[0]) + np.square(
++        candidates[:, 1] - expected_xy_mm[1]
++    )
++    peak = candidates[int(np.argmin(distances))]
++    return float(peak[0]), float(peak[1]), float(peak[2])
++
++
++def _closest_peak_coordinate_mm(
++    candidates: tuple[tuple[float, float, float], ...],
++    *,
++    expected_xy_mm: tuple[float, float],
++) -> tuple[float, float, float]:
++    return min(
++        candidates,
++        key=lambda value: (value[0] - expected_xy_mm[0]) ** 2 + (value[1] - expected_xy_mm[1]) ** 2,
++    )
++
++
++def _expected_model_peak_mm(
++    processed_elevations_m: np.ndarray,
++    processed_peak_coordinate: dict[str, object],
++    top_z_mm: np.ndarray,
++    *,
++    width_mm: float,
++    depth_mm: float,
++) -> tuple[float, float, float]:
++    rows, columns = processed_elevations_m.shape
++    row_value = processed_peak_coordinate.get("row")
++    column_value = processed_peak_coordinate.get("column")
++    if not isinstance(row_value, int) or not isinstance(column_value, int):
++        raise MeshValidationError("Processed peak raster indices are not integers")
++    row = row_value
++    column = column_value
++    x_mm = width_mm * column / max(columns - 1, 1)
++    y_mm = depth_mm * (rows - 1 - row) / max(rows - 1, 1)
++    return x_mm, y_mm, float(top_z_mm[row, column])
++
++
+ def _required_validation_passed(report: dict[str, Any]) -> bool:
+     true_checks = (
+         "finite_vertices",
+@@ -75,6 +128,8 @@ def _required_validation_passed(report: dict[str, Any]) -> bool:
+         "height_limit_passed",
+         "minimum_base_thickness_passed",
+         "triangle_budget_passed",
++        "terrain_fidelity_passed",
++        "orientation_consistent",
+     )
+     if not all(report.get(key) is True for key in true_checks):
+         return False
+@@ -120,10 +175,19 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+         processed = process_local_raster(stage_config)
+         scaling = resolve_scaling(processed.elevations_m, processed.report, resolved_config)
+         top_z_mm = apply_vertical_scale(processed.elevations_m, scaling)
+-        mesh = build_rectangular_terrain_mesh(
++        expected_peak_mm = _expected_model_peak_mm(
++            processed.elevations_m,
++            processed.report.processed_peak_coordinate,
+             top_z_mm,
+             width_mm=scaling.model_width_mm,
+             depth_mm=scaling.model_depth_mm,
++        )
++        # Raster row 0 is north.  Flip rows so mesh row 0 is south/y=0 and +Y is North.
++        oriented_top_z_mm = np.flipud(top_z_mm)
++        mesh = build_rectangular_terrain_mesh(
++            oriented_top_z_mm,
++            width_mm=scaling.model_width_mm,
++            depth_mm=scaling.model_depth_mm,
+             base_thickness_mm=scaling.base_thickness_mm,
+         )
+         if "stl" in config.output_formats:
+@@ -141,6 +205,18 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+                     "horizontal_crs": processed.report.metadata.horizontal_crs,
+                     "vertical_datum": processed.report.metadata.vertical_datum,
+                     "vertical_exaggeration": format(scaling.vertical_exaggeration, ".9g"),
++                    "east_axis": "+X = East",
++                    "north_axis": "+Y = North",
++                    "north_edge": "y=model_depth_mm",
++                    "source_bounds": json.dumps(
++                        processed.report.source_bounds,
++                        sort_keys=True,
++                        separators=(",", ":"),
++                    ),
++                    "orientation_transform": (
++                        "mesh_heightfield=flipud(processed_dem); "
++                        "source row 0 north maps to y=model_depth_mm"
++                    ),
+                 },
+             )
+             three_mf = inspect_3mf(artifacts["model_3mf"])
+@@ -165,7 +241,8 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+             "reopened model.stl" if "stl" in config.output_formats else "in-memory mesh"
+         )
+         validation["mesh_units"] = "millimetres by TopoForge coordinate contract"
+-        validation["triangle_budget"] = config.max_grid_cells * 4 + 16
++        validation["estimated_triangle_count"] = processed.report.estimated_triangle_count
++        validation["triangle_budget"] = config.max_grid_cells * 4 - 4
+         validation["triangle_budget_passed"] = int(validation["triangle_count"]) <= int(
+             validation["triangle_budget"]
+         )
+@@ -192,10 +269,88 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+                 "object_names": three_mf.object_names,
+                 "strict_warning_count": three_mf.strict_warning_count,
+                 "lib3mf_version": three_mf.lib3mf_version,
++                "peak_coordinate_mm": three_mf.peak_coordinate_mm,
++                "peak_coordinates_mm": three_mf.peak_coordinates_mm,
++                "metadata": three_mf.metadata,
+             }
+             validation["three_mf_dimensions_match"] = bool(
+                 np.allclose(three_mf.dimensions_mm, expected_dimensions, atol=0.05, rtol=0.0)
+             )
++
++        expected_xy_mm = (expected_peak_mm[0], expected_peak_mm[1])
++        format_peaks: dict[str, tuple[float, float, float]] = {
++            "in_memory": _peak_coordinate_mm(mesh, expected_xy_mm=expected_xy_mm)
++        }
++        if "stl" in config.output_formats:
++            format_peaks["stl"] = _peak_coordinate_mm(
++                validation_mesh, expected_xy_mm=expected_xy_mm
++            )
++        if "glb" in config.output_formats:
++            format_peaks["glb"] = _peak_coordinate_mm(
++                _load_glb(artifacts["preview_glb"]), expected_xy_mm=expected_xy_mm
++            )
++        if three_mf is not None:
++            format_peaks["3mf"] = _closest_peak_coordinate_mm(
++                three_mf.peak_coordinates_mm,
++                expected_xy_mm=expected_xy_mm,
++            )
++        orientation_consistent = all(
++            np.allclose(value, expected_peak_mm, atol=0.01, rtol=0.0)
++            for value in format_peaks.values()
++        )
++        reference_peak_difference_m = (
++            None
++            if config.reference_peak_elevation_m is None
++            else config.reference_peak_elevation_m - processed.report.raw_elevation_max_m
++        )
++        validation.update(
++            {
++                "reference_peak_elevation_m": config.reference_peak_elevation_m,
++                "reference_peak_difference_m": reference_peak_difference_m,
++                "reference_peak_adjustment_applied": False,
++                "source_horizontal_resolution_m": processed.report.source_horizontal_resolution_m,
++                "processed_horizontal_resolution_m": (
++                    processed.report.processed_horizontal_resolution_m
++                ),
++                "source_grid_shape": processed.report.source_grid_shape,
++                "processed_grid_shape": processed.report.processed_grid_shape,
++                "downsampling_factor": processed.report.downsampling_factor,
++                "physical_sample_spacing_mm": processed.report.physical_sample_spacing_mm,
++                "estimated_memory_mb": processed.report.estimated_memory_mb,
++                "raw_elevation_min_m": processed.report.raw_elevation_min_m,
++                "raw_elevation_max_m": processed.report.raw_elevation_max_m,
++                "processed_elevation_min_m": processed.report.processed_elevation_min_m,
++                "processed_elevation_max_m": processed.report.processed_elevation_max_m,
++                "peak_elevation_loss_m": processed.report.peak_elevation_loss_m,
++                "raw_peak_coordinate": processed.report.raw_peak_coordinate,
++                "processed_peak_coordinate": processed.report.processed_peak_coordinate,
++                "peak_horizontal_shift_m": processed.report.peak_horizontal_shift_m,
++                "sampling_decision_reasons": processed.report.sampling_decision_reasons,
++                "sampling_warnings": processed.report.sampling_warnings,
++                "terrain_fidelity_status": processed.report.terrain_fidelity_status,
++                "terrain_fidelity_passed": processed.report.terrain_fidelity_passed,
++                "peak_elevation_loss_threshold_m": (
++                    processed.report.peak_elevation_loss_threshold_m
++                ),
++                "peak_horizontal_shift_threshold_m": (
++                    processed.report.peak_horizontal_shift_threshold_m
++                ),
++                "orientation_consistent": orientation_consistent,
++                "orientation": {
++                    "east_axis": "+X = East",
++                    "north_axis": "+Y = North",
++                    "up_axis": "+Z = Up",
++                    "north_edge": "y=model_depth_mm",
++                    "orientation_transform": (
++                        "mesh_heightfield=flipud(processed_dem); "
++                        "source row 0 north maps to y=model_depth_mm"
++                    ),
++                    "expected_processed_peak_mm": expected_peak_mm,
++                    "reopened_format_peak_coordinates_mm": format_peaks,
++                    "coordinate_correction_only": True,
++                },
++            }
++        )
+         validation["required_checks_passed"] = _required_validation_passed(validation)
+         if not validation["required_checks_passed"]:
+             raise MeshValidationError(
+@@ -226,11 +381,26 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+             },
+             "dataset": processed.report.metadata.model_dump(mode="json"),
+             "source_file_checksums": processed.report.metadata.checksums,
++            "elevation_reference_comparison": {
++                "raw_dem_peak_elevation_m": processed.report.raw_elevation_max_m,
++                "published_reference_peak_elevation_m": config.reference_peak_elevation_m,
++                "reference_minus_raw_dem_m": reference_peak_difference_m,
++                "note": config.reference_peak_elevation_note,
++                "dataset_semantics": processed.report.metadata.dataset_type.value,
++                "vertical_datum": processed.report.metadata.vertical_datum,
++                "terrain_adjustment_applied": False,
++                "interpretation": (
++                    "The published nominal elevation is contextual provenance only; "
++                    "the model retains measured source raster elevations without "
++                    "an artificial peak."
++                ),
++            },
+             "processing": {
+                 "pipeline": [
+                     "read metadata",
+                     "normalize to a north-up metric CRS when required",
+-                    "enforce cell budget using average resampling",
++                    "resolve print-aware/source-preserving/custom sampling",
++                    "enforce deterministic cell and memory budgets using average resampling",
+                     "preserve original NoData mask",
+                     "interpolate bounded interior holes from nearest valid cells",
+                     "write processed DEM",
+@@ -238,12 +408,59 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+                 "processed_crs": processed.report.crs,
+                 "automatic_projection_choice": processed.report.crs,
+                 "array_shape": processed.report.array_shape,
+-                "horizontal_resolution_m": processed.report.metadata.horizontal_resolution_m,
++                "source_grid_shape": processed.report.source_grid_shape,
++                "processed_grid_shape": processed.report.processed_grid_shape,
++                "source_horizontal_resolution_m": (processed.report.source_horizontal_resolution_m),
++                "processed_horizontal_resolution_m": (
++                    processed.report.processed_horizontal_resolution_m
++                ),
++                "downsampling_factor": processed.report.downsampling_factor,
++                "physical_sample_spacing_mm": processed.report.physical_sample_spacing_mm,
++                "physical_sample_spacing_xy_mm": (processed.report.physical_sample_spacing_xy_mm),
++                "estimated_triangle_count": processed.report.estimated_triangle_count,
++                "estimated_memory_mb": processed.report.estimated_memory_mb,
++                "sampling_mode": config.sampling_mode.value,
++                "mesh_sampling_mm": config.mesh_sampling_mm,
++                "max_grid_cells": config.max_grid_cells,
++                "max_estimated_memory_mb": config.max_estimated_memory_mb,
++                "sampling_decision_reasons": processed.report.sampling_decision_reasons,
++                "sampling_warnings": processed.report.sampling_warnings,
++                "horizontal_resolution_m": (processed.report.processed_horizontal_resolution_m),
+                 "nodata_percentage": processed.report.original_nodata_fraction * 100.0,
+                 "interpolated_percentage": processed.report.interpolated_fraction * 100.0,
+                 "original_nodata_mask": "original_nodata_mask.tif",
+                 "elevation_min_m": processed.report.elevation_min_m,
+                 "elevation_max_m": processed.report.elevation_max_m,
++                "raw_elevation_min_m": processed.report.raw_elevation_min_m,
++                "raw_elevation_max_m": processed.report.raw_elevation_max_m,
++                "processed_elevation_min_m": processed.report.processed_elevation_min_m,
++                "processed_elevation_max_m": processed.report.processed_elevation_max_m,
++                "peak_elevation_loss_m": processed.report.peak_elevation_loss_m,
++                "raw_peak_coordinate": processed.report.raw_peak_coordinate,
++                "processed_peak_coordinate": processed.report.processed_peak_coordinate,
++                "peak_horizontal_shift_m": processed.report.peak_horizontal_shift_m,
++                "peak_elevation_loss_threshold_m": (
++                    processed.report.peak_elevation_loss_threshold_m
++                ),
++                "peak_horizontal_shift_threshold_m": (
++                    processed.report.peak_horizontal_shift_threshold_m
++                ),
++                "terrain_fidelity_status": processed.report.terrain_fidelity_status,
++                "terrain_fidelity_passed": processed.report.terrain_fidelity_passed,
++                "source_bounds": processed.report.source_bounds,
++                "aoi": processed.report.aoi,
++            },
++            "orientation": {
++                "east_axis": "+X = East",
++                "north_axis": "+Y = North",
++                "up_axis": "+Z = Up",
++                "north_edge": "y=model_depth_mm",
++                "source_bounds": processed.report.source_bounds,
++                "orientation_transform": (
++                    "mesh_heightfield=flipud(processed_dem); "
++                    "source row 0 north maps to y=model_depth_mm"
++                ),
++                "coordinate_correction_only": True,
+             },
+             "scaling": scaling.model_dump(mode="json"),
+             "geometry": {
+@@ -268,6 +485,29 @@ def build_local_terrain(config: BuildConfig) -> BuildResult:
+                 "Dataset terms are separate from the Apache-2.0 TopoForge code license."
+             ),
+         }
++        provenance.update(
++            {
++                "source_horizontal_resolution_m": (processed.report.source_horizontal_resolution_m),
++                "processed_horizontal_resolution_m": (
++                    processed.report.processed_horizontal_resolution_m
++                ),
++                "source_grid_shape": processed.report.source_grid_shape,
++                "processed_grid_shape": processed.report.processed_grid_shape,
++                "downsampling_factor": processed.report.downsampling_factor,
++                "physical_sample_spacing_mm": processed.report.physical_sample_spacing_mm,
++                "estimated_triangle_count": processed.report.estimated_triangle_count,
++                "raw_elevation_min_m": processed.report.raw_elevation_min_m,
++                "raw_elevation_max_m": processed.report.raw_elevation_max_m,
++                "processed_elevation_min_m": processed.report.processed_elevation_min_m,
++                "processed_elevation_max_m": processed.report.processed_elevation_max_m,
++                "peak_elevation_loss_m": processed.report.peak_elevation_loss_m,
++                "raw_peak_coordinate": processed.report.raw_peak_coordinate,
++                "processed_peak_coordinate": processed.report.processed_peak_coordinate,
++                "peak_horizontal_shift_m": processed.report.peak_horizontal_shift_m,
++                "sampling_decision_reasons": processed.report.sampling_decision_reasons,
++                "terrain_fidelity_status": processed.report.terrain_fidelity_status,
++            }
++        )
+         write_json(artifacts["validation_json"], validation)
+         write_validation_html(artifacts["validation_html"], validation)
+         write_json(artifacts["provenance"], provenance)
+@@ -366,7 +606,19 @@ def verify_artifact_bundle(
+         if not reopened_stl.is_watertight:
+             raise MeshValidationError("Reopened model.stl is not watertight")
+     if "3mf" in formats:
+-        inspect_3mf(output_dir / "model.3mf")
++        three_mf = inspect_3mf(output_dir / "model.3mf")
++        metadata_names = set(three_mf.metadata)
++        for required_suffix in (
++            "east_axis",
++            "north_axis",
++            "north_edge",
++            "source_bounds",
++            "orientation_transform",
++        ):
++            if not any(name.endswith(required_suffix) for name in metadata_names):
++                raise MeshValidationError(
++                    f"Reopened model.3mf is missing orientation metadata {required_suffix}"
++                )
+     if "glb" in formats:
+         glb = trimesh.load(output_dir / "preview.glb", force="scene")
+         if not isinstance(glb, trimesh.Scene) or len(glb.geometry) == 0:
+@@ -411,8 +663,12 @@ def record_slice_validation(build_dir: Path, result: dict[str, Any]) -> Path:
+     )
+     validation["slicer_result"] = result
+     validation["manufacturing_validation"] = manufacturing_validation
++    slicer_record = result.get("slicer")
++    slicer_name = slicer_record.get("name") if isinstance(slicer_record, dict) else None
++    release_role = "official-p2s-release" if slicer_name == "BambuStudio" else "diagnostic"
+     provenance["slicer_validation"] = {
+-        "slicer": result.get("slicer"),
++        "slicer": slicer_record,
++        "release_role": release_role,
+         "profile": result.get("profile"),
+         "success": result.get("status") == "succeeded",
+         "gcode_generated": result.get("gcode_generated"),
+@@ -434,7 +690,11 @@ def record_slice_validation(build_dir: Path, result: dict[str, Any]) -> Path:
+     manifest["sha256"]["provenance"] = sha256_file(provenance_path)
+     write_json(manifest_path, manifest)
+     verify_artifact_bundle(build_dir)
+-    if manufacturing_validation["required"] and not manufacturing_validation["release_gate_passed"]:
++    if (
++        manufacturing_validation["required"]
++        and slicer_name == "BambuStudio"
++        and not manufacturing_validation["release_gate_passed"]
++    ):
+         raise MeshValidationError(
+             "Bambu Lab P2S release gate failed; inspect bambu_studio_validation.json"
+         )
+diff --git a/src/topoforge/exporters/three_mf.py b/src/topoforge/exporters/three_mf.py
+index 9c314cc..5de504d 100644
+--- a/src/topoforge/exporters/three_mf.py
++++ b/src/topoforge/exporters/three_mf.py
+@@ -31,6 +31,9 @@ class ThreeMFInspection:
+     vertex_count: int
+     triangle_count: int
+     dimensions_mm: tuple[float, float, float]
++    peak_coordinate_mm: tuple[float, float, float]
++    peak_coordinates_mm: tuple[tuple[float, float, float], ...]
++    metadata: dict[str, str]
+     object_names: tuple[str, ...]
+     strict_warning_count: int
+     lib3mf_version: tuple[int, int, int]
+@@ -213,6 +216,14 @@ def inspect_3mf(path: str | Path) -> ThreeMFInspection:
+     if strict_vertex_count != len(vertices) or strict_triangle_count != len(triangles):
+         raise ValueError("lib3mf and independent XML topology counts disagree")
+     dimensions = np.ptp(coordinates, axis=0)
++    peak_index = int(np.argmax(coordinates[:, 2]))
++    peak = coordinates[peak_index]
++    maximum_z = float(peak[2])
++    peak_candidates = coordinates[np.isclose(coordinates[:, 2], maximum_z, atol=1e-6, rtol=0.0)]
++    metadata = {
++        str(element.attrib.get("name", "")): str(element.text or "")
++        for element in root.findall("m:metadata", namespace)
++    }
+     return ThreeMFInspection(
+         unit="millimeter",
+         object_count=len(object_names),
+@@ -220,6 +231,12 @@ def inspect_3mf(path: str | Path) -> ThreeMFInspection:
+         vertex_count=len(vertices),
+         triangle_count=len(triangles),
+         dimensions_mm=(float(dimensions[0]), float(dimensions[1]), float(dimensions[2])),
++        peak_coordinate_mm=(float(peak[0]), float(peak[1]), float(peak[2])),
++        peak_coordinates_mm=tuple(
++            (float(candidate[0]), float(candidate[1]), float(candidate[2]))
++            for candidate in peak_candidates
++        ),
++        metadata=metadata,
+         object_names=tuple(object_names),
+         strict_warning_count=warning_count,
+         lib3mf_version=(
+diff --git a/src/topoforge/mesh/terrain.py b/src/topoforge/mesh/terrain.py
+index 53b1526..b39142c 100644
+--- a/src/topoforge/mesh/terrain.py
++++ b/src/topoforge/mesh/terrain.py
+@@ -32,8 +32,9 @@ def build_rectangular_terrain_mesh(
+     bottom is constructed at ``z=0``.  The caller therefore controls where a
+     sea-level or custom reference plane falls in the printable solid.
+ 
+-    Array row zero maps to ``y=0`` and column zero maps to ``x=0``.  Each grid
+-    cell uses the same lower-left to upper-right diagonal.  The stable vertex
++    Array row zero is the south edge and maps to ``y=0``; column zero is the
++    west edge and maps to ``x=0``.  Thus +X is East, +Y is North, and +Z is Up.
++    Each grid cell uses the same lower-left to upper-right diagonal.  The stable vertex
+     and face order makes repeated construction byte-for-byte deterministic at
+     the NumPy topology level.
+ 
+@@ -104,6 +105,10 @@ def build_rectangular_terrain_mesh(
+         "base_thickness_mm": base_thickness,
+         "source_elevation_min_mm": float(np.min(heights)),
+         "source_elevation_max_mm": float(np.max(heights)),
++        "east_axis": "+X",
++        "north_axis": "+Y",
++        "up_axis": "+Z",
++        "south_edge_row": 0,
+     }
+ 
+     _assert_closed_positive_mesh(mesh)
+diff --git a/src/topoforge/models/__init__.py b/src/topoforge/models/__init__.py
+index 9afd538..807831c 100644
+--- a/src/topoforge/models/__init__.py
++++ b/src/topoforge/models/__init__.py
+@@ -2,6 +2,7 @@
+ 
+ from topoforge.models.domain import (
+     AreaOfInterest,
++    AreaOfInterestInput,
+     BaselineMode,
+     BuildConfig,
+     BuildManifest,
+@@ -9,6 +10,7 @@ from topoforge.models.domain import (
+     DatasetType,
+     PrinterProfile,
+     RasterResult,
++    SamplingMode,
+     ScalingResult,
+     TerrainMode,
+     VerticalScaleMode,
+@@ -16,6 +18,7 @@ from topoforge.models.domain import (
+ 
+ __all__ = [
+     "AreaOfInterest",
++    "AreaOfInterestInput",
+     "BaselineMode",
+     "BuildConfig",
+     "BuildManifest",
+@@ -23,6 +26,7 @@ __all__ = [
+     "DatasetType",
+     "PrinterProfile",
+     "RasterResult",
++    "SamplingMode",
+     "ScalingResult",
+     "TerrainMode",
+     "VerticalScaleMode",
+diff --git a/src/topoforge/models/domain.py b/src/topoforge/models/domain.py
+index 13f8a37..6e3a8fa 100644
+--- a/src/topoforge/models/domain.py
++++ b/src/topoforge/models/domain.py
+@@ -46,17 +46,48 @@ class BaselineMode(StrEnum):
+     LOW_PERCENTILE = "low-percentile"
+ 
+ 
++class SamplingMode(StrEnum):
++    """Policy used to select the processed terrain grid."""
++
++    PRINT_AWARE = "print-aware"
++    SOURCE_PRESERVING = "source-preserving"
++    CUSTOM = "custom"
++
++
++class AreaOfInterestInput(BaseModel):
++    """User-supplied WGS84 bbox or geodesic center-radius request."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    bbox_wgs84: tuple[float, float, float, float] | None = None
++    center_wgs84: tuple[float, float] | None = None
++    radius_m: float | None = Field(default=None, gt=0)
++
++    @model_validator(mode="after")
++    def validate_shape(self) -> AreaOfInterestInput:
++        """Require exactly one complete AOI input form."""
++        has_bbox = self.bbox_wgs84 is not None
++        has_center = self.center_wgs84 is not None or self.radius_m is not None
++        if has_bbox == has_center:
++            raise ValueError("AOI requires exactly one of bbox_wgs84 or center_wgs84 + radius_m")
++        if has_center and (self.center_wgs84 is None or self.radius_m is None):
++            raise ValueError("center_wgs84 and radius_m must be supplied together")
++        return self
++
++
+ class AreaOfInterest(BaseModel):
+-    """Normalized area geometry and the metric CRS selected for processing."""
++    """Normalized WGS84 area geometry and metric processing CRS."""
+ 
+     model_config = ConfigDict(extra="forbid")
+ 
+-    geometry_geojson: dict[str, object]
+-    source_crs: str
++    kind: str
++    user_input: dict[str, object]
+     normalized_geometry_geojson: dict[str, object]
++    bounds_wgs84: tuple[float, float, float, float]
+     target_local_crs: str
+     crosses_antimeridian: bool = False
+     area_m2: float = Field(gt=0)
++    normalization_method: str
+ 
+ 
+ class DatasetMetadata(BaseModel):
+@@ -115,6 +146,8 @@ class BuildConfig(BaseModel):
+     vertical_datum: str = "unknown"
+     data_license: str = "user-supplied; verify source terms"
+     attribution: str = "Provided by the user"
++    reference_peak_elevation_m: float | None = None
++    reference_peak_elevation_note: str | None = None
+     vertical_scale_mode: VerticalScaleMode = VerticalScaleMode.AUTO_PERCEPTUAL
+     vertical_exaggeration: float = Field(default=1.0, gt=0)
+     max_height_mm: float = Field(default=45.0, gt=0)
+@@ -126,7 +159,11 @@ class BuildConfig(BaseModel):
+     baseline_elevation_m: float | None = None
+     nodata_max_fraction: float = Field(default=0.05, ge=0, le=1)
+     nodata_max_hole_pixels: int = Field(default=256, ge=0)
++    sampling_mode: SamplingMode = SamplingMode.PRINT_AWARE
++    mesh_sampling_mm: float | None = Field(default=None, gt=0)
+     max_grid_cells: int = Field(default=1_500_000, ge=16)
++    max_estimated_memory_mb: float = Field(default=1024.0, gt=0)
++    aoi: AreaOfInterestInput | None = None
+     printer_profile: PrinterProfile = Field(default_factory=PrinterProfile)
+     output_formats: list[str] = Field(default_factory=lambda: ["stl", "3mf", "glb"])
+ 
+@@ -152,6 +189,9 @@ class BuildConfig(BaseModel):
+         if self.max_height_mm > self.printer_profile.build_volume_mm[2]:
+             msg = "max_height_mm exceeds the printer build height"
+             raise ValueError(msg)
++        if self.sampling_mode is not SamplingMode.CUSTOM and self.mesh_sampling_mm is not None:
++            msg = "mesh_sampling_mm is only valid when sampling_mode is custom"
++            raise ValueError(msg)
+         unknown_formats = set(self.output_formats) - {"stl", "3mf", "glb"}
+         if unknown_formats:
+             msg = f"unsupported output formats: {', '.join(sorted(unknown_formats))}"
+@@ -167,6 +207,8 @@ class RasterResult(BaseModel):
+     path: Path
+     original_nodata_mask_path: Path | None = None
+     array_shape: tuple[int, int]
++    source_grid_shape: tuple[int, int]
++    processed_grid_shape: tuple[int, int]
+     transform: tuple[float, float, float, float, float, float]
+     crs: str
+     nodata: float | None
+@@ -179,6 +221,29 @@ class RasterResult(BaseModel):
+     original_nodata_fraction: float = Field(ge=0, le=1)
+     elevation_min_m: float
+     elevation_max_m: float
++    source_horizontal_resolution_m: float = Field(gt=0)
++    processed_horizontal_resolution_m: float = Field(gt=0)
++    downsampling_factor: float = Field(ge=1)
++    physical_sample_spacing_mm: float = Field(gt=0)
++    physical_sample_spacing_xy_mm: tuple[float, float]
++    estimated_triangle_count: int = Field(gt=0)
++    estimated_memory_mb: float = Field(gt=0)
++    raw_elevation_min_m: float
++    raw_elevation_max_m: float
++    processed_elevation_min_m: float
++    processed_elevation_max_m: float
++    peak_elevation_loss_m: float = Field(ge=0)
++    raw_peak_coordinate: dict[str, object]
++    processed_peak_coordinate: dict[str, object]
++    peak_horizontal_shift_m: float = Field(ge=0)
++    sampling_decision_reasons: list[str]
++    sampling_warnings: list[str] = Field(default_factory=list)
++    terrain_fidelity_status: str
++    terrain_fidelity_passed: bool
++    peak_elevation_loss_threshold_m: float = Field(gt=0)
++    peak_horizontal_shift_threshold_m: float = Field(gt=0)
++    source_bounds: dict[str, object]
++    aoi: dict[str, object] | None = None
+     metadata: DatasetMetadata
+ 
+ 
+diff --git a/src/topoforge/raster/__init__.py b/src/topoforge/raster/__init__.py
+index 1debfd0..bd3091b 100644
+--- a/src/topoforge/raster/__init__.py
++++ b/src/topoforge/raster/__init__.py
+@@ -1,11 +1,22 @@
+-"""Elevation raster ingestion, processing, and deterministic fixtures."""
++"""Elevation raster ingestion, processing, AOI normalization, and fixtures."""
+ 
++from topoforge.raster.aoi import normalize_area_of_interest, select_local_metric_crs
+ from topoforge.raster.processing import ProcessedRaster, process_local_raster
++from topoforge.raster.sampling import (
++    SamplingDecision,
++    resolve_sampling_decision,
++    triangle_count_for_shape,
++)
+ from topoforge.raster.synthetic import SyntheticTerrain, create_synthetic_geotiff
+ 
+ __all__ = [
+     "ProcessedRaster",
++    "SamplingDecision",
+     "SyntheticTerrain",
+     "create_synthetic_geotiff",
++    "normalize_area_of_interest",
+     "process_local_raster",
++    "resolve_sampling_decision",
++    "select_local_metric_crs",
++    "triangle_count_for_shape",
+ ]
+diff --git a/src/topoforge/raster/aoi.py b/src/topoforge/raster/aoi.py
+new file mode 100644
+index 0000000..b1f4a6b
+--- /dev/null
++++ b/src/topoforge/raster/aoi.py
+@@ -0,0 +1,139 @@
++"""Deterministic WGS84 AOI normalization and local-raster window selection."""
++
++from __future__ import annotations
++
++import math
++from typing import Any
++
++from pyproj import CRS, Geod
++from shapely.geometry import MultiPolygon, box, mapping
++from shapely.geometry.base import BaseGeometry
++
++from topoforge.models import AreaOfInterest, AreaOfInterestInput
++
++_GEOD = Geod(ellps="WGS84")
++
++
++def _validated_longitude(value: float, name: str) -> float:
++    converted = float(value)
++    if not math.isfinite(converted) or converted < -180.0 or converted > 180.0:
++        raise ValueError(f"{name} must be finite and between -180 and 180 degrees")
++    return converted
++
++
++def _validated_latitude(value: float, name: str) -> float:
++    converted = float(value)
++    if not math.isfinite(converted) or converted < -90.0 or converted > 90.0:
++        raise ValueError(f"{name} must be finite and between -90 and 90 degrees")
++    return converted
++
++
++def _geometry_for_bounds(
++    west: float, south: float, east: float, north: float
++) -> tuple[BaseGeometry, bool]:
++    crosses = west > east
++    if crosses:
++        return MultiPolygon((box(west, south, 180.0, north), box(-180.0, south, east, north))), True
++    return box(west, south, east, north), False
++
++
++def _central_longitude(west: float, east: float, crosses: bool) -> float:
++    unwrapped_east = east + 360.0 if crosses else east
++    center = (west + unwrapped_east) / 2.0
++    return ((center + 180.0) % 360.0) - 180.0
++
++
++def _utm_zone(longitude: float) -> int:
++    return min(60, max(1, int((longitude + 180.0) // 6.0) + 1))
++
++
++def select_local_metric_crs(
++    bounds_wgs84: tuple[float, float, float, float], *, crosses_antimeridian: bool
++) -> CRS:
++    """Select UTM only for one-zone mid-latitude AOIs; otherwise use local AEQD."""
++    west, south, east, north = bounds_wgs84
++    center_lon = _central_longitude(west, east, crosses_antimeridian)
++    center_lat = (south + north) / 2.0
++    same_utm_zone = not crosses_antimeridian and _utm_zone(west) == _utm_zone(
++        math.nextafter(east, west)
++    )
++    if -80.0 <= center_lat <= 84.0 and same_utm_zone:
++        epsg = (32600 if center_lat >= 0 else 32700) + _utm_zone(center_lon)
++        return CRS.from_epsg(epsg)
++    return CRS.from_proj4(
++        f"+proj=aeqd +lat_0={center_lat:.10f} +lon_0={center_lon:.10f} "
++        "+datum=WGS84 +units=m +no_defs"
++    )
++
++
++def _geometry_area_m2(geometry: BaseGeometry) -> float:
++    area_m2, _ = _GEOD.geometry_area_perimeter(geometry)
++    return abs(float(area_m2))
++
++
++def _minimal_longitude_bounds(longitudes: list[float]) -> tuple[float, float, bool]:
++    normalized = sorted((longitude + 360.0) % 360.0 for longitude in longitudes)
++    gaps = [
++        ((normalized[(index + 1) % len(normalized)] - normalized[index]) % 360.0, index)
++        for index in range(len(normalized))
++    ]
++    _, gap_index = max(gaps)
++    start = normalized[(gap_index + 1) % len(normalized)]
++    end = normalized[gap_index]
++    west = ((start + 180.0) % 360.0) - 180.0
++    east = ((end + 180.0) % 360.0) - 180.0
++    return west, east, west > east
++
++
++def normalize_area_of_interest(request: AreaOfInterestInput) -> AreaOfInterest:
++    """Normalize a bbox or center-radius request into explicit WGS84 bounds/geometry."""
++    if request.bbox_wgs84 is not None:
++        west, south, east, north = request.bbox_wgs84
++        west = _validated_longitude(west, "bbox west")
++        east = _validated_longitude(east, "bbox east")
++        south = _validated_latitude(south, "bbox south")
++        north = _validated_latitude(north, "bbox north")
++        if west == east:
++            raise ValueError("bbox west and east must differ")
++        if south >= north:
++            raise ValueError("bbox south must be below bbox north")
++        geometry, crosses = _geometry_for_bounds(west, south, east, north)
++        bounds = (west, south, east, north)
++        kind = "bbox"
++        user_input: dict[str, object] = {"bbox_wgs84": list(request.bbox_wgs84)}
++        method = "validated WGS84 bbox; antimeridian split when west > east"
++    else:
++        assert request.center_wgs84 is not None and request.radius_m is not None
++        longitude = _validated_longitude(request.center_wgs84[0], "center longitude")
++        latitude = _validated_latitude(request.center_wgs84[1], "center latitude")
++        radius_m = float(request.radius_m)
++        bearings = tuple(float(value) for value in range(0, 360, 5))
++        points = [_GEOD.fwd(longitude, latitude, bearing, radius_m)[:2] for bearing in bearings]
++        west, east, crosses = _minimal_longitude_bounds([point[0] for point in points])
++        south = max(-90.0, min(point[1] for point in points))
++        north = min(90.0, max(point[1] for point in points))
++        geometry, crosses = _geometry_for_bounds(west, south, east, north)
++        bounds = (west, south, east, north)
++        kind = "center-radius"
++        user_input = {
++            "center_wgs84": [longitude, latitude],
++            "radius_m": radius_m,
++        }
++        method = "geodesic 5-degree bearing envelope normalized to explicit WGS84 pixel-crop bounds"
++    target_crs = select_local_metric_crs(bounds, crosses_antimeridian=crosses)
++    normalized_geometry = dict(mapping(geometry))
++    return AreaOfInterest(
++        kind=kind,
++        user_input=user_input,
++        normalized_geometry_geojson=normalized_geometry,
++        bounds_wgs84=bounds,
++        target_local_crs=target_crs.to_string(),
++        crosses_antimeridian=crosses,
++        area_m2=_geometry_area_m2(geometry),
++        normalization_method=method,
++    )
++
++
++def aoi_provenance(aoi: AreaOfInterest) -> dict[str, Any]:
++    """Return the stable JSON representation used by raster/build reports."""
++    return aoi.model_dump(mode="json")
+diff --git a/src/topoforge/raster/processing.py b/src/topoforge/raster/processing.py
+index 7f77ac4..e2ce11d 100644
+--- a/src/topoforge/raster/processing.py
++++ b/src/topoforge/raster/processing.py
+@@ -1,4 +1,4 @@
+-"""Local GeoTIFF processing with explicit CRS and conservative NoData handling."""
++"""Local GeoTIFF processing with AOI clipping and printer-aware sampling."""
+ 
+ from __future__ import annotations
+ 
+@@ -10,18 +10,27 @@ import numpy as np
+ import numpy.typing as npt
+ import rasterio
+ from affine import Affine
+-from pyproj import CRS
++from pyproj import CRS, Geod, Transformer
+ from rasterio.enums import Resampling
+-from rasterio.errors import RasterioError
+-from rasterio.warp import calculate_default_transform, reproject, transform_bounds
++from rasterio.errors import RasterioError, WindowError
++from rasterio.features import geometry_window
++from rasterio.io import DatasetReader
++from rasterio.warp import calculate_default_transform, reproject, transform_bounds, transform_geom
++from rasterio.windows import Window
++from rasterio.windows import bounds as window_bounds
++from rasterio.windows import transform as window_transform
+ from scipy import ndimage
++from shapely.geometry import box, shape
+ 
+ from topoforge.exceptions import RasterProcessingError
+-from topoforge.models import BuildConfig, DatasetMetadata, RasterResult
++from topoforge.models import AreaOfInterest, BuildConfig, DatasetMetadata, RasterResult
++from topoforge.raster.aoi import aoi_provenance, normalize_area_of_interest
++from topoforge.raster.sampling import SamplingDecision, resolve_sampling_decision
+ from topoforge.util.hashing import sha256_file
+ 
+ FloatArray = npt.NDArray[np.float32]
+ BoolArray = npt.NDArray[np.bool_]
++_GEOD = Geod(ellps="WGS84")
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+@@ -35,8 +44,24 @@ class ProcessedRaster:
+     report: RasterResult
+ 
+ 
++@dataclass(frozen=True, slots=True)
++class _SourceFacts:
++    full_shape: tuple[int, int]
++    selected_shape: tuple[int, int]
++    crs: CRS
++    transform: Affine
++    native_bounds: tuple[float, float, float, float]
++    bounds_wgs84: tuple[float, float, float, float]
++    horizontal_resolution_m: float
++    raw_elevation_min_m: float
++    raw_elevation_max_m: float
++    raw_peak_coordinate: dict[str, object]
++    tags: dict[str, str]
++    aoi_report: dict[str, object] | None
++
++
+ def _is_north_up(transform: Affine) -> bool:
+-    return abs(transform.b) < 1e-12 and abs(transform.d) < 1e-12
++    return abs(transform.b) < 1e-12 and abs(transform.d) < 1e-12 and transform.e < 0
+ 
+ 
+ def _uses_metre_axes(crs: CRS) -> bool:
+@@ -109,7 +134,124 @@ def _crop_to_source_coverage(
+     return np.asarray(cropped, dtype=np.float32), cropped_transform
+ 
+ 
+-def _read_to_metric_grid(path: Path) -> tuple[FloatArray, Affine, CRS, dict[str, str]]:
++def _pixel_resolution_m(transform: Affine, crs: CRS, shape_: tuple[int, int]) -> float:
++    pixel_x = float(np.hypot(transform.a, transform.d))
++    pixel_y = float(np.hypot(transform.b, transform.e))
++    if _uses_metre_axes(crs):
++        return (pixel_x + pixel_y) / 2.0
++    rows, columns = shape_
++    center_row = (rows - 1) / 2.0
++    center_column = (columns - 1) / 2.0
++    points = [
++        transform * (center_column + 0.5, center_row + 0.5),
++        transform * (center_column + 1.5, center_row + 0.5),
++        transform * (center_column + 0.5, center_row + 1.5),
++    ]
++    to_wgs84 = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
++    lon0, lat0 = to_wgs84.transform(*points[0])
++    lon_x, lat_x = to_wgs84.transform(*points[1])
++    lon_y, lat_y = to_wgs84.transform(*points[2])
++    distance_x = abs(float(_GEOD.inv(lon0, lat0, lon_x, lat_x)[2]))
++    distance_y = abs(float(_GEOD.inv(lon0, lat0, lon_y, lat_y)[2]))
++    return (distance_x + distance_y) / 2.0
++
++
++def _coordinate_record(
++    transform: Affine,
++    crs: CRS,
++    *,
++    row: int,
++    column: int,
++) -> dict[str, object]:
++    x = float(transform.a * (column + 0.5) + transform.b * (row + 0.5) + transform.c)
++    y = float(transform.d * (column + 0.5) + transform.e * (row + 0.5) + transform.f)
++    longitude, latitude = Transformer.from_crs(crs, "EPSG:4326", always_xy=True).transform(x, y)
++    return {
++        "row": row,
++        "column": column,
++        "x": float(x),
++        "y": float(y),
++        "crs": crs.to_string(),
++        "longitude": float(longitude),
++        "latitude": float(latitude),
++    }
++
++
++def _peak_record(elevations: FloatArray, transform: Affine, crs: CRS) -> dict[str, object]:
++    finite = np.where(np.isfinite(elevations), elevations, -np.inf)
++    flat_index = int(np.argmax(finite))
++    row, column = np.unravel_index(flat_index, elevations.shape)
++    return _coordinate_record(transform, crs, row=int(row), column=int(column))
++
++
++def _aoi_bbox_parts(aoi: AreaOfInterest) -> list[tuple[float, float, float, float]]:
++    west, south, east, north = aoi.bounds_wgs84
++    if aoi.crosses_antimeridian:
++        return [(west, south, 180.0, north), (-180.0, south, east, north)]
++    return [(west, south, east, north)]
++
++
++def _combine_windows(windows: list[Window], full_window: Window) -> Window:
++    column_start = max(int(full_window.col_off), min(int(window.col_off) for window in windows))
++    row_start = max(int(full_window.row_off), min(int(window.row_off) for window in windows))
++    column_stop = min(
++        int(full_window.col_off + full_window.width),
++        max(int(window.col_off + window.width) for window in windows),
++    )
++    row_stop = min(
++        int(full_window.row_off + full_window.height),
++        max(int(window.row_off + window.height) for window in windows),
++    )
++    return Window.from_slices(
++        (row_start, row_stop),
++        (column_start, column_stop),
++    )
++
++
++def _window_for_aoi(source: DatasetReader, aoi: AreaOfInterest) -> tuple[Window, str]:
++    windows: list[Window] = []
++    for bounds_wgs84 in _aoi_bbox_parts(aoi):
++        geometry_wgs84 = box(*bounds_wgs84)
++        transformed = transform_geom(
++            "EPSG:4326",
++            source.crs,
++            geometry_wgs84.__geo_interface__,
++            precision=15,
++        )
++        try:
++            candidate = geometry_window(source, [transformed])
++        except WindowError:
++            continue
++        windows.append(candidate)
++    if not windows:
++        raise RasterProcessingError(
++            "AOI does not intersect the local raster; choose overlapping WGS84 bounds"
++        )
++    full_window = Window.from_slices((0, source.height), (0, source.width))
++    selected = _combine_windows(windows, full_window)
++    if selected.width < 2 or selected.height < 2:
++        raise RasterProcessingError("AOI intersection contains fewer than 2 x 2 raster cells")
++
++    source_geometry_wgs84 = shape(
++        transform_geom(
++            source.crs,
++            "EPSG:4326",
++            box(*source.bounds).__geo_interface__,
++            precision=15,
++        )
++    )
++    requested_geometry = shape(aoi.normalized_geometry_geojson)
++    coverage_status = (
++        "within-source"
++        if source_geometry_wgs84.covers(requested_geometry)
++        else "partial-source-overlap"
++    )
++    return selected, coverage_status
++
++
++def _read_source(
++    path: Path, aoi: AreaOfInterest | None
++) -> tuple[FloatArray, Affine, CRS, _SourceFacts]:
+     try:
+         source = rasterio.open(path)
+     except RasterioError as exc:
+@@ -123,70 +265,134 @@ def _read_to_metric_grid(path: Path) -> tuple[FloatArray, Affine, CRS, dict[str,
+                 f"Raster {path} has no horizontal CRS; assign the correct CRS before building"
+             )
+         source_crs = CRS.from_user_input(source.crs)
+-        source_array = source.read(1, masked=True).astype(np.float32)
++        full_shape = (source.height, source.width)
++        coverage_status = "full-source"
++        selected_window = Window.from_slices((0, source.height), (0, source.width))
++        if aoi is not None:
++            selected_window, coverage_status = _window_for_aoi(source, aoi)
++        source_array = source.read(1, window=selected_window, masked=True).astype(np.float32)
+         source_data = np.asarray(source_array.filled(np.nan), dtype=np.float32)
+-        tags = {str(key): str(value) for key, value in source.tags().items()}
+-        source_bounds = (
+-            source.bounds.left,
+-            source.bounds.bottom,
+-            source.bounds.right,
+-            source.bounds.top,
+-        )
+-        if _uses_metre_axes(source_crs) and _is_north_up(source.transform):
+-            return source_data, source.transform, source_crs, tags
+-
+-        target_crs = _choose_metric_crs(source_crs, source_bounds)
+-        transform, width, height = calculate_default_transform(
+-            source.crs,
+-            target_crs,
+-            source.width,
+-            source.height,
+-            *source_bounds,
+-        )
+-        destination = np.full((height, width), np.nan, dtype=np.float32)
+-        coverage = np.zeros((height, width), dtype=np.uint8)
+-        reproject(
+-            source=source_data,
+-            destination=destination,
+-            src_transform=source.transform,
+-            src_crs=source.crs,
+-            src_nodata=np.nan,
+-            dst_transform=transform,
+-            dst_crs=target_crs,
+-            dst_nodata=np.nan,
+-            resampling=Resampling.bilinear,
++        if source_data.shape[0] < 2 or source_data.shape[1] < 2:
++            raise RasterProcessingError("Selected source raster contains fewer than 2 x 2 cells")
++        if not bool(np.any(np.isfinite(source_data))):
++            raise RasterProcessingError("Selected AOI intersects only source NoData cells")
++        selected_transform = window_transform(selected_window, source.transform)
++        selected_bounds = cast(
++            tuple[float, float, float, float],
++            tuple(float(value) for value in window_bounds(selected_window, source.transform)),
+         )
+-        reproject(
+-            source=np.ones(source_data.shape, dtype=np.uint8),
+-            destination=coverage,
+-            src_transform=source.transform,
+-            src_crs=source.crs,
+-            src_nodata=0,
+-            dst_transform=transform,
+-            dst_crs=target_crs,
+-            dst_nodata=0,
+-            resampling=Resampling.nearest,
++        bounds_wgs84 = tuple(
++            float(value)
++            for value in transform_bounds(
++                source.crs,
++                "EPSG:4326",
++                *selected_bounds,
++                densify_pts=21,
++            )
+         )
+-        destination, transform = _crop_to_source_coverage(
+-            destination,
+-            coverage.astype(bool),
+-            transform,
++        tags = {str(key): str(value) for key, value in source.tags().items()}
++        raw_min = float(np.nanmin(source_data))
++        raw_max = float(np.nanmax(source_data))
++        raw_peak = _peak_record(source_data, selected_transform, source_crs)
++        aoi_report: dict[str, object] | None = None
++        if aoi is not None:
++            aoi_report = aoi_provenance(aoi)
++            aoi_report["clip"] = {
++                "coverage_status": coverage_status,
++                "source_full_grid_shape": list(full_shape),
++                "selected_source_grid_shape": list(source_data.shape),
++                "source_pixel_window": [
++                    int(selected_window.col_off),
++                    int(selected_window.row_off),
++                    int(selected_window.width),
++                    int(selected_window.height),
++                ],
++                "selected_pixel_bounds_native": list(selected_bounds),
++                "selected_pixel_bounds_wgs84": list(bounds_wgs84),
++                "pixel_aligned_crop": True,
++                "silent_expansion": False,
++            }
++        facts = _SourceFacts(
++            full_shape=full_shape,
++            selected_shape=(source_data.shape[0], source_data.shape[1]),
++            crs=source_crs,
++            transform=selected_transform,
++            native_bounds=selected_bounds,
++            bounds_wgs84=cast(tuple[float, float, float, float], bounds_wgs84),
++            horizontal_resolution_m=_pixel_resolution_m(
++                selected_transform, source_crs, source_data.shape
++            ),
++            raw_elevation_min_m=raw_min,
++            raw_elevation_max_m=raw_max,
++            raw_peak_coordinate=raw_peak,
++            tags=tags,
++            aoi_report=aoi_report,
+         )
+-        return destination, transform, target_crs, tags
++        return source_data, selected_transform, source_crs, facts
++
++
++def _read_to_metric_grid(
++    path: Path, aoi: AreaOfInterest | None
++) -> tuple[FloatArray, Affine, CRS, _SourceFacts]:
++    source_data, source_transform, source_crs, facts = _read_source(path, aoi)
++    if aoi is not None:
++        target_crs = CRS.from_user_input(aoi.target_local_crs)
++    else:
++        target_crs = _choose_metric_crs(source_crs, facts.native_bounds)
++    if source_crs == target_crs and _uses_metre_axes(source_crs) and _is_north_up(source_transform):
++        return source_data, source_transform, source_crs, facts
++    if aoi is None and _uses_metre_axes(source_crs) and _is_north_up(source_transform):
++        return source_data, source_transform, source_crs, facts
++
++    transform, width, height = calculate_default_transform(
++        source_crs,
++        target_crs,
++        source_data.shape[1],
++        source_data.shape[0],
++        *facts.native_bounds,
++    )
++    destination = np.full((height, width), np.nan, dtype=np.float32)
++    coverage = np.zeros((height, width), dtype=np.uint8)
++    reproject(
++        source=source_data,
++        destination=destination,
++        src_transform=source_transform,
++        src_crs=source_crs,
++        src_nodata=np.nan,
++        dst_transform=transform,
++        dst_crs=target_crs,
++        dst_nodata=np.nan,
++        resampling=Resampling.bilinear,
++    )
++    reproject(
++        source=np.ones(source_data.shape, dtype=np.uint8),
++        destination=coverage,
++        src_transform=source_transform,
++        src_crs=source_crs,
++        src_nodata=0,
++        dst_transform=transform,
++        dst_crs=target_crs,
++        dst_nodata=0,
++        resampling=Resampling.nearest,
++    )
++    destination, transform = _crop_to_source_coverage(
++        destination,
++        coverage.astype(bool),
++        transform,
++    )
++    return destination, transform, target_crs, facts
+ 
+ 
+-def _resample_to_cell_budget(
++def _resample_to_shape(
+     elevations: FloatArray,
+     transform: Affine,
+     crs: CRS,
+-    max_grid_cells: int,
++    target_shape: tuple[int, int],
+ ) -> tuple[FloatArray, Affine]:
+     rows, columns = elevations.shape
+-    if rows * columns <= max_grid_cells:
++    target_rows, target_columns = target_shape
++    if (rows, columns) == target_shape:
+         return elevations, transform
+-    reduction = np.sqrt((rows * columns) / max_grid_cells)
+-    target_rows = max(2, int(rows / reduction))
+-    target_columns = max(2, int(columns / reduction))
+     target = np.full((target_rows, target_columns), np.nan, dtype=np.float32)
+     target_transform = transform * Affine.scale(columns / target_columns, rows / target_rows)
+     reproject(
+@@ -267,6 +473,7 @@ def _write_processed_raster(
+     original_mask: BoolArray,
+     transform: Affine,
+     crs: CRS,
++    decision: SamplingDecision,
+ ) -> None:
+     output_path.parent.mkdir(parents=True, exist_ok=True)
+     common: dict[str, Any] = {
+@@ -283,25 +490,56 @@ def _write_processed_raster(
+         target.update_tags(
+             UNITS="metre",
+             ORIGINAL_NODATA_MASK=mask_path.name,
+-            PROCESSING="metric reprojection; conservative small-hole nearest interpolation",
++            PROCESSING=(
++                "metric reprojection; deterministic sampling; conservative small-hole interpolation"
++            ),
++            ORIENTATION="row 0 is north; model export maps north to +Y",
++            ESTIMATED_TRIANGLE_COUNT=str(decision.estimated_triangle_count),
+         )
+     with rasterio.open(mask_path, "w", dtype="uint8", **common) as target:
+         target.write(original_mask.astype(np.uint8), 1)
+         target.update_tags(MASK_MEANING="1=source/reprojection NoData before interpolation")
+ 
+ 
++def _coordinate_value(coordinate: dict[str, object], key: str) -> float:
++    value = coordinate.get(key)
++    if not isinstance(value, int | float):
++        raise RasterProcessingError(f"Coordinate field {key!r} is not numeric")
++    return float(value)
++
++
++def _peak_shift_m(raw: dict[str, object], processed: dict[str, object]) -> float:
++    return abs(
++        float(
++            _GEOD.inv(
++                _coordinate_value(raw, "longitude"),
++                _coordinate_value(raw, "latitude"),
++                _coordinate_value(processed, "longitude"),
++                _coordinate_value(processed, "latitude"),
++            )[2]
++        )
++    )
++
++
+ def process_local_raster(config: BuildConfig) -> ProcessedRaster:
+-    """Read, normalize, conservatively fill, and persist a local elevation raster."""
++    """Clip, normalize, sample, conservatively fill, and persist a local raster."""
+     source_path = config.dem_path.expanduser().resolve()
+     if not source_path.is_file():
+         raise RasterProcessingError(f"DEM file does not exist: {source_path}")
+-    elevations, transform, crs, tags = _read_to_metric_grid(source_path)
+-    elevations, transform = _resample_to_cell_budget(
+-        elevations,
+-        transform,
+-        crs,
+-        config.max_grid_cells,
++    normalized_aoi = normalize_area_of_interest(config.aoi) if config.aoi is not None else None
++    elevations, transform, crs, source = _read_to_metric_grid(source_path, normalized_aoi)
++    metric_rows, metric_columns = elevations.shape
++    metric_pixel_x_m = float(abs(transform.a))
++    metric_pixel_y_m = float(abs(transform.e))
++    metric_ground_width_m = metric_pixel_x_m * metric_columns
++    metric_ground_depth_m = metric_pixel_y_m * metric_rows
++    decision = resolve_sampling_decision(
++        elevations.shape,
++        ground_width_m=metric_ground_width_m,
++        ground_depth_m=metric_ground_depth_m,
++        config=config,
+     )
++    elevations, transform = _resample_to_shape(elevations, transform, crs, decision.target_shape)
+     filled, original_mask, interpolated_fraction = _fill_small_nodata(
+         elevations,
+         config.nodata_max_fraction,
+@@ -310,7 +548,15 @@ def process_local_raster(config: BuildConfig) -> ProcessedRaster:
+     output_dir = config.output_dir.expanduser().resolve()
+     processed_path = output_dir / "processed_dem.tif"
+     mask_path = output_dir / "original_nodata_mask.tif"
+-    _write_processed_raster(processed_path, mask_path, filled, original_mask, transform, crs)
++    _write_processed_raster(
++        processed_path,
++        mask_path,
++        filled,
++        original_mask,
++        transform,
++        crs,
++        decision,
++    )
+ 
+     rows, columns = filled.shape
+     pixel_x_m = float(abs(transform.a))
+@@ -319,6 +565,27 @@ def process_local_raster(config: BuildConfig) -> ProcessedRaster:
+     ground_depth_m = pixel_y_m * rows
+     finite_count = int(np.count_nonzero(np.isfinite(elevations)))
+     original_nodata_fraction = 1.0 - finite_count / elevations.size
++    processed_resolution_m = (pixel_x_m + pixel_y_m) / 2.0
++    processed_peak = _peak_record(filled, transform, crs)
++    peak_loss_m = max(0.0, source.raw_elevation_max_m - float(np.max(filled)))
++    peak_shift_m = _peak_shift_m(source.raw_peak_coordinate, processed_peak)
++    downsampling_factor = max(1.0, processed_resolution_m / source.horizontal_resolution_m)
++    peak_loss_threshold_m = max(10.0, source.horizontal_resolution_m * 2.0)
++    peak_shift_threshold_m = max(
++        source.horizontal_resolution_m * 3.0,
++        processed_resolution_m * 3.0,
++    )
++    terrain_fidelity_passed = (
++        peak_loss_m <= peak_loss_threshold_m and peak_shift_m <= peak_shift_threshold_m
++    )
++    if not terrain_fidelity_passed:
++        terrain_fidelity_status = "failed-threshold"
++    elif downsampling_factor > 1.05:
++        terrain_fidelity_status = "documented-downsampling"
++    else:
++        terrain_fidelity_status = "source-resolution-preserved"
++
++    tags = source.tags
+     metadata = DatasetMetadata(
+         provider="local",
+         dataset_name=config.dataset_name or source_path.stem,
+@@ -328,8 +595,8 @@ def process_local_raster(config: BuildConfig) -> ProcessedRaster:
+             else tags.get("DATASET_VERSION", "unknown")
+         ),
+         dataset_type=config.dataset_type,
+-        horizontal_resolution_m=float((pixel_x_m + pixel_y_m) / 2.0),
+-        horizontal_crs=crs.to_string(),
++        horizontal_resolution_m=source.horizontal_resolution_m,
++        horizontal_crs=source.crs.to_string(),
+         vertical_crs=(
+             config.vertical_crs
+             if config.vertical_crs != "unknown"
+@@ -365,10 +632,13 @@ def process_local_raster(config: BuildConfig) -> ProcessedRaster:
+         ),
+         checksums={source_path.name: sha256_file(source_path)},
+     )
++    physical_spacing = sum(decision.physical_spacing_xy_mm) / 2.0
+     report = RasterResult(
+         path=processed_path,
+         original_nodata_mask_path=mask_path,
+         array_shape=(rows, columns),
++        source_grid_shape=source.selected_shape,
++        processed_grid_shape=(rows, columns),
+         transform=(
+             float(transform.a),
+             float(transform.b),
+@@ -388,6 +658,34 @@ def process_local_raster(config: BuildConfig) -> ProcessedRaster:
+         original_nodata_fraction=original_nodata_fraction,
+         elevation_min_m=float(np.min(filled)),
+         elevation_max_m=float(np.max(filled)),
++        source_horizontal_resolution_m=source.horizontal_resolution_m,
++        processed_horizontal_resolution_m=processed_resolution_m,
++        downsampling_factor=downsampling_factor,
++        physical_sample_spacing_mm=physical_spacing,
++        physical_sample_spacing_xy_mm=decision.physical_spacing_xy_mm,
++        estimated_triangle_count=decision.estimated_triangle_count,
++        estimated_memory_mb=decision.estimated_memory_mb,
++        raw_elevation_min_m=source.raw_elevation_min_m,
++        raw_elevation_max_m=source.raw_elevation_max_m,
++        processed_elevation_min_m=float(np.min(filled)),
++        processed_elevation_max_m=float(np.max(filled)),
++        peak_elevation_loss_m=peak_loss_m,
++        raw_peak_coordinate=source.raw_peak_coordinate,
++        processed_peak_coordinate=processed_peak,
++        peak_horizontal_shift_m=peak_shift_m,
++        sampling_decision_reasons=list(decision.reasons),
++        sampling_warnings=list(decision.warnings),
++        terrain_fidelity_status=terrain_fidelity_status,
++        terrain_fidelity_passed=terrain_fidelity_passed,
++        peak_elevation_loss_threshold_m=peak_loss_threshold_m,
++        peak_horizontal_shift_threshold_m=peak_shift_threshold_m,
++        source_bounds={
++            "native": list(source.native_bounds),
++            "native_crs": source.crs.to_string(),
++            "wgs84": list(source.bounds_wgs84),
++            "full_grid_shape": list(source.full_shape),
++        },
++        aoi=source.aoi_report,
+         metadata=metadata,
+     )
+     return ProcessedRaster(filled, original_mask, transform, crs, report)
+diff --git a/src/topoforge/raster/sampling.py b/src/topoforge/raster/sampling.py
+new file mode 100644
+index 0000000..d7b78d2
+--- /dev/null
++++ b/src/topoforge/raster/sampling.py
+@@ -0,0 +1,167 @@
++"""Printer-aware deterministic terrain-grid sampling decisions."""
++
++from __future__ import annotations
++
++import math
++from dataclasses import dataclass
++
++from topoforge.models import BuildConfig, SamplingMode
++
++_ESTIMATED_BYTES_PER_GRID_CELL = 320
++_MEBIBYTE = 1024 * 1024
++
++
++@dataclass(frozen=True, slots=True)
++class SamplingDecision:
++    """Resolved deterministic grid shape plus explainable resource estimates."""
++
++    target_shape: tuple[int, int]
++    model_depth_mm: float
++    physical_spacing_xy_mm: tuple[float, float]
++    estimated_triangle_count: int
++    estimated_memory_mb: float
++    reasons: tuple[str, ...]
++    warnings: tuple[str, ...]
++
++
++def triangle_count_for_shape(shape: tuple[int, int]) -> int:
++    """Return exact triangles for the closed regular-grid topology."""
++    return 4 * shape[0] * shape[1] - 4
++
++
++def _shape_for_spacing(
++    source_shape: tuple[int, int],
++    *,
++    model_width_mm: float,
++    model_depth_mm: float,
++    spacing_mm: float,
++) -> tuple[int, int]:
++    source_rows, source_columns = source_shape
++    target_columns = min(source_columns, max(2, math.floor(model_width_mm / spacing_mm) + 1))
++    target_rows = min(source_rows, max(2, math.floor(model_depth_mm / spacing_mm) + 1))
++    return target_rows, target_columns
++
++
++def _fit_shape_to_budget(shape: tuple[int, int], maximum_cells: int) -> tuple[int, int]:
++    rows, columns = shape
++    if rows * columns <= maximum_cells:
++        return shape
++    reduction = math.sqrt((rows * columns) / maximum_cells)
++    target_rows = max(2, math.floor(rows / reduction))
++    target_columns = max(2, math.floor(columns / reduction))
++    while target_rows * target_columns > maximum_cells:
++        if target_rows / rows >= target_columns / columns and target_rows > 2:
++            target_rows -= 1
++        elif target_columns > 2:
++            target_columns -= 1
++        else:
++            break
++    return target_rows, target_columns
++
++
++def resolve_sampling_decision(
++    source_shape: tuple[int, int],
++    *,
++    ground_width_m: float,
++    ground_depth_m: float,
++    config: BuildConfig,
++) -> SamplingDecision:
++    """Resolve print resolution and resource budgets without ever upsampling terrain."""
++    source_rows, source_columns = source_shape
++    model_depth_mm = config.model_depth_mm or (
++        config.model_width_mm * ground_depth_m / ground_width_m
++    )
++    source_spacing_x_mm = config.model_width_mm / max(source_columns - 1, 1)
++    source_spacing_y_mm = model_depth_mm / max(source_rows - 1, 1)
++    reasons = [
++        f"source grid is {source_rows} x {source_columns}",
++        (
++            "source samples map to "
++            f"{source_spacing_x_mm:.6f} x {source_spacing_y_mm:.6f} mm on the model"
++        ),
++    ]
++    warnings: list[str] = []
++
++    if config.sampling_mode is SamplingMode.PRINT_AWARE:
++        printer_spacing_mm = min(
++            config.printer_profile.preferred_mesh_sampling_mm,
++            config.printer_profile.nozzle_diameter_mm,
++            config.printer_profile.minimum_feature_mm,
++        )
++        requested_shape = _shape_for_spacing(
++            source_shape,
++            model_width_mm=config.model_width_mm,
++            model_depth_mm=model_depth_mm,
++            spacing_mm=printer_spacing_mm,
++        )
++        reasons.extend(
++            (
++                (
++                    "print-aware spacing uses the finest of preferred mesh sampling "
++                    f"({config.printer_profile.preferred_mesh_sampling_mm:.6f} mm), nozzle "
++                    f"diameter ({config.printer_profile.nozzle_diameter_mm:.6f} mm), and minimum "
++                    f"feature ({config.printer_profile.minimum_feature_mm:.6f} mm)"
++                ),
++                f"resolved printer-aware target spacing is {printer_spacing_mm:.6f} mm",
++                "target shape is capped at the source grid so no terrain detail is invented",
++            )
++        )
++    elif config.sampling_mode is SamplingMode.SOURCE_PRESERVING:
++        requested_shape = source_shape
++        reasons.append("source-preserving mode requested every normalized source sample")
++    else:
++        if config.mesh_sampling_mm is not None:
++            requested_shape = _shape_for_spacing(
++                source_shape,
++                model_width_mm=config.model_width_mm,
++                model_depth_mm=model_depth_mm,
++                spacing_mm=config.mesh_sampling_mm,
++            )
++            reasons.extend(
++                (
++                    f"custom mode requested {config.mesh_sampling_mm:.6f} mm mesh spacing",
++                    "custom spacing is capped at the source grid so no terrain detail is invented",
++                )
++            )
++        else:
++            requested_shape = source_shape
++            reasons.append("custom mode uses max_grid_cells as the explicit sampling control")
++
++    memory_cell_limit = max(
++        16,
++        int(config.max_estimated_memory_mb * _MEBIBYTE // _ESTIMATED_BYTES_PER_GRID_CELL),
++    )
++    effective_cell_limit = min(config.max_grid_cells, memory_cell_limit)
++    target_shape = _fit_shape_to_budget(requested_shape, effective_cell_limit)
++    if target_shape != requested_shape:
++        reasons.append(
++            f"resource budget reduced {requested_shape[0]} x {requested_shape[1]} to "
++            f"{target_shape[0]} x {target_shape[1]}"
++        )
++        limiting_budget = (
++            "max_grid_cells"
++            if config.max_grid_cells <= memory_cell_limit
++            else "max_estimated_memory_mb"
++        )
++        warnings.append(
++            f"{config.sampling_mode.value} request was limited by {limiting_budget}; "
++            "the processed grid does not retain every requested sample"
++        )
++    reasons.append(
++        f"effective cell limit is {effective_cell_limit} from max_grid_cells="
++        f"{config.max_grid_cells} and max_estimated_memory_mb={config.max_estimated_memory_mb:.3f}"
++    )
++
++    rows, columns = target_shape
++    spacing_x_mm = config.model_width_mm / max(columns - 1, 1)
++    spacing_y_mm = model_depth_mm / max(rows - 1, 1)
++    estimated_memory_mb = rows * columns * _ESTIMATED_BYTES_PER_GRID_CELL / _MEBIBYTE
++    return SamplingDecision(
++        target_shape=target_shape,
++        model_depth_mm=model_depth_mm,
++        physical_spacing_xy_mm=(spacing_x_mm, spacing_y_mm),
++        estimated_triangle_count=triangle_count_for_shape(target_shape),
++        estimated_memory_mb=estimated_memory_mb,
++        reasons=tuple(reasons),
++        warnings=tuple(warnings),
++    )
+diff --git a/src/topoforge/rendering/preview.py b/src/topoforge/rendering/preview.py
+index d63bb57..0a79590 100644
+--- a/src/topoforge/rendering/preview.py
++++ b/src/topoforge/rendering/preview.py
+@@ -66,6 +66,19 @@ def render_elevation_preview(
+         f"Measured elevation range: {float(np.min(values)):.2f}-{float(np.max(values)):.2f} m",
+         fill=(182, 193, 199),
+     )
++    north_x = width_px - 42
++    north_tip_y = header_px + 10
++    north_tail_y = header_px + 58
++    draw.line((north_x, north_tail_y, north_x, north_tip_y), fill=(255, 255, 255), width=4)
++    draw.polygon(
++        (
++            (north_x, north_tip_y),
++            (north_x - 9, north_tip_y + 15),
++            (north_x + 9, north_tip_y + 15),
++        ),
++        fill=(255, 255, 255),
++    )
++    draw.text((north_x - 5, header_px + 60), "N", fill=(255, 255, 255))
+     temporary = path.with_name(f".{path.name}.tmp")
+     canvas.save(temporary, format="PNG", optimize=True)
+     temporary.replace(path)
+diff --git a/tests/cli/test_build_config_overrides.py b/tests/cli/test_build_config_overrides.py
+index 74e4f48..142e9ab 100644
+--- a/tests/cli/test_build_config_overrides.py
++++ b/tests/cli/test_build_config_overrides.py
+@@ -172,3 +172,62 @@ def test_build_without_profile_uses_bambu_p2s_default(monkeypatch: Any) -> None:
+ 
+     assert result.exit_code == 0, result.output
+     assert captured.pop().printer_profile.profile_id == "bambu-p2s-0.4"
++
++
++def test_cli_custom_sampling_and_bbox_are_resolved(monkeypatch: Any) -> None:
++    captured = _capture_build(monkeypatch)
++
++    result = runner.invoke(
++        cli_module.app,
++        [
++            "build",
++            "--dem",
++            "source.tif",
++            "--sampling-mode",
++            "custom",
++            "--mesh-sampling-mm",
++            "0.75",
++            "--max-grid-cells",
++            "50000",
++            "--max-estimated-memory-mb",
++            "256",
++            "--bbox",
++            "170",
++            "-10",
++            "-170",
++            "10",
++        ],
++    )
++
++    assert result.exit_code == 0, result.output
++    resolved = captured.pop()
++    assert resolved.sampling_mode.value == "custom"
++    assert resolved.mesh_sampling_mm == 0.75
++    assert resolved.max_grid_cells == 50_000
++    assert resolved.max_estimated_memory_mb == 256.0
++    assert resolved.aoi is not None
++    assert resolved.aoi.bbox_wgs84 == (170.0, -10.0, -170.0, 10.0)
++
++
++def test_cli_center_radius_aoi_is_resolved(monkeypatch: Any) -> None:
++    captured = _capture_build(monkeypatch)
++
++    result = runner.invoke(
++        cli_module.app,
++        [
++            "build",
++            "--dem",
++            "source.tif",
++            "--center",
++            "101.8",
++            "29.6",
++            "--radius-m",
++            "10000",
++        ],
++    )
++
++    assert result.exit_code == 0, result.output
++    resolved = captured.pop()
++    assert resolved.aoi is not None
++    assert resolved.aoi.center_wgs84 == (101.8, 29.6)
++    assert resolved.aoi.radius_m == 10_000.0
+diff --git a/tests/integration/test_aoi_clipping.py b/tests/integration/test_aoi_clipping.py
+new file mode 100644
+index 0000000..d2f1b2b
+--- /dev/null
++++ b/tests/integration/test_aoi_clipping.py
+@@ -0,0 +1,83 @@
++from pathlib import Path
++
++import numpy as np
++import pytest
++import rasterio
++from rasterio.transform import from_origin
++
++from topoforge.exceptions import RasterProcessingError
++from topoforge.models import AreaOfInterestInput, BuildConfig, SamplingMode
++from topoforge.raster import process_local_raster
++
++
++def _write_geographic(
++    path: Path,
++    *,
++    nodata_pixel: tuple[int, int] | None = None,
++) -> Path:
++    values = np.arange(100 * 120, dtype=np.float32).reshape(100, 120)
++    nodata = -9999.0
++    if nodata_pixel is not None:
++        values[nodata_pixel] = nodata
++    with rasterio.open(
++        path,
++        "w",
++        driver="GTiff",
++        width=120,
++        height=100,
++        count=1,
++        dtype="float32",
++        crs="EPSG:4326",
++        transform=from_origin(100.0, 30.0, 0.01, 0.01),
++        nodata=nodata,
++    ) as dataset:
++        dataset.write(values, 1)
++    return path
++
++
++def _config(source: Path, output: Path, bbox: tuple[float, float, float, float]) -> BuildConfig:
++    return BuildConfig(
++        dem_path=source,
++        output_dir=output,
++        aoi=AreaOfInterestInput(bbox_wgs84=bbox),
++        sampling_mode=SamplingMode.SOURCE_PRESERVING,
++        max_grid_cells=100_000,
++    )
++
++
++def test_bbox_aoi_crops_local_raster_and_records_pixel_coverage(tmp_path: Path) -> None:
++    source = _write_geographic(tmp_path / "source.tif")
++    result = process_local_raster(_config(source, tmp_path / "out", (100.2, 29.2, 100.8, 29.8)))
++
++    assert result.report.source_grid_shape[0] < 100
++    assert result.report.source_grid_shape[1] < 120
++    assert result.report.aoi is not None
++    assert result.report.aoi["clip"]["coverage_status"] == "within-source"
++    assert result.report.aoi["clip"]["silent_expansion"] is False
++    assert result.crs.is_projected
++
++
++def test_partially_outside_aoi_is_clipped_and_explicitly_reported(tmp_path: Path) -> None:
++    source = _write_geographic(tmp_path / "source.tif")
++    result = process_local_raster(_config(source, tmp_path / "out", (99.8, 29.4, 100.4, 30.2)))
++
++    assert result.report.aoi is not None
++    assert result.report.aoi["clip"]["coverage_status"] == "partial-source-overlap"
++    assert result.report.source_grid_shape[0] < 100
++    assert result.report.source_grid_shape[1] < 120
++
++
++def test_fully_outside_aoi_is_rejected(tmp_path: Path) -> None:
++    source = _write_geographic(tmp_path / "source.tif")
++    with pytest.raises(RasterProcessingError, match="does not intersect"):
++        process_local_raster(_config(source, tmp_path / "out", (110.0, 40.0, 111.0, 41.0)))
++
++
++def test_aoi_intersecting_small_nodata_hole_preserves_and_reports_mask(tmp_path: Path) -> None:
++    source = _write_geographic(tmp_path / "source.tif", nodata_pixel=(50, 60))
++    result = process_local_raster(_config(source, tmp_path / "out", (100.4, 29.3, 100.8, 29.7)))
++
++    assert result.report.original_nodata_fraction > 0.0
++    assert result.report.interpolated_fraction > 0.0
++    assert bool(np.any(result.original_nodata_mask))
++    assert bool(np.all(np.isfinite(result.elevations_m)))
+diff --git a/tests/integration/test_orientation.py b/tests/integration/test_orientation.py
+new file mode 100644
+index 0000000..7a6c7d3
+--- /dev/null
++++ b/tests/integration/test_orientation.py
+@@ -0,0 +1,101 @@
++from pathlib import Path
++from xml.etree import ElementTree as ET
++from zipfile import ZipFile
++
++import numpy as np
++import rasterio
++import trimesh
++from rasterio.transform import from_origin
++
++from topoforge.engine import build_local_terrain
++from topoforge.exporters.three_mf import CORE_NS, MODEL_PATH, inspect_3mf
++from topoforge.models import BuildConfig, SamplingMode, VerticalScaleMode
++
++
++def _top_z(mesh: trimesh.Trimesh, x: float, y: float) -> float:
++    vertices = np.asarray(mesh.vertices)
++    matches = np.isclose(vertices[:, 0], x, atol=1e-5) & np.isclose(vertices[:, 1], y, atol=1e-5)
++    return float(np.max(vertices[matches, 2]))
++
++
++def _three_mf_mesh(path: Path) -> trimesh.Trimesh:
++    with ZipFile(path) as package:
++        root = ET.fromstring(package.read(MODEL_PATH))
++    namespace = {"m": CORE_NS}
++    vertices = np.asarray(
++        [
++            [float(item.attrib[axis]) for axis in ("x", "y", "z")]
++            for item in root.findall(".//m:mesh/m:vertices/m:vertex", namespace)
++        ]
++    )
++    faces = np.asarray(
++        [
++            [int(item.attrib[index]) for index in ("v1", "v2", "v3")]
++            for item in root.findall(".//m:mesh/m:triangles/m:triangle", namespace)
++        ]
++    )
++    return trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
++
++
++def test_asymmetric_dem_keeps_all_corners_and_peak_in_stl_glb_and_3mf(tmp_path: Path) -> None:
++    values = np.array(
++        [
++            [400.0, 80.0, 70.0, 60.0, 300.0],
++            [50.0, 45.0, 40.0, 35.0, 30.0],
++            [20.0, 18.0, 16.0, 14.0, 12.0],
++            [200.0, 10.0, 8.0, 6.0, 100.0],
++        ],
++        dtype=np.float32,
++    )
++    source = tmp_path / "asymmetric.tif"
++    with rasterio.open(
++        source,
++        "w",
++        driver="GTiff",
++        width=5,
++        height=4,
++        count=1,
++        dtype="float32",
++        crs="EPSG:32647",
++        transform=from_origin(500_000.0, 3_300_000.0, 30.0, 30.0),
++    ) as dataset:
++        dataset.write(values, 1)
++
++    result = build_local_terrain(
++        BuildConfig(
++            dem_path=source,
++            output_dir=tmp_path / "build",
++            model_width_mm=100.0,
++            model_depth_mm=80.0,
++            sampling_mode=SamplingMode.SOURCE_PRESERVING,
++            vertical_scale_mode=VerticalScaleMode.FIT_HEIGHT,
++            max_height_mm=30.0,
++        )
++    )
++
++    assert result.validation["orientation_consistent"] is True
++    assert result.validation["orientation"]["east_axis"] == "+X = East"
++    assert result.validation["orientation"]["north_axis"] == "+Y = North"
++    assert result.validation["orientation"]["north_edge"] == "y=model_depth_mm"
++
++    stl = trimesh.load(result.artifacts["model_stl"], force="mesh", process=True)
++    glb = trimesh.load(result.artifacts["preview_glb"], force="mesh", process=False)
++    three_mf = _three_mf_mesh(result.artifacts["model_3mf"])
++    assert isinstance(stl, trimesh.Trimesh)
++    assert isinstance(glb, trimesh.Trimesh)
++
++    for mesh in (stl, glb, three_mf):
++        northwest = _top_z(mesh, 0.0, 80.0)
++        northeast = _top_z(mesh, 100.0, 80.0)
++        southwest = _top_z(mesh, 0.0, 0.0)
++        southeast = _top_z(mesh, 100.0, 0.0)
++        assert northwest > northeast > southwest > southeast
++        assert mesh.is_watertight
++        assert mesh.is_winding_consistent
++        assert mesh.volume > 0.0
++
++    inspection = inspect_3mf(result.artifacts["model_3mf"])
++    assert inspection.strict_warning_count == 0
++    assert inspection.metadata["customXMLNS0:east_axis"] == "+X = East"
++    assert inspection.metadata["customXMLNS0:north_axis"] == "+Y = North"
++    assert inspection.metadata["customXMLNS0:north_edge"] == "y=model_depth_mm"
+diff --git a/tests/integration/test_sampling_fidelity.py b/tests/integration/test_sampling_fidelity.py
+new file mode 100644
+index 0000000..370e118
+--- /dev/null
++++ b/tests/integration/test_sampling_fidelity.py
+@@ -0,0 +1,45 @@
++from pathlib import Path
++
++import numpy as np
++import rasterio
++from rasterio.transform import from_origin
++
++from topoforge.models import BuildConfig, SamplingMode
++from topoforge.raster import process_local_raster
++
++
++def test_peak_loss_and_shift_are_measured_when_custom_sampling_is_coarse(tmp_path: Path) -> None:
++    values = np.zeros((80, 100), dtype=np.float32)
++    values[21, 73] = 1000.0
++    source = tmp_path / "impulse.tif"
++    with rasterio.open(
++        source,
++        "w",
++        driver="GTiff",
++        width=100,
++        height=80,
++        count=1,
++        dtype="float32",
++        crs="EPSG:32647",
++        transform=from_origin(500_000.0, 3_300_000.0, 30.0, 30.0),
++    ) as dataset:
++        dataset.write(values, 1)
++
++    result = process_local_raster(
++        BuildConfig(
++            dem_path=source,
++            output_dir=tmp_path / "out",
++            model_width_mm=100.0,
++            sampling_mode=SamplingMode.CUSTOM,
++            mesh_sampling_mm=10.0,
++            max_grid_cells=10_000,
++        )
++    )
++
++    assert result.report.raw_elevation_max_m == 1000.0
++    assert result.report.processed_elevation_max_m < 1000.0
++    assert result.report.peak_elevation_loss_m > 0.0
++    assert result.report.peak_horizontal_shift_m > 0.0
++    assert result.report.terrain_fidelity_status == "failed-threshold"
++    assert result.report.terrain_fidelity_passed is False
++    assert result.report.sampling_decision_reasons
+diff --git a/tests/unit/test_aoi.py b/tests/unit/test_aoi.py
+new file mode 100644
+index 0000000..f9b3391
+--- /dev/null
++++ b/tests/unit/test_aoi.py
+@@ -0,0 +1,59 @@
++import pytest
++from pydantic import ValidationError
++from pyproj import CRS
++
++from topoforge.models import AreaOfInterestInput
++from topoforge.raster import normalize_area_of_interest
++
++
++def test_bbox_aoi_normalizes_to_wgs84_geometry_and_utm() -> None:
++    result = normalize_area_of_interest(AreaOfInterestInput(bbox_wgs84=(101.5, 29.4, 101.9, 29.8)))
++
++    assert result.kind == "bbox"
++    assert result.bounds_wgs84 == (101.5, 29.4, 101.9, 29.8)
++    assert result.crosses_antimeridian is False
++    assert result.area_m2 > 0
++    assert CRS.from_user_input(result.target_local_crs).to_epsg() == 32647
++
++
++def test_center_radius_aoi_records_input_and_geodesic_bounds() -> None:
++    result = normalize_area_of_interest(
++        AreaOfInterestInput(center_wgs84=(101.8, 29.6), radius_m=10_000.0)
++    )
++
++    assert result.kind == "center-radius"
++    assert result.user_input == {"center_wgs84": [101.8, 29.6], "radius_m": 10_000.0}
++    west, south, east, north = result.bounds_wgs84
++    assert west < 101.8 < east
++    assert south < 29.6 < north
++    assert "geodesic" in result.normalization_method
++
++
++def test_cross_zone_high_latitude_and_antimeridian_use_local_aeqd() -> None:
++    cross_zone = normalize_area_of_interest(AreaOfInterestInput(bbox_wgs84=(5.9, 45.0, 6.1, 45.2)))
++    high_latitude = normalize_area_of_interest(
++        AreaOfInterestInput(bbox_wgs84=(20.0, 84.5, 21.0, 85.0))
++    )
++    antimeridian = normalize_area_of_interest(
++        AreaOfInterestInput(bbox_wgs84=(170.0, -10.0, -170.0, 10.0))
++    )
++
++    assert CRS.from_user_input(cross_zone.target_local_crs).to_epsg() is None
++    assert CRS.from_user_input(high_latitude.target_local_crs).to_epsg() is None
++    assert antimeridian.crosses_antimeridian is True
++    assert antimeridian.normalized_geometry_geojson["type"] == "MultiPolygon"
++    assert CRS.from_user_input(antimeridian.target_local_crs).to_epsg() is None
++
++
++@pytest.mark.parametrize(
++    "aoi_request",
++    [
++        {"bbox_wgs84": (-181.0, 0.0, 1.0, 2.0)},
++        {"bbox_wgs84": (0.0, -91.0, 1.0, 2.0)},
++        {"bbox_wgs84": (0.0, 2.0, 1.0, 1.0)},
++        {"center_wgs84": (0.0, 0.0), "radius_m": -1.0},
++    ],
++)
++def test_invalid_aoi_inputs_are_rejected(aoi_request: dict[str, object]) -> None:
++    with pytest.raises((ValueError, ValidationError)):
++        normalize_area_of_interest(AreaOfInterestInput.model_validate(aoi_request))
+diff --git a/tests/unit/test_sampling.py b/tests/unit/test_sampling.py
+new file mode 100644
+index 0000000..3b3758f
+--- /dev/null
++++ b/tests/unit/test_sampling.py
+@@ -0,0 +1,105 @@
++from pathlib import Path
++
++import pytest
++
++from topoforge.models import BuildConfig, SamplingMode
++from topoforge.raster import resolve_sampling_decision, triangle_count_for_shape
++
++
++def _config(**updates: object) -> BuildConfig:
++    values: dict[str, object] = {
++        "dem_path": Path("source.tif"),
++        "output_dir": Path("output"),
++        "model_width_mm": 180.0,
++        "max_grid_cells": 1_500_000,
++    }
++    values.update(updates)
++    return BuildConfig.model_validate(values)
++
++
++def test_print_aware_sampling_uses_printer_limits_without_upsampling() -> None:
++    decision = resolve_sampling_decision(
++        (1000, 1200),
++        ground_width_m=36_000.0,
++        ground_depth_m=30_000.0,
++        config=_config(),
++    )
++
++    assert decision.target_shape == (376, 451)
++    assert decision.physical_spacing_xy_mm == pytest.approx((0.4, 0.4))
++    assert decision.estimated_triangle_count == triangle_count_for_shape(decision.target_shape)
++    assert decision.target_shape[0] < 1000
++    assert decision.target_shape[1] < 1200
++    assert not decision.warnings
++    assert any("no terrain detail is invented" in reason for reason in decision.reasons)
++
++
++def test_source_preserving_retains_normalized_source_grid_within_budget() -> None:
++    decision = resolve_sampling_decision(
++        (200, 300),
++        ground_width_m=9_000.0,
++        ground_depth_m=6_000.0,
++        config=_config(sampling_mode=SamplingMode.SOURCE_PRESERVING),
++    )
++
++    assert decision.target_shape == (200, 300)
++    assert not decision.warnings
++    assert any("every normalized source sample" in reason for reason in decision.reasons)
++
++
++def test_source_preserving_reports_cell_budget_limit() -> None:
++    decision = resolve_sampling_decision(
++        (500, 600),
++        ground_width_m=18_000.0,
++        ground_depth_m=15_000.0,
++        config=_config(
++            sampling_mode=SamplingMode.SOURCE_PRESERVING,
++            max_grid_cells=10_000,
++        ),
++    )
++
++    assert decision.target_shape[0] * decision.target_shape[1] <= 10_000
++    assert decision.warnings
++    assert "max_grid_cells" in decision.warnings[0]
++
++
++def test_custom_spacing_and_custom_cell_budget_are_deterministic() -> None:
++    spacing_config = _config(sampling_mode=SamplingMode.CUSTOM, mesh_sampling_mm=1.0)
++    first = resolve_sampling_decision(
++        (500, 600),
++        ground_width_m=18_000.0,
++        ground_depth_m=15_000.0,
++        config=spacing_config,
++    )
++    second = resolve_sampling_decision(
++        (500, 600),
++        ground_width_m=18_000.0,
++        ground_depth_m=15_000.0,
++        config=spacing_config,
++    )
++    assert first == second
++    assert first.target_shape == (151, 181)
++
++    cell_budget = resolve_sampling_decision(
++        (500, 600),
++        ground_width_m=18_000.0,
++        ground_depth_m=15_000.0,
++        config=_config(sampling_mode=SamplingMode.CUSTOM, max_grid_cells=20_000),
++    )
++    assert cell_budget.target_shape[0] * cell_budget.target_shape[1] <= 20_000
++
++
++def test_memory_budget_can_be_the_limiting_resource() -> None:
++    decision = resolve_sampling_decision(
++        (1000, 1000),
++        ground_width_m=30_000.0,
++        ground_depth_m=30_000.0,
++        config=_config(
++            sampling_mode=SamplingMode.SOURCE_PRESERVING,
++            max_estimated_memory_mb=2.0,
++        ),
++    )
++
++    assert decision.estimated_memory_mb <= 2.0
++    assert decision.warnings
++    assert "max_estimated_memory_mb" in decision.warnings[0]
+diff --git a/tests/unit/test_scaling.py b/tests/unit/test_scaling.py
+index 8ebe042..f07f184 100644
+--- a/tests/unit/test_scaling.py
++++ b/tests/unit/test_scaling.py
+@@ -18,6 +18,8 @@ def raster_report() -> RasterResult:
+     return RasterResult(
+         path=Path("processed_dem.tif"),
+         array_shape=(3, 4),
++        source_grid_shape=(3, 4),
++        processed_grid_shape=(3, 4),
+         transform=(10.0, 0.0, 0.0, 0.0, -10.0, 0.0),
+         crs="EPSG:32648",
+         nodata=None,
+@@ -30,6 +32,27 @@ def raster_report() -> RasterResult:
+         original_nodata_fraction=0.0,
+         elevation_min_m=100.0,
+         elevation_max_m=200.0,
++        source_horizontal_resolution_m=10.0,
++        processed_horizontal_resolution_m=10.0,
++        downsampling_factor=1.0,
++        physical_sample_spacing_mm=1.0,
++        physical_sample_spacing_xy_mm=(1.0, 1.0),
++        estimated_triangle_count=44,
++        estimated_memory_mb=0.01,
++        raw_elevation_min_m=100.0,
++        raw_elevation_max_m=200.0,
++        processed_elevation_min_m=100.0,
++        processed_elevation_max_m=200.0,
++        peak_elevation_loss_m=0.0,
++        raw_peak_coordinate={"row": 2, "column": 3},
++        processed_peak_coordinate={"row": 2, "column": 3},
++        peak_horizontal_shift_m=0.0,
++        sampling_decision_reasons=["unit fixture preserves source grid"],
++        terrain_fidelity_status="source-resolution-preserved",
++        terrain_fidelity_passed=True,
++        peak_elevation_loss_threshold_m=20.0,
++        peak_horizontal_shift_threshold_m=30.0,
++        source_bounds={"native": [0.0, 0.0, 40.0, 30.0], "native_crs": "EPSG:32648"},
+         metadata=DatasetMetadata(
+             dataset_name="fixture",
+             horizontal_crs="EPSG:32648",

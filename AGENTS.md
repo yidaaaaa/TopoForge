@@ -27,6 +27,7 @@ The current milestone is the local GeoTIFF/synthetic Phase 1 pipeline. Global pr
 - Run `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, and `uv run pytest` before a milestone commit.
 - Geometry claims require measured assertions: watertightness, winding, volume, flat bottom, dimensions, degeneracy, duplicates, and connected components.
 - Online tests are opt-in integration tests; default tests must work offline.
+- The default manufacturing target is Bambu Lab P2S with a 0.4 mm nozzle. Production P2S 3MF evidence requires official Bambu Studio normative slicing, resolved official preset hashes, hard parameter assertions, and project reopen/reslice verification.
 
 ## Data and license rules
 
@@ -42,6 +43,7 @@ The current milestone is the local GeoTIFF/synthetic Phase 1 pipeline. Global pr
 - No angle-space mesh construction in EPSG:4326.
 - No silent CRS, datum, unit, NoData, or provider fallback.
 - No unverified printable/manifold/slicer claims.
+- No P2S production release based only on a slicer exit code, preset filename, OrcaSlicer, or PrusaSlicer; the official Bambu Studio parameter gate must pass.
 - No large DEM, mesh, cache, download, or G-code files in Git.
 - No duplicated core algorithms in CLI/API/Web.
 
@@ -61,4 +63,4 @@ The current milestone is the local GeoTIFF/synthetic Phase 1 pipeline. Global pr
 
 ## Definition of Done
 
-A milestone is done only when source, tests, generated artifacts, validation reports, preview, and (where required) actual slicer output exist; all required quality commands pass; state documents match the repository; generated outputs are ignored; a milestone report exists; and the milestone is committed with a reversible diff.
+A milestone is done only when source, tests, generated artifacts, validation reports, preview, and (where required) actual slicer output exist; all required quality commands pass; state documents match the repository; generated outputs are ignored; a milestone report exists; and the milestone is committed with a reversible diff. For the default P2S target, completion also requires separate interoperable and Bambu-project 3MF roles plus official reopen/reslice evidence.

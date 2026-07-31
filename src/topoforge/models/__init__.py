@@ -2,6 +2,7 @@
 
 from topoforge.models.domain import (
     AreaOfInterest,
+    AreaOfInterestInput,
     BaselineMode,
     BuildConfig,
     BuildManifest,
@@ -9,6 +10,7 @@ from topoforge.models.domain import (
     DatasetType,
     PrinterProfile,
     RasterResult,
+    SamplingMode,
     ScalingResult,
     TerrainMode,
     VerticalScaleMode,
@@ -16,6 +18,7 @@ from topoforge.models.domain import (
 
 __all__ = [
     "AreaOfInterest",
+    "AreaOfInterestInput",
     "BaselineMode",
     "BuildConfig",
     "BuildManifest",
@@ -23,6 +26,7 @@ __all__ = [
     "DatasetType",
     "PrinterProfile",
     "RasterResult",
+    "SamplingMode",
     "ScalingResult",
     "TerrainMode",
     "VerticalScaleMode",

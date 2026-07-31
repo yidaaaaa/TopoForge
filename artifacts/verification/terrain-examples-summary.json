@@ -1,0 +1,152 @@
+{
+  "generated_at": "2026-07-31T03:28:32.519857+00:00",
+  "all_command_exit_statuses": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "examples": [
+    {
+      "slug": "great-trango-tower",
+      "source_sha256": "7539ad8dcaf2300658f6e945e63baf42d7185924322cab149d3c3ec1e0734833",
+      "geometry": {
+        "dimensions_mm": [
+          180.0,
+          180.00015258789062,
+          48.0
+        ],
+        "triangle_count": 770880,
+        "watertight": true,
+        "manifold": true,
+        "winding_consistent": true,
+        "positive_volume": true,
+        "connected_components": 1,
+        "degenerate_faces": 0,
+        "duplicate_faces": 0,
+        "bottom_planarity_error_mm": 0.0,
+        "required_checks_passed": true
+      },
+      "fidelity": {
+        "source_grid_shape": [
+          439,
+          439
+        ],
+        "processed_grid_shape": [
+          439,
+          439
+        ],
+        "source_horizontal_resolution_m": 29.96579087860559,
+        "processed_horizontal_resolution_m": 29.96579087860559,
+        "physical_sample_spacing_mm": 0.41095907098848705,
+        "raw_elevation_min_m": 3512.917236328125,
+        "raw_elevation_max_m": 6690.2646484375,
+        "processed_elevation_min_m": 3512.917236328125,
+        "processed_elevation_max_m": 6690.2646484375,
+        "peak_elevation_loss_m": 0.0,
+        "peak_horizontal_shift_m": 0.0,
+        "terrain_fidelity_status": "source-resolution-preserved"
+      },
+      "official_slice": {
+        "status": "succeeded",
+        "slicer": {
+          "detail": null,
+          "executable": "/root/autodl-tmp/bambu/TopoForge/downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage",
+          "name": "BambuStudio",
+          "status": "available",
+          "version": "02.07.01.62"
+        },
+        "profile": "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic",
+        "exit_code": 0,
+        "gcode": "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/great-trango-tower-p2s.gcode",
+        "gcode_size_bytes": 51185238,
+        "estimated_time_text": "6h 17m 18s",
+        "filament_used_g": 215.13,
+        "layer_count": 240,
+        "support_material": false,
+        "out_of_bed": false,
+        "empty_layer_warning": false,
+        "floating_region_warning": false,
+        "release_gate_passed": true
+      }
+    },
+    {
+      "slug": "mount-thor",
+      "source_sha256": "6c85376e74a5df5997d1cb4caf7d76727c7b83c79f1c553be7bfceab1601415e",
+      "geometry": {
+        "dimensions_mm": [
+          180.0,
+          180.0001220703125,
+          48.0
+        ],
+        "triangle_count": 809996,
+        "watertight": true,
+        "manifold": true,
+        "winding_consistent": true,
+        "positive_volume": true,
+        "connected_components": 1,
+        "degenerate_faces": 0,
+        "duplicate_faces": 0,
+        "bottom_planarity_error_mm": 0.0,
+        "required_checks_passed": true
+      },
+      "fidelity": {
+        "source_grid_shape": [
+          450,
+          450
+        ],
+        "processed_grid_shape": [
+          450,
+          450
+        ],
+        "source_horizontal_resolution_m": 29.933828957089247,
+        "processed_horizontal_resolution_m": 29.933828957089247,
+        "physical_sample_spacing_mm": 0.4008910077242973,
+        "raw_elevation_min_m": 85.61587524414062,
+        "raw_elevation_max_m": 2089.2275390625,
+        "processed_elevation_min_m": 85.61587524414062,
+        "processed_elevation_max_m": 2089.2275390625,
+        "peak_elevation_loss_m": 0.0,
+        "peak_horizontal_shift_m": 0.0,
+        "terrain_fidelity_status": "source-resolution-preserved"
+      },
+      "official_slice": {
+        "status": "succeeded",
+        "slicer": {
+          "detail": null,
+          "executable": "/root/autodl-tmp/bambu/TopoForge/downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage",
+          "name": "BambuStudio",
+          "status": "available",
+          "version": "02.07.01.62"
+        },
+        "profile": "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic",
+        "exit_code": 0,
+        "gcode": "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/mount-thor-p2s.gcode",
+        "gcode_size_bytes": 46330376,
+        "estimated_time_text": "6h 35m 58s",
+        "filament_used_g": 245.86,
+        "layer_count": 240,
+        "support_material": false,
+        "out_of_bed": false,
+        "empty_layer_warning": false,
+        "floating_region_warning": false,
+        "release_gate_passed": true
+      }
+    }
+  ],
+  "quality_gates": {
+    "ruff_check": "passed",
+    "ruff_format_check": "99 files already formatted",
+    "pyright": "0 errors, 0 warnings",
+    "pytest": "113 passed, 45 warnings",
+    "exit_status": 0
+  },
+  "patch_sha256": "809021cd59a55ecb263031eb7dab85d0c2d37be8d0a4d4a8e8b5cf94b80212f8",
+  "rollback_sha256": "4e5fb6e7a974da62e00c7479583115d70aca6f6b099c18956e878eb92fc326c2"
+}

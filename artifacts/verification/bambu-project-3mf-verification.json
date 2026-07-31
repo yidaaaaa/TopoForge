@@ -1,0 +1,263 @@
+{
+  "schema": "topoforge-bambu-project-3mf-regression-v1",
+  "generated_at": "2026-07-31T04:19:22.630908+00:00",
+  "issue": "Generic Core 3MF contains geometry only, so Bambu Studio shows the third-party 3MF notice.",
+  "resolution": "Preserve model.3mf as interoperable geometry and add model.bambu-p2s.3mf authored by official Bambu Studio with embedded P2S project settings and sliced plate.",
+  "application": "BambuStudio 02.07.01.62",
+  "examples": [
+    {
+      "slug": "great-trango-tower",
+      "baseline_behavior": {
+        "file": "/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/model.3mf",
+        "sha256": "73f2c1a94aa16fccb827165bda9a1eb2031e952034430bc9f1dd1eca524ccb41",
+        "archive_parts": [
+          "3D/3dmodel.model",
+          "[Content_Types].xml",
+          "_rels/.rels"
+        ],
+        "bambu_project_metadata_present": false,
+        "observed_gui_behavior": "Bambu Studio identifies it as a third-party geometry-only 3MF"
+      },
+      "modified_behavior": {
+        "file": "/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/model.bambu-p2s.3mf",
+        "sha256": "61e28bab1c64e423125dc11b90af6e5aa07de939efbd3cb86237e7ce213e042e",
+        "bytes": 24327524,
+        "archive_parts": [
+          "3D/3dmodel.model",
+          "3D/Objects/object_1.model",
+          "3D/_rels/3dmodel.model.rels",
+          "Metadata/_rels/model_settings.config.rels",
+          "Metadata/cut_information.xml",
+          "Metadata/filament_sequence.json",
+          "Metadata/model_settings.config",
+          "Metadata/plate_1.gcode",
+          "Metadata/plate_1.gcode.md5",
+          "Metadata/plate_1.json",
+          "Metadata/project_settings.config",
+          "Metadata/slice_info.config",
+          "[Content_Types].xml",
+          "_rels/.rels"
+        ],
+        "bambu_project_metadata_present": true,
+        "zip_test_bad_member": null,
+        "build_return_code": 0,
+        "build_error_string": "Success.",
+        "standalone_reopen_return_code": 0,
+        "standalone_reopen_error_string": "Success.",
+        "triangle_count": 770880,
+        "dimensions_mm": {
+          "depth": 180.00015258789062,
+          "height": 48.0,
+          "width": 180.0,
+          "x": 38.0,
+          "y": 37.99992370605469,
+          "z": 0.0
+        },
+        "filament_used_g": 215.12332153320312
+      },
+      "embedded_settings": {
+        "printer_model": "Bambu Lab P2S",
+        "printer_settings_id": "Bambu Lab P2S 0.4 nozzle",
+        "print_settings_id": "0.20mm Standard @BBL P2S",
+        "filament_settings_id": [
+          "Bambu PLA Basic @BBL P2S"
+        ],
+        "curr_bed_type": "Textured PEI Plate",
+        "layer_height": "0.2",
+        "wall_loops": "2",
+        "sparse_infill_density": "15%",
+        "enable_support": "0",
+        "nozzle_diameter": [
+          "0.4"
+        ],
+        "printable_height": "256"
+      },
+      "embedded_gcode": {
+        "bytes": 52500688,
+        "expected_md5": "71423a0e31e97e9c1cad6085de04a7d9",
+        "actual_md5": "71423a0e31e97e9c1cad6085de04a7d9",
+        "md5_matches": true
+      },
+      "verified_behaviors": {
+        "generic_is_geometry_only": true,
+        "bambu_project_marker_verified": true,
+        "standalone_reopen_and_reslice_succeeded": true,
+        "embedded_settings_verified": true,
+        "embedded_gcode_integrity_verified": true
+      },
+      "exact_build_and_reopen_records": "/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/bambu_project_validation.json",
+      "verification_runs": [
+        {
+          "command": [
+            "unzip",
+            "-t",
+            "/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/model.bambu-p2s.3mf"
+          ],
+          "stdout": "Archive:  /root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/model.bambu-p2s.3mf\n    testing: [Content_Types].xml      OK\n    testing: Metadata/plate_1.json    OK\n    testing: 3D/3dmodel.model         OK\n    testing: 3D/_rels/3dmodel.model.rels   OK\n    testing: 3D/Objects/object_1.model   OK\n    testing: Metadata/project_settings.config   OK\n    testing: Metadata/plate_1.gcode.md5   OK\n    testing: Metadata/plate_1.gcode   OK\n    testing: Metadata/_rels/model_settings.config.rels   OK\n    testing: Metadata/model_settings.config   OK\n    testing: Metadata/cut_information.xml   OK\n    testing: Metadata/slice_info.config   OK\n    testing: Metadata/filament_sequence.json   OK\n    testing: _rels/.rels              OK\nNo errors detected in compressed data of /root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/model.bambu-p2s.3mf.\n",
+          "stderr": "",
+          "exit_status": 0
+        },
+        {
+          "command": [
+            "uv",
+            "run",
+            "topoforge",
+            "preview",
+            "/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example"
+          ],
+          "stdout": "{\n  \"raster_shape\": [\n    439,\n    439\n  ],\n  \"raster_crs\": \"EPSG:32643\",\n  \"required_checks_passed\": true,\n  \"dataset_name\": \"Copernicus DEM GLO-30 2021 — Great Trango Tower\",\n  \"resolved_output_dir\": \"/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example\",\n  \"manifest_artifact_count\": 23,\n  \"preview_png\": \"/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/preview.png\",\n  \"preview_glb\": \"/root/autodl-tmp/bambu/TopoForge/outputs/great-trango-tower-example/preview.glb\"\n}\n",
+          "stderr": "",
+          "exit_status": 0
+        }
+      ]
+    },
+    {
+      "slug": "mount-thor",
+      "baseline_behavior": {
+        "file": "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/model.3mf",
+        "sha256": "33ecf0823f6d35141cc4f7941b59c26725c8f6e0e5deaa3397c4b62b57eab568",
+        "archive_parts": [
+          "3D/3dmodel.model",
+          "[Content_Types].xml",
+          "_rels/.rels"
+        ],
+        "bambu_project_metadata_present": false,
+        "observed_gui_behavior": "Bambu Studio identifies it as a third-party geometry-only 3MF"
+      },
+      "modified_behavior": {
+        "file": "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/model.bambu-p2s.3mf",
+        "sha256": "1c1f16ed4634e6fa68f555637532e885187dfa4903be06cd6f4a49705e19e26b",
+        "bytes": 23377704,
+        "archive_parts": [
+          "3D/3dmodel.model",
+          "3D/Objects/object_1.model",
+          "3D/_rels/3dmodel.model.rels",
+          "Metadata/_rels/model_settings.config.rels",
+          "Metadata/cut_information.xml",
+          "Metadata/filament_sequence.json",
+          "Metadata/model_settings.config",
+          "Metadata/plate_1.gcode",
+          "Metadata/plate_1.gcode.md5",
+          "Metadata/plate_1.json",
+          "Metadata/project_settings.config",
+          "Metadata/slice_info.config",
+          "[Content_Types].xml",
+          "_rels/.rels"
+        ],
+        "bambu_project_metadata_present": true,
+        "zip_test_bad_member": null,
+        "build_return_code": 0,
+        "build_error_string": "Success.",
+        "standalone_reopen_return_code": 0,
+        "standalone_reopen_error_string": "Success.",
+        "triangle_count": 809996,
+        "dimensions_mm": {
+          "depth": 180.0001220703125,
+          "height": 48.0,
+          "width": 180.0,
+          "x": 38.0,
+          "y": 37.99993896484375,
+          "z": 0.0
+        },
+        "filament_used_g": 245.8574981689453
+      },
+      "embedded_settings": {
+        "printer_model": "Bambu Lab P2S",
+        "printer_settings_id": "Bambu Lab P2S 0.4 nozzle",
+        "print_settings_id": "0.20mm Standard @BBL P2S",
+        "filament_settings_id": [
+          "Bambu PLA Basic @BBL P2S"
+        ],
+        "curr_bed_type": "Textured PEI Plate",
+        "layer_height": "0.2",
+        "wall_loops": "2",
+        "sparse_infill_density": "15%",
+        "enable_support": "0",
+        "nozzle_diameter": [
+          "0.4"
+        ],
+        "printable_height": "256"
+      },
+      "embedded_gcode": {
+        "bytes": 46641474,
+        "expected_md5": "e566999053e697753db9f6029c8c2248",
+        "actual_md5": "e566999053e697753db9f6029c8c2248",
+        "md5_matches": true
+      },
+      "verified_behaviors": {
+        "generic_is_geometry_only": true,
+        "bambu_project_marker_verified": true,
+        "standalone_reopen_and_reslice_succeeded": true,
+        "embedded_settings_verified": true,
+        "embedded_gcode_integrity_verified": true
+      },
+      "exact_build_and_reopen_records": "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/bambu_project_validation.json",
+      "verification_runs": [
+        {
+          "command": [
+            "unzip",
+            "-t",
+            "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/model.bambu-p2s.3mf"
+          ],
+          "stdout": "Archive:  /root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/model.bambu-p2s.3mf\n    testing: [Content_Types].xml      OK\n    testing: Metadata/plate_1.json    OK\n    testing: 3D/3dmodel.model         OK\n    testing: 3D/_rels/3dmodel.model.rels   OK\n    testing: 3D/Objects/object_1.model   OK\n    testing: Metadata/project_settings.config   OK\n    testing: Metadata/plate_1.gcode.md5   OK\n    testing: Metadata/plate_1.gcode   OK\n    testing: Metadata/_rels/model_settings.config.rels   OK\n    testing: Metadata/model_settings.config   OK\n    testing: Metadata/cut_information.xml   OK\n    testing: Metadata/slice_info.config   OK\n    testing: Metadata/filament_sequence.json   OK\n    testing: _rels/.rels              OK\nNo errors detected in compressed data of /root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/model.bambu-p2s.3mf.\n",
+          "stderr": "",
+          "exit_status": 0
+        },
+        {
+          "command": [
+            "uv",
+            "run",
+            "topoforge",
+            "preview",
+            "/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example"
+          ],
+          "stdout": "{\n  \"raster_shape\": [\n    450,\n    450\n  ],\n  \"raster_crs\": \"EPSG:32620\",\n  \"required_checks_passed\": true,\n  \"dataset_name\": \"Copernicus DEM GLO-30 2021 — Mount Thor\",\n  \"resolved_output_dir\": \"/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example\",\n  \"manifest_artifact_count\": 23,\n  \"preview_png\": \"/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/preview.png\",\n  \"preview_glb\": \"/root/autodl-tmp/bambu/TopoForge/outputs/mount-thor-example/preview.glb\"\n}\n",
+          "stderr": "",
+          "exit_status": 0
+        }
+      ]
+    }
+  ],
+  "patch_role": {
+    "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/patches/bambu-project-3mf-metadata.patch",
+    "sha256": "237ffd04f19f71a21380cbec0ac54031f737f7ec96d2da824b0c2576bc4c5ccf"
+  },
+  "rollback_role": {
+    "path": "/root/autodl-tmp/bambu/TopoForge/scripts/rollback-bambu-project-3mf.sh",
+    "sha256": "7a00f399f1bd19f1604803bfdf9e15a4efcd4c8a52bc75392401fdff705deeae"
+  },
+  "meta_verification_runs": [
+    {
+      "command": [
+        "git",
+        "apply",
+        "--check",
+        "--reverse",
+        "artifacts/patches/bambu-project-3mf-metadata.patch"
+      ],
+      "stdout": "",
+      "stderr": "",
+      "exit_status": 0
+    },
+    {
+      "command": [
+        "bash",
+        "-n",
+        "scripts/rollback-bambu-project-3mf.sh"
+      ],
+      "stdout": "",
+      "stderr": "",
+      "exit_status": 0
+    },
+    {
+      "command": [
+        "scripts/rollback-bambu-project-3mf.sh",
+        "--check"
+      ],
+      "stdout": "ready  great-trango-tower\nready  mount-thor\n",
+      "stderr": "",
+      "exit_status": 0
+    }
+  ],
+  "all_required_checks_passed": true
+}

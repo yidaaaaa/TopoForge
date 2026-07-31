@@ -17,12 +17,24 @@ import typer
 from rasterio.errors import RasterioError
 
 from topoforge import __version__
-from topoforge.config import get_printer_profile, load_build_config
+from topoforge.config import DEFAULT_PRINTER_PROFILE_ID, get_printer_profile, load_build_config
 from topoforge.engine import build_local_terrain, record_slice_validation, verify_artifact_bundle
 from topoforge.exceptions import TopoForgeError
 from topoforge.exporters.three_mf import inspect_3mf
-from topoforge.models import BuildConfig, DatasetType, VerticalScaleMode
-from topoforge.providers import list_provider_descriptors
+from topoforge.models import (
+    AreaOfInterestInput,
+    BuildConfig,
+    DatasetType,
+    SamplingMode,
+    VerticalScaleMode,
+)
+from topoforge.providers import (
+    CachingHttpClient,
+    ContentAddressedCache,
+    CopernicusAwsProvider,
+    HttpTransportConfig,
+    list_provider_descriptors,
+)
 from topoforge.raster import SyntheticTerrain, create_synthetic_geotiff
 from topoforge.util import sha256_file
 from topoforge.validation import validate_mesh
@@ -73,7 +85,40 @@ def build(
     vertical_exaggeration: Annotated[
         float, typer.Option("--vertical-exaggeration", min=0.01)
     ] = 1.0,
-    printer_profile: Annotated[str, typer.Option("--printer-profile")] = "generic-fdm-0.4",
+    printer_profile: Annotated[
+        str,
+        typer.Option(
+            "--printer-profile",
+            help="Manufacturing profile; defaults to Bambu Lab P2S with a 0.4 mm nozzle.",
+        ),
+    ] = DEFAULT_PRINTER_PROFILE_ID,
+    sampling_mode: Annotated[
+        SamplingMode,
+        typer.Option("--sampling-mode", help="print-aware, source-preserving, or custom."),
+    ] = SamplingMode.PRINT_AWARE,
+    mesh_sampling_mm: Annotated[
+        float | None,
+        typer.Option("--mesh-sampling-mm", min=0.001, help="Custom physical mesh spacing."),
+    ] = None,
+    max_grid_cells: Annotated[
+        int, typer.Option("--max-grid-cells", min=16, help="Hard processed-grid cell budget.")
+    ] = 1_500_000,
+    max_estimated_memory_mb: Annotated[
+        float,
+        typer.Option("--max-estimated-memory-mb", min=1.0, help="Estimated mesh memory budget."),
+    ] = 1024.0,
+    bbox: Annotated[
+        tuple[float, float, float, float] | None,
+        typer.Option("--bbox", metavar="WEST SOUTH EAST NORTH", help="WGS84 AOI bbox."),
+    ] = None,
+    center: Annotated[
+        tuple[float, float] | None,
+        typer.Option("--center", metavar="LON LAT", help="WGS84 AOI center."),
+    ] = None,
+    radius_m: Annotated[
+        float | None,
+        typer.Option("--radius-m", min=0.001, help="Geodesic center AOI radius."),
+    ] = None,
     dataset_type: Annotated[DatasetType, typer.Option("--dataset-type")] = DatasetType.UNKNOWN,
     dataset_name: Annotated[str | None, typer.Option("--dataset-name")] = None,
     dataset_version: Annotated[str, typer.Option("--dataset-version")] = "unknown",
@@ -103,6 +148,13 @@ def build(
                 "max_height_mm": ("max_height_mm", max_height_mm),
                 "vertical_scale": ("vertical_scale_mode", vertical_scale),
                 "vertical_exaggeration": ("vertical_exaggeration", vertical_exaggeration),
+                "sampling_mode": ("sampling_mode", sampling_mode),
+                "mesh_sampling_mm": ("mesh_sampling_mm", mesh_sampling_mm),
+                "max_grid_cells": ("max_grid_cells", max_grid_cells),
+                "max_estimated_memory_mb": (
+                    "max_estimated_memory_mb",
+                    max_estimated_memory_mb,
+                ),
                 "dataset_type": ("dataset_type", dataset_type),
                 "dataset_name": ("dataset_name", dataset_name),
                 "dataset_version": ("dataset_version", dataset_version),
@@ -121,6 +173,12 @@ def build(
                 overrides["model_depth_mm"] = size_mm[1] if size_mm[1] > 0 else None
             if _was_provided(ctx, "printer_profile"):
                 overrides["printer_profile"] = get_printer_profile(printer_profile)
+            if any(_was_provided(ctx, name) for name in ("bbox", "center", "radius_m")):
+                overrides["aoi"] = AreaOfInterestInput(
+                    bbox_wgs84=bbox,
+                    center_wgs84=center,
+                    radius_m=radius_m,
+                )
             resolved = load_build_config(config, overrides)
         else:
             if dem is None:
@@ -136,6 +194,19 @@ def build(
                 vertical_scale_mode=vertical_scale,
                 vertical_exaggeration=vertical_exaggeration,
                 printer_profile=profile,
+                sampling_mode=sampling_mode,
+                mesh_sampling_mm=mesh_sampling_mm,
+                max_grid_cells=max_grid_cells,
+                max_estimated_memory_mb=max_estimated_memory_mb,
+                aoi=(
+                    AreaOfInterestInput(
+                        bbox_wgs84=bbox,
+                        center_wgs84=center,
+                        radius_m=radius_m,
+                    )
+                    if bbox is not None or center is not None or radius_m is not None
+                    else None
+                ),
                 dataset_type=dataset_type,
                 dataset_name=dataset_name,
                 dataset_version=dataset_version,
@@ -153,6 +224,14 @@ def build(
                 "output_dir": str(result.output_dir),
                 "vertical_exaggeration": result.provenance["scaling"]["vertical_exaggeration"],
                 "dimensions_mm": result.validation["dimensions_mm"],
+                "sampling_mode": resolved.sampling_mode.value,
+                "source_horizontal_resolution_m": result.validation.get(
+                    "source_horizontal_resolution_m"
+                ),
+                "processed_horizontal_resolution_m": result.validation.get(
+                    "processed_horizontal_resolution_m"
+                ),
+                "orientation": result.validation.get("orientation"),
                 "watertight": result.validation["watertight"],
                 "manifold": result.validation["manifold"],
                 "required_checks_passed": result.validation["required_checks_passed"],
@@ -266,12 +345,200 @@ def providers() -> None:
     _emit([item.model_dump(mode="json") for item in list_provider_descriptors()])
 
 
+@app.command("fetch-dem")
+def fetch_dem(
+    output: Annotated[Path, typer.Option("--output", "-o", help="New provider GeoTIFF path.")],
+    bbox: Annotated[
+        tuple[float, float, float, float] | None,
+        typer.Option("--bbox", metavar="WEST SOUTH EAST NORTH", help="WGS84 AOI bbox."),
+    ] = None,
+    center: Annotated[
+        tuple[float, float] | None,
+        typer.Option("--center", metavar="LON LAT", help="WGS84 AOI center."),
+    ] = None,
+    radius_m: Annotated[
+        float | None, typer.Option("--radius-m", min=0.001, help="Geodesic AOI radius.")
+    ] = None,
+    provider: Annotated[str, typer.Option("--provider")] = "copernicus-aws",
+    cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path("cache/providers"),
+    timeout_seconds: Annotated[float, typer.Option("--timeout-seconds", min=0.1)] = 30.0,
+    max_attempts: Annotated[int, typer.Option("--max-attempts", min=1, max=10)] = 4,
+    min_request_interval_seconds: Annotated[
+        float, typer.Option("--min-request-interval-seconds", min=0.0)
+    ] = 0.2,
+) -> None:
+    """Fetch, cache, verify, and AOI-crop a no-key global DEM."""
+    try:
+        if provider != "copernicus-aws":
+            raise ValueError("--provider currently supports copernicus-aws")
+        request = AreaOfInterestInput(
+            bbox_wgs84=bbox,
+            center_wgs84=center,
+            radius_m=radius_m,
+        )
+        from topoforge.raster import normalize_area_of_interest
+
+        normalized = normalize_area_of_interest(request)
+        cache_store = ContentAddressedCache(cache_dir)
+        client = CachingHttpClient(
+            cache_store,
+            HttpTransportConfig(
+                timeout_seconds=timeout_seconds,
+                max_attempts=max_attempts,
+                min_request_interval_seconds=min_request_interval_seconds,
+            ),
+        )
+        acquisition = CopernicusAwsProvider(client).acquire(normalized, output)
+        _emit(
+            {
+                "status": "completed",
+                "provider": acquisition.provider_id,
+                "dataset": acquisition.dataset.model_dump(mode="json"),
+                "aoi": acquisition.aoi,
+                "plan": acquisition.plan.model_dump(mode="json"),
+                "raster": str(acquisition.raster_path),
+                "source_acquisition": str(acquisition.acquisition_manifest_path),
+                "cache": cache_store.summary().model_dump(mode="json"),
+            }
+        )
+    except (TopoForgeError, ValueError, OSError) as exc:
+        _fail(exc)
+
+
+@app.command("build-global")
+def build_global(
+    output: Annotated[
+        Path, typer.Option("--output", "-o", help="New complete terrain bundle directory.")
+    ],
+    bbox: Annotated[
+        tuple[float, float, float, float] | None,
+        typer.Option("--bbox", metavar="WEST SOUTH EAST NORTH", help="WGS84 AOI bbox."),
+    ] = None,
+    center: Annotated[
+        tuple[float, float] | None,
+        typer.Option("--center", metavar="LON LAT", help="WGS84 AOI center."),
+    ] = None,
+    radius_m: Annotated[
+        float | None, typer.Option("--radius-m", min=0.001, help="Geodesic AOI radius.")
+    ] = None,
+    source_dir: Annotated[
+        Path | None,
+        typer.Option("--source-dir", help="New directory for acquired source evidence."),
+    ] = None,
+    cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path("cache/providers"),
+    size_mm: Annotated[tuple[float, float], typer.Option("--size-mm", metavar="WIDTH DEPTH")] = (
+        180.0,
+        0.0,
+    ),
+    base_mm: Annotated[float, typer.Option("--base-mm", min=0.01)] = 3.0,
+    max_height_mm: Annotated[float, typer.Option("--max-height-mm", min=0.01)] = 45.0,
+    printer_profile: Annotated[str, typer.Option("--printer-profile")] = (
+        DEFAULT_PRINTER_PROFILE_ID
+    ),
+    sampling_mode: Annotated[SamplingMode, typer.Option("--sampling-mode")] = (
+        SamplingMode.PRINT_AWARE
+    ),
+    mesh_sampling_mm: Annotated[float | None, typer.Option("--mesh-sampling-mm", min=0.001)] = None,
+    max_grid_cells: Annotated[int, typer.Option("--max-grid-cells", min=16)] = 1_500_000,
+    max_estimated_memory_mb: Annotated[
+        float, typer.Option("--max-estimated-memory-mb", min=1.0)
+    ] = 1024.0,
+    timeout_seconds: Annotated[float, typer.Option("--timeout-seconds", min=0.1)] = 30.0,
+    max_attempts: Annotated[int, typer.Option("--max-attempts", min=1, max=10)] = 4,
+    min_request_interval_seconds: Annotated[
+        float, typer.Option("--min-request-interval-seconds", min=0.0)
+    ] = 0.2,
+) -> None:
+    """Acquire a no-key global DSM and run the existing validated build pipeline."""
+    try:
+        if output.exists():
+            raise ValueError(f"output already exists; preserve it and choose a new path: {output}")
+        request = AreaOfInterestInput(
+            bbox_wgs84=bbox,
+            center_wgs84=center,
+            radius_m=radius_m,
+        )
+        from topoforge.raster import normalize_area_of_interest
+
+        normalized = normalize_area_of_interest(request)
+        source_root = (
+            source_dir if source_dir is not None else output.parent / f"{output.name}-source"
+        ).resolve()
+        if source_root.exists():
+            raise ValueError(
+                f"source evidence directory already exists; choose a new path: {source_root}"
+            )
+        source_raster = source_root / "copernicus-aws-aoi.tif"
+        cache_store = ContentAddressedCache(cache_dir)
+        client = CachingHttpClient(
+            cache_store,
+            HttpTransportConfig(
+                timeout_seconds=timeout_seconds,
+                max_attempts=max_attempts,
+                min_request_interval_seconds=min_request_interval_seconds,
+            ),
+        )
+        acquisition = CopernicusAwsProvider(client).acquire(normalized, source_raster)
+        dataset = acquisition.dataset
+        resolved = BuildConfig(
+            dem_path=acquisition.raster_path,
+            output_dir=output,
+            model_width_mm=size_mm[0],
+            model_depth_mm=size_mm[1] if size_mm[1] > 0 else None,
+            base_thickness_mm=base_mm,
+            max_height_mm=max_height_mm,
+            printer_profile=get_printer_profile(printer_profile),
+            sampling_mode=sampling_mode,
+            mesh_sampling_mm=mesh_sampling_mm,
+            max_grid_cells=max_grid_cells,
+            max_estimated_memory_mb=max_estimated_memory_mb,
+            aoi=request,
+            dataset_type=dataset.dataset_type,
+            dataset_name=dataset.dataset_name,
+            dataset_version=dataset.dataset_version,
+            acquisition_period=dataset.acquisition_period,
+            source_urls=dataset.source_urls,
+            vertical_crs=dataset.vertical_crs,
+            vertical_datum=dataset.vertical_datum,
+            data_license=dataset.license,
+            attribution=dataset.attribution,
+            source_provider=dataset.provider,
+            source_download_time=dataset.download_time,
+            source_checksums=dataset.checksums,
+            source_acquisition_manifest=acquisition.acquisition_manifest_path,
+        )
+        result = build_local_terrain(resolved)
+        _emit(
+            {
+                "status": "completed",
+                "provider": dataset.provider,
+                "dataset": dataset.model_dump(mode="json"),
+                "source_raster": str(acquisition.raster_path),
+                "source_acquisition": str(acquisition.acquisition_manifest_path),
+                "output_dir": str(result.output_dir),
+                "required_checks_passed": result.validation["required_checks_passed"],
+                "dimensions_mm": result.validation["dimensions_mm"],
+                "artifacts": {key: str(path) for key, path in result.artifacts.items()},
+                "cache": cache_store.summary().model_dump(mode="json"),
+            }
+        )
+    except (TopoForgeError, ValueError, OSError) as exc:
+        _fail(exc)
+
+
 @app.command()
 def doctor() -> None:
     """Report the exact local runtime and external manufacturing tools."""
     slicers = {
         name: shutil.which(name)
-        for name in ("OrcaSlicer", "orca-slicer", "prusa-slicer", "PrusaSlicer")
+        for name in (
+            "BambuStudio",
+            "bambu-studio",
+            "OrcaSlicer",
+            "orca-slicer",
+            "prusa-slicer",
+            "PrusaSlicer",
+        )
         if shutil.which(name)
     }
     _emit(
@@ -288,40 +555,76 @@ def doctor() -> None:
 
 @app.command()
 def cache(
-    action: Annotated[str, typer.Argument(help="Currently supported action: status")] = "status",
+    action: Annotated[str, typer.Argument(help="Supported action: status")] = "status",
+    cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path("cache/providers"),
 ) -> None:
-    """Inspect the local provider cache state."""
+    """Inspect the content-addressed provider cache state."""
     if action != "status":
-        _fail(ValueError("Only 'topoforge cache status' is implemented in Phase 1"))
-    cache_dir = Path("cache").resolve()
-    size = (
-        sum(path.stat().st_size for path in cache_dir.rglob("*") if path.is_file())
-        if cache_dir.exists()
-        else 0
-    )
-    _emit({"path": str(cache_dir), "exists": cache_dir.exists(), "bytes": size})
+        _fail(ValueError("cache action must be status"))
+    _emit(ContentAddressedCache(cache_dir).summary().model_dump(mode="json"))
 
 
 @app.command()
 def slice(
     model: Annotated[Path, typer.Argument(help="STL or 3MF model.")],
     output: Annotated[Path, typer.Option("--output", "-o")] = Path("outputs/sliced/model.gcode"),
-    profile: Annotated[Path | None, typer.Option("--profile")] = None,
+    profile: Annotated[
+        Path | None,
+        typer.Option("--profile", help="Legacy process/machine settings file."),
+    ] = None,
+    machine_profile: Annotated[
+        Path | None, typer.Option("--machine-profile", help="Resolved machine preset JSON.")
+    ] = None,
+    process_profile: Annotated[
+        Path | None, typer.Option("--process-profile", help="Resolved process preset JSON.")
+    ] = None,
+    filament_profile: Annotated[
+        Path | None, typer.Option("--filament-profile", help="Resolved filament preset JSON.")
+    ] = None,
+    slicer: Annotated[
+        str,
+        typer.Option(
+            "--slicer",
+            help="bambu-studio (release gate), orca, prusa, or auto (diagnostic fallback).",
+        ),
+    ] = "bambu-studio",
 ) -> None:
     """Invoke the installed headless slicer adapter and emit measured results."""
     try:
         from topoforge.validation.slicers import (
+            BambuStudioAdapter,
+            OrcaSlicerAdapter,
+            PrusaSlicerAdapter,
             SlicerProfile,
             SliceStatus,
             select_slicer,
         )
 
-        slicer_profile = (
-            SlicerProfile(name=profile.stem, settings=(profile,))
-            if profile is not None
-            else SlicerProfile()
+        settings = tuple(
+            path for path in (machine_profile, process_profile, profile) if path is not None
         )
-        result = select_slicer().slice(model, output, profile=slicer_profile)
+        filaments = () if filament_profile is None else (filament_profile,)
+        slicer_profile = SlicerProfile(
+            name=(
+                "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic"
+                if slicer == "bambu-studio"
+                else None
+            ),
+            settings=settings,
+            filaments=filaments,
+        )
+        adapters = {
+            "bambu-studio": BambuStudioAdapter,
+            "orca": OrcaSlicerAdapter,
+            "prusa": PrusaSlicerAdapter,
+        }
+        if slicer == "auto":
+            adapter = select_slicer()
+        elif slicer in adapters:
+            adapter = adapters[slicer]()
+        else:
+            raise ValueError("--slicer must be bambu-studio, orca, prusa, or auto")
+        result = adapter.slice(model, output, profile=slicer_profile)
         serialized_result = result.model_dump(mode="json")
         if result.status is SliceStatus.SUCCEEDED and (model.parent / "validation.json").is_file():
             report_path = record_slice_validation(model.parent, serialized_result)

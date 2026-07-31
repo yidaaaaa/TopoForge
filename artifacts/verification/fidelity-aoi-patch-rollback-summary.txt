@@ -1,0 +1,13 @@
+patch=/root/autodl-tmp/bambu/TopoForge/artifacts/patches/fidelity-aoi.patch
+patch_sha256=4430bb10fb01355f25d993b035ede37553fcb74918e26161d812763c8479c22a
+patch_bytes=129251
+forward_check_command=git apply --check /root/autodl-tmp/bambu/TopoForge/artifacts/patches/fidelity-aoi.patch
+forward_check_exit=0
+forward_apply_command=git apply --whitespace=error-all /root/autodl-tmp/bambu/TopoForge/artifacts/patches/fidelity-aoi.patch
+forward_apply_exit=0
+forward_regular_file_manifest_match=true
+rollback_command=bash /tmp/topoforge-fidelity-patch-replay-final/scripts/rollback-fidelity-aoi.sh --confirm-rollback --patch /root/autodl-tmp/bambu/TopoForge/artifacts/patches/fidelity-aoi.patch
+fidelity/AOI source patch reversed
+rollback_exit=0
+rollback_regular_file_manifest_match=true
+note=Compared regular-file path, Git executable bit, and SHA-256; Git patches do not represent empty directory shells or owner/group permission bits.

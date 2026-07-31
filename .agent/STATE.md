@@ -1,12 +1,14 @@
 # Current State
 
-- **Current milestone:** Milestone 02 — AOI normalization/local clipping followed by the no-key global provider.
-- **Current branch/worktree:** `main`, `/root/autodl-tmp/bambu/TopoForge`.
-- **Last completed task:** Committed Milestone 01, replayed its binary-safe patch from the empty baseline with tests/build/slice, and executed rollback to a clean baseline in a second worktree.
-- **Current implementation status:** Full-raster local GeoTIFF/synthetic builds emit and reopen STL, 3MF, GLB, processed DEM, original NoData mask, provenance, validation JSON/HTML, resolved YAML, checksum-verified manifest, and PNG. Explicit local AOI cropping, network provider fetching, and geocoding remain next.
-- **Known failing tests:** None. Latest full suite: 71 passed.
-- **Current blockers:** No blocking external dependency. OrcaSlicer 2.4.2 targets a newer system runtime; verified OrcaSlicer 2.3.0 and PrusaSlicer 2.4.0 paths are available.
-- **Known warnings:** 33 upstream Rasterio/NumPy masked-array deprecation warnings under NumPy 2.5.1; behavior tests pass.
-- **Next exact action:** Implement normalized bbox/center AOIs and explicit local raster clipping before connecting the configurable Copernicus AWS GLO-30/GLO-90 provider.
-- **Next exact command:** `uv run topoforge providers && uv run pytest tests/providers tests/integration -q`
-- **Important paths:** `src/topoforge/engine/build.py`, `src/topoforge/raster/processing.py`, `src/topoforge/scaling/policy.py`, `src/topoforge/exporters/three_mf.py`, `src/topoforge/validation/slicers/`, `docs/data-sources.md`, `outputs/milestone-01-synthetic/`, `artifacts/reports/milestone-01.md`.
+- **Current milestone:** Milestone 02 — normalized local/global AOI, no-key Copernicus AWS provider/cache, and official ancillary quality-mask preservation are complete; explainable provider selection/fallback and candidate geocoding are next.
+- **Current version/branch/worktree:** TopoForge `0.2.0`, branch `main`, `/root/autodl-tmp/bambu/TopoForge`; the milestone release commit is the next Git action.
+- **Last completed task:** Discovered EDM/FLM/HEM/WBM from exact per-tile S3 prefix listings, cached every exposed source by SHA-256, required exact source-grid alignment with its DEM, applied nearest-neighbour reprojection plus the identical DEM crop, copied complete roles into build bundles, and verified a real Amazon rebuild/slice.
+- **Provider implementation:** `copernicus-aws` is `implemented: true`. Complete GLO-30 is preferred; complete GLO-90 is a whole-AOI fallback only. Dataset ids are not blended. Catalog, DEM, tile-prefix inventory, and ancillary-mask URL/ETag/Last-Modified/bytes/SHA-256/attempt/cache evidence are retained. Raw mask values never alter elevation samples.
+- **Real provider result:** `/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-quality-v2`; source/processed 74 x 74 at 29.7638 m, model 80 x 80.6587 x 9.7146 mm, 21,900 triangles, watertight/manifold/winding/positive-volume/flat-bottom/orientation true, strict 3MF warnings 0. EDM/FLM/HEM/WBM align exactly and are independent checksummed bundle roles. PrusaSlicer exit 0, 32 layers, support false, no floating/empty/out-of-bed warning.
+- **Terrain invariance:** Final processed DEM, original NoData mask, STL, 3MF, GLB, and PNG are byte-identical to `/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-v2`; the change records source quality without changing terrain.
+- **Cache state:** `/root/autodl-tmp/bambu/TopoForge/cache/providers`; 9 verified request entries/9 content objects, 152,952,754 bytes, 0 temporary files. The final build acquisition recorded catalog, DEM, tile-prefix listing, and all four masks as cache hits.
+- **Existing mountain reference:** `/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-fidelity-v2` remains unchanged; its source DEM was not downloaded again.
+- **Known failing tests:** None. Final gate: Ruff passed, format 99 files, Pyright 0 errors/0 warnings, Pytest 118 passed with 45 tracked warnings, `git diff --check` passed. Log: `artifacts/logs/topoforge-0.2.0-quality-gates.log`.
+- **Known warnings:** Rasterio/NumPy masked-array deprecation remains TF-006. Exhaustive self-intersection remains TF-005. PrusaSlicer results are diagnostic rather than the official P2S release role.
+- **Next exact action:** Implement explainable provider selection/fallback attempts, then Nominatim-compatible candidate geocoding.
+- **Important paths:** `src/topoforge/providers/{cache,transport,copernicus_aws}.py`, `outputs/amazon-copernicus-aws-quality-v2`, `artifacts/verification/amazon-copernicus-aws-quality-v2-verification.json`, `downloads/amazon-copernicus-aws-quality-v1-build-source/copernicus-aws-aoi.tif.source_acquisition.json`.

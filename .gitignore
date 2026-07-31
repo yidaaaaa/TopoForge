@@ -25,3 +25,4 @@ artifacts/logs/*
 !artifacts/logs/.gitkeep
 !tests/**/fixtures/*.tif
 !examples/synthetic/*.tif
+/result.json

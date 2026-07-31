@@ -1,0 +1,457 @@
+{
+  "aoi": {
+    "area_m2": 4916525.719334841,
+    "bounds_wgs84": [
+      -60.02,
+      -3.13,
+      -60.0,
+      -3.11
+    ],
+    "crosses_antimeridian": false,
+    "kind": "bbox",
+    "normalization_method": "validated WGS84 bbox; antimeridian split when west > east",
+    "normalized_geometry_geojson": {
+      "coordinates": [
+        [
+          [
+            -60.0,
+            -3.13
+          ],
+          [
+            -60.0,
+            -3.11
+          ],
+          [
+            -60.02,
+            -3.11
+          ],
+          [
+            -60.02,
+            -3.13
+          ],
+          [
+            -60.0,
+            -3.13
+          ]
+        ]
+      ],
+      "type": "Polygon"
+    },
+    "target_local_crs": "+proj=aeqd +lat_0=-3.1200000000 +lon_0=-60.0100000000 +datum=WGS84 +units=m +no_defs +type=crs",
+    "user_input": {
+      "bbox_wgs84": [
+        -60.02,
+        -3.13,
+        -60.0,
+        -3.11
+      ]
+    }
+  },
+  "build": {
+    "command": "uv run topoforge build-global --bbox -60.02 -3.13 -60.00 -3.11 --output outputs/amazon-copernicus-aws-v2 --source-dir downloads/amazon-copernicus-aws-v2 --cache-dir cache/providers --size-mm 80 0 --max-height-mm 30 --max-grid-cells 250000 --max-estimated-memory-mb 256 --timeout-seconds 30 --max-attempts 4 --min-request-interval-seconds 0.25",
+    "dimensions_mm": [
+      80.0,
+      80.65869140625,
+      9.714625358581543
+    ],
+    "exit_code": 0,
+    "geometry": {
+      "connected_components": 1,
+      "degenerate_faces": 0,
+      "duplicate_faces": 0,
+      "flat_bottom": true,
+      "manifold": true,
+      "positive_volume": true,
+      "watertight": true,
+      "winding_consistent": true
+    },
+    "manifest": {
+      "artifacts": {
+        "bambu_studio_validation": "bambu_studio_validation.json",
+        "manifest": "build_manifest.json",
+        "model_3mf": "model.3mf",
+        "model_stl": "model.stl",
+        "original_nodata_mask": "original_nodata_mask.tif",
+        "preview_glb": "preview.glb",
+        "preview_png": "preview.png",
+        "processed_dem": "processed_dem.tif",
+        "provenance": "provenance.json",
+        "resolved_config": "build_config.resolved.yaml",
+        "slicer_validation": "slicer_validation.json",
+        "source_acquisition": "source_acquisition.json",
+        "validation_html": "validation.html",
+        "validation_json": "validation.json"
+      },
+      "generated_at": "2026-07-31T02:43:50.833427+00:00",
+      "resolved_config_sha256": "1e4f3779da3fce5197ba8b6a30adb67ae0d553f19c1011a49bbe70e20a7a6bbf",
+      "sha256": {
+        "bambu_studio_validation": "227add34bd3ad768a720c6d6792b8898cfbeddc75581c5405cf79802192f7ecf",
+        "model_3mf": "67a09bfd158769ec921fdf38fd62dce9d63999501a1f1701d17ffe10e134be11",
+        "model_stl": "e76ccd7f39b31db23512b595ff36cc31d48e008bea626548566e22da59062f9a",
+        "original_nodata_mask": "5ece74e9e42295cab147c16aa1b7c5f485e410084303a053f48ad42e33e2a4b9",
+        "preview_glb": "32f159e88b3f8e3a3f25e8a6078347edc1306882099d99fa1d02c39b1e893597",
+        "preview_png": "2ce33d9a4d759f40ee078ac6976f347d8431cc583596197c80ed8d8159335f91",
+        "processed_dem": "7e32a4bf3f9646d14f858205ca86f5f2091fe3a0b7bc088053b46d95c571553e",
+        "provenance": "2f8c214b8df614eea91f06d9352ee488c07ae039046ccb3500a8a72b26429bfb",
+        "resolved_config": "1e4f3779da3fce5197ba8b6a30adb67ae0d553f19c1011a49bbe70e20a7a6bbf",
+        "slicer_validation": "ea6d47823634d58f0bff6db180acc4d2828aa16d89cc3a390a023ae6d373ec2b",
+        "source_acquisition": "ec349fde9f913fa3f3306e773a312121993b81a76ebf9a868bd19988daaf2584",
+        "validation_html": "cd4f5c787f293dc288b23209317cf092430a642c8143ed0e151f4a7417dfac37",
+        "validation_json": "8c3a43a1971b698348c5ead8fc0464ee21b2fc563e1d14152f971c02383b67b5"
+      },
+      "source_sha256": "33732b7df5699bd8a2237484dc34cee1ab6a516095e03b06167ca9ac98d39d95",
+      "topoforge_version": "0.1.0"
+    },
+    "output_dir": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-v2",
+    "peak_elevation_loss_m": 0.0,
+    "peak_horizontal_shift_m": 0.0,
+    "processed_grid_shape": [
+      74,
+      74
+    ],
+    "processed_horizontal_resolution_m": 29.763799211548566,
+    "required_checks_passed": true,
+    "source_grid_shape": [
+      74,
+      74
+    ],
+    "source_horizontal_resolution_m": 29.763799211548566,
+    "terrain_fidelity_status": "source-resolution-preserved",
+    "triangle_count": 21900,
+    "volume_mm3": 37389.53330103921
+  },
+  "cache": {
+    "content_bytes": 45857948,
+    "content_objects": 2,
+    "exists": true,
+    "request_entries": 2,
+    "root": "/root/autodl-tmp/bambu/TopoForge/cache/providers",
+    "temporary_files": 0
+  },
+  "checksum_manifest": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-copernicus-aws-v2/checksums.sha256",
+  "dataset": {
+    "acquisition_period": "TanDEM-X primarily 2011-2015; Copernicus DEM 2021 release",
+    "attribution": "© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved.",
+    "checksums": {
+      "Copernicus_DSM_COG_10_S04_00_W061_00_DEM": "178ae62c3835b603631b5a6259f827d9cbfa2a4bfa4adcdae0adf7c4ee1516d7"
+    },
+    "dataset_name": "Copernicus DEM GLO-30 AWS 2021",
+    "dataset_type": "dsm",
+    "dataset_version": "AWS mirror 2021",
+    "download_time": "2026-07-31T02:43:46.230451+00:00",
+    "horizontal_crs": "PROJCS[\"unknown\",GEOGCS[\"unknown\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Azimuthal_Equidistant\"],PARAMETER[\"latitude_of_center\",-3.12],PARAMETER[\"longitude_of_center\",-60.01],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
+    "horizontal_resolution_m": 29.763799211548566,
+    "license": "Copernicus-DEM-GLO-30-F",
+    "provider": "copernicus-aws",
+    "source_urls": [
+      "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_S04_00_W061_00_DEM/Copernicus_DSM_COG_10_S04_00_W061_00_DEM.tif"
+    ],
+    "vertical_crs": "EPSG:3855",
+    "vertical_datum": "EGM2008"
+  },
+  "patch_and_rollback": {
+    "forward_apply_exit_code": 0,
+    "forward_check_exit_code": 0,
+    "forward_regular_file_manifest_match": true,
+    "patch": "/root/autodl-tmp/bambu/TopoForge/artifacts/patches/provider-cache-copernicus.patch",
+    "patch_bytes": 114797,
+    "patch_sha256": "e65ac5e7feb8a946ae024c462306c226bab2ae63c1bf58c5daaff86e20859769",
+    "rollback_exit_code": 0,
+    "rollback_regular_file_manifest_match": true,
+    "rollback_script": "/root/autodl-tmp/bambu/TopoForge/scripts/rollback-provider-cache-copernicus.sh",
+    "rollback_script_sha256": "e5670bed751435143ea12705e9d07a2981d99aa4734a4b326f24b48e1fc9499c",
+    "verification_record": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/provider-cache-copernicus-patch-rollback.txt",
+    "verification_record_sha256": "8fccaa58d08066a458e1f185c6d85b7a7f492f597cab360e9bf0c6ea3553f773"
+  },
+  "provider": "copernicus-aws",
+  "quality_gates": {
+    "all_passed": true,
+    "commands": [
+      {
+        "command": "uv run ruff check .",
+        "exit_code": 0,
+        "literal_result": "All checks passed!"
+      },
+      {
+        "command": "uv run ruff format --check .",
+        "exit_code": 0,
+        "literal_result": "98 files already formatted"
+      },
+      {
+        "command": "uv run pyright",
+        "exit_code": 0,
+        "literal_result": "0 errors, 0 warnings, 0 informations"
+      },
+      {
+        "command": "uv run pytest",
+        "exit_code": 0,
+        "literal_result": "113 passed, 45 warnings in 7.35s"
+      },
+      {
+        "command": "uv run topoforge preview outputs/amazon-copernicus-aws-v2",
+        "exit_code": 0,
+        "literal_result": "required_checks_passed=true; raster_shape=[74,74]; manifest_artifact_count=14"
+      },
+      {
+        "command": "uv run topoforge inspect outputs/amazon-copernicus-aws-v2/model.3mf",
+        "exit_code": 0,
+        "literal_result": "lib3mf=2.5.0; strict_warning_count=0; triangle_count=21900"
+      }
+    ],
+    "log": "/root/autodl-tmp/bambu/TopoForge/artifacts/logs/provider-cache-copernicus-quality-gates.log",
+    "log_sha256": "e17222c0213bde947810a2d12e9593f4c9d9b9df9173788d8f872f0688d525e7"
+  },
+  "slice": {
+    "command": "uv run topoforge slice outputs/amazon-copernicus-aws-v2/model.3mf --slicer prusa --output artifacts/slicer/amazon-copernicus-aws-v2-prusa.gcode",
+    "exit_code": 0,
+    "gcode_path": "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/amazon-copernicus-aws-v2-prusa.gcode",
+    "gcode_sha256": "7cd7c9a24290ff0f6604e70e8741b3af50bb62f71fac34741a024e053e9f4349",
+    "gcode_size_bytes": 2085508,
+    "metrics": {
+      "empty_layer_warning": false,
+      "estimated_time_seconds": 7852,
+      "estimated_time_text": "2h 10m 52s",
+      "filament_used_cm3": 21.85,
+      "filament_used_g": 0.0,
+      "filament_used_mm": 9085.44,
+      "floating_region_warning": false,
+      "layer_count": 32,
+      "out_of_bed": false,
+      "settings": {
+        "bed_temperature_c": null,
+        "bed_type": null,
+        "bottom_shell_layers": null,
+        "brim_type": "outer_only",
+        "brim_width_mm": 0.0,
+        "filament_density_g_cm3": null,
+        "filament_diameter_mm": 1.75,
+        "filament_flow_ratio": null,
+        "filament_max_volumetric_speed_mm3_s": null,
+        "filament_settings_ids": [],
+        "filament_type": "PLA",
+        "filament_vendor": null,
+        "initial_layer_height_mm": null,
+        "layer_height_mm": 0.3,
+        "nozzle_diameter_mm": 0.4,
+        "nozzle_temperature_c": null,
+        "printable_depth_mm": null,
+        "printable_height_mm": null,
+        "printable_width_mm": null,
+        "printer_model": "; printer_notes =",
+        "printer_settings_id": "; printer_technology = FFF",
+        "printer_variant": null,
+        "process_settings_id": "; printer_model =",
+        "sparse_infill_density_percent": null,
+        "sparse_infill_pattern": null,
+        "support_enabled": null,
+        "support_type": null,
+        "top_shell_layers": null,
+        "wall_loops": null
+      },
+      "support_material": false,
+      "warnings": []
+    },
+    "status": "succeeded"
+  },
+  "source_acquisition": {
+    "acquisition_manifest_path": "/root/autodl-tmp/bambu/TopoForge/downloads/amazon-copernicus-aws-v2/copernicus-aws-aoi.tif.source_acquisition.json",
+    "aoi": {
+      "area_m2": 4916525.719334841,
+      "bounds_wgs84": [
+        -60.02,
+        -3.13,
+        -60.0,
+        -3.11
+      ],
+      "crosses_antimeridian": false,
+      "kind": "bbox",
+      "normalization_method": "validated WGS84 bbox; antimeridian split when west > east",
+      "normalized_geometry_geojson": {
+        "coordinates": [
+          [
+            [
+              -60.0,
+              -3.13
+            ],
+            [
+              -60.0,
+              -3.11
+            ],
+            [
+              -60.02,
+              -3.11
+            ],
+            [
+              -60.02,
+              -3.13
+            ],
+            [
+              -60.0,
+              -3.13
+            ]
+          ]
+        ],
+        "type": "Polygon"
+      },
+      "target_local_crs": "+proj=aeqd +lat_0=-3.1200000000 +lon_0=-60.0100000000 +datum=WGS84 +units=m +no_defs +type=crs",
+      "user_input": {
+        "bbox_wgs84": [
+          -60.02,
+          -3.13,
+          -60.0,
+          -3.11
+        ]
+      }
+    },
+    "catalog_downloads": [
+      {
+        "attempts": [],
+        "bytes": 1110900,
+        "cache_lookup_reason": "request index and content SHA-256 verified",
+        "cache_status": "hit",
+        "etag": "\"637fe75ddf7615ba853dd83caf05cd82\"",
+        "fetched_at": "2026-07-31T02:36:02.496919+00:00",
+        "last_modified": "Mon, 09 May 2022 18:23:01 GMT",
+        "media_type": "text/plain",
+        "request_key": "c3e950848692918b435c4b8750a94e5ba271be7ed2e63d4826a2d15c9c3b949c",
+        "sha256": "10604e3052c98a09e9216f1a8f0a555a04148419757575f783d4937fd44316dc",
+        "url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/tileList.txt"
+      }
+    ],
+    "coverage_crop": {
+      "discarded_reprojection_gap_cells": 74,
+      "method": "largest all-source-footprint rectangle; source NoData remains masked and is not filled by provider acquisition",
+      "original_grid_shape": [
+        74,
+        75
+      ],
+      "pixel_window": {
+        "column_start": 0,
+        "column_stop": 74,
+        "row_start": 0,
+        "row_stop": 74
+      },
+      "selected_grid_shape": [
+        74,
+        74
+      ]
+    },
+    "dataset": {
+      "acquisition_period": "TanDEM-X primarily 2011-2015; Copernicus DEM 2021 release",
+      "attribution": "© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved.",
+      "checksums": {
+        "Copernicus_DSM_COG_10_S04_00_W061_00_DEM": "178ae62c3835b603631b5a6259f827d9cbfa2a4bfa4adcdae0adf7c4ee1516d7"
+      },
+      "dataset_name": "Copernicus DEM GLO-30 AWS 2021",
+      "dataset_type": "dsm",
+      "dataset_version": "AWS mirror 2021",
+      "download_time": "2026-07-31T02:43:46.230451+00:00",
+      "horizontal_crs": "EPSG:4326 source COGs; normalized AOI raster uses its recorded metric CRS",
+      "horizontal_resolution_m": 30.0,
+      "license": "Copernicus-DEM-GLO-30-F",
+      "provider": "copernicus-aws",
+      "source_urls": [
+        "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_S04_00_W061_00_DEM/Copernicus_DSM_COG_10_S04_00_W061_00_DEM.tif"
+      ],
+      "vertical_crs": "EPSG:3855",
+      "vertical_datum": "EGM2008"
+    },
+    "generated_at": "2026-07-31T02:43:46.230451+00:00",
+    "liability_notice": "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30.",
+    "license_url": "https://dataspace.copernicus.eu/sites/default/files/media/files/2025-06/copernicus_contributing_mission_data_access_v2_cop_dem_licenses.pdf",
+    "output_raster_sha256": "33732b7df5699bd8a2237484dc34cee1ab6a516095e03b06167ca9ac98d39d95",
+    "output_source_nodata_pixels": 0,
+    "plan": {
+      "dataset_id": "copernicus-dem-glo-30-aws-2021",
+      "decisions": [
+        "normalized AOI requires 1 one-degree source cell(s)",
+        "glo-30 authoritative tileList.txt covers every required cell",
+        "selected one dataset id copernicus-dem-glo-30-aws-2021; GLO-30/GLO-90 are not blended"
+      ],
+      "horizontal_resolution_m": 30.0,
+      "missing_glo30_tiles": [],
+      "product": "glo-30",
+      "tiles": [
+        {
+          "latitude_degree": -4,
+          "longitude_degree": -61,
+          "product": "glo-30",
+          "tile_id": "Copernicus_DSM_COG_10_S04_00_W061_00_DEM",
+          "url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_S04_00_W061_00_DEM/Copernicus_DSM_COG_10_S04_00_W061_00_DEM.tif"
+        }
+      ]
+    },
+    "provider_id": "copernicus-aws",
+    "raster_path": "/root/autodl-tmp/bambu/TopoForge/downloads/amazon-copernicus-aws-v2/copernicus-aws-aoi.tif",
+    "tile_downloads": [
+      {
+        "attempts": [],
+        "bytes": 44747048,
+        "cache_lookup_reason": "request index and content SHA-256 verified",
+        "cache_status": "hit",
+        "etag": "\"05c761e54ee6091ecceceb597b52ac0d\"",
+        "fetched_at": "2026-07-31T02:37:38.677910+00:00",
+        "last_modified": "Mon, 09 May 2022 14:53:53 GMT",
+        "media_type": "image/tiff",
+        "request_key": "ecc0567e258392af6ffd4f4da5b4238af88b7911b20dbf4f2ee24fdf73eeca33",
+        "sha256": "178ae62c3835b603631b5a6259f827d9cbfa2a4bfa4adcdae0adf7c4ee1516d7",
+        "url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_S04_00_W061_00_DEM/Copernicus_DSM_COG_10_S04_00_W061_00_DEM.tif"
+      }
+    ]
+  },
+  "strict_3mf": {
+    "build_item_count": 1,
+    "dimensions_mm": [
+      80.0,
+      80.658688,
+      9.714625
+    ],
+    "lib3mf_version": [
+      2,
+      5,
+      0
+    ],
+    "metadata": {
+      "Application": "TopoForge",
+      "Title": "TopoForge terrain",
+      "customXMLNS0:dataset_name": "Copernicus DEM GLO-30 AWS 2021",
+      "customXMLNS0:dataset_type": "dsm",
+      "customXMLNS0:east_axis": "+X = East",
+      "customXMLNS0:horizontal_crs": "PROJCS[\"unknown\",GEOGCS[\"unknown\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Azimuthal_Equidistant\"],PARAMETER[\"latitude_of_center\",-3.12],PARAMETER[\"longitude_of_center\",-60.01],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
+      "customXMLNS0:north_axis": "+Y = North",
+      "customXMLNS0:north_edge": "y=model_depth_mm",
+      "customXMLNS0:orientation_transform": "mesh_heightfield=flipud(processed_dem); source row 0 north maps to y=model_depth_mm",
+      "customXMLNS0:source_bounds": "{\"full_grid_shape\":[74,74],\"native\":[-1111.5663698538108,-1105.7810415954134,1081.9245999898142,1105.7702718701496],\"native_crs\":\"PROJCS[\\\"unknown\\\",GEOGCS[\\\"unknown\\\",DATUM[\\\"WGS_1984\\\",SPHEROID[\\\"WGS 84\\\",6378137,298.257223563,AUTHORITY[\\\"EPSG\\\",\\\"7030\\\"]],AUTHORITY[\\\"EPSG\\\",\\\"6326\\\"]],PRIMEM[\\\"Greenwich\\\",0],UNIT[\\\"degree\\\",0.0174532925199433,AUTHORITY[\\\"EPSG\\\",\\\"9122\\\"]]],PROJECTION[\\\"Azimuthal_Equidistant\\\"],PARAMETER[\\\"latitude_of_center\\\",-3.12],PARAMETER[\\\"longitude_of_center\\\",-60.01],PARAMETER[\\\"false_easting\\\",0],PARAMETER[\\\"false_northing\\\",0],UNIT[\\\"metre\\\",1,AUTHORITY[\\\"EPSG\\\",\\\"9001\\\"]],AXIS[\\\"Easting\\\",EAST],AXIS[\\\"Northing\\\",NORTH]]\",\"wgs84\":[-60.02000018900119,-3.130000047787117,-60.0002664827055,-3.109999999999998]}",
+      "customXMLNS0:vertical_datum": "EGM2008",
+      "customXMLNS0:vertical_exaggeration": "2.92159673"
+    },
+    "object_count": 1,
+    "object_names": [
+      "TopoForge terrain"
+    ],
+    "peak_coordinate_mm": [
+      12.054794,
+      67.399728,
+      9.714625
+    ],
+    "peak_coordinates_mm": [
+      [
+        12.054794,
+        67.399728,
+        9.714625
+      ]
+    ],
+    "strict_warning_count": 0,
+    "triangle_count": 21900,
+    "unit": "millimeter",
+    "vertex_count": 10952
+  },
+  "v1_boundary_failure": {
+    "exit_code": 2,
+    "literal_error": "NoData includes an edge gap or hole of 74 pixels, above the safe local interpolation policy; crop or replace the source raster",
+    "log": "/root/autodl-tmp/bambu/TopoForge/artifacts/logs/amazon-copernicus-aws-v1-build.log",
+    "resolution": "independent source-footprint mask; largest all-covered rectangle; 74 x 75 -> 74 x 74; no provider fill",
+    "source_dir": "/root/autodl-tmp/bambu/TopoForge/downloads/amazon-copernicus-aws-v1"
+  },
+  "verified_at": "2026-07-31T02:51:59.675713+00:00"
+}

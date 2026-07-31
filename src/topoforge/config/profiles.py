@@ -2,18 +2,14 @@
 
 from topoforge.models import PrinterProfile
 
+DEFAULT_PRINTER_PROFILE_ID = "bambu-p2s-0.4"
+
 _PROFILES: dict[str, PrinterProfile] = {
-    "generic-fdm-0.4": PrinterProfile(),
-    "bambu-p2s-0.4": PrinterProfile(
-        profile_id="bambu-p2s-0.4",
-        build_volume_mm=(256.0, 256.0, 256.0),
-        nozzle_diameter_mm=0.4,
-        layer_height_mm=0.2,
-        minimum_feature_mm=0.5,
-        preferred_mesh_sampling_mm=0.5,
-        minimum_base_thickness_mm=2.0,
-        connector_tolerance_mm=0.2,
+    "generic-fdm-0.4": PrinterProfile(
+        profile_id="generic-fdm-0.4",
+        build_volume_mm=(220.0, 220.0, 250.0),
     ),
+    "bambu-p2s-0.4": PrinterProfile(),
     "bambu-p2s-0.2": PrinterProfile(
         profile_id="bambu-p2s-0.2",
         build_volume_mm=(256.0, 256.0, 256.0),

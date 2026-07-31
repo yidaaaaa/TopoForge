@@ -163,3 +163,71 @@ def test_explicit_cli_options_override_all_corresponding_yaml_fields(
     assert resolved.vertical_datum == "EGM2008"
     assert resolved.data_license == "CLI-LICENSE"
     assert resolved.attribution == "CLI attribution"
+
+
+def test_build_without_profile_uses_bambu_p2s_default(monkeypatch: Any) -> None:
+    captured = _capture_build(monkeypatch)
+
+    result = runner.invoke(cli_module.app, ["build", "--dem", "source.tif"])
+
+    assert result.exit_code == 0, result.output
+    assert captured.pop().printer_profile.profile_id == "bambu-p2s-0.4"
+
+
+def test_cli_custom_sampling_and_bbox_are_resolved(monkeypatch: Any) -> None:
+    captured = _capture_build(monkeypatch)
+
+    result = runner.invoke(
+        cli_module.app,
+        [
+            "build",
+            "--dem",
+            "source.tif",
+            "--sampling-mode",
+            "custom",
+            "--mesh-sampling-mm",
+            "0.75",
+            "--max-grid-cells",
+            "50000",
+            "--max-estimated-memory-mb",
+            "256",
+            "--bbox",
+            "170",
+            "-10",
+            "-170",
+            "10",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    resolved = captured.pop()
+    assert resolved.sampling_mode.value == "custom"
+    assert resolved.mesh_sampling_mm == 0.75
+    assert resolved.max_grid_cells == 50_000
+    assert resolved.max_estimated_memory_mb == 256.0
+    assert resolved.aoi is not None
+    assert resolved.aoi.bbox_wgs84 == (170.0, -10.0, -170.0, 10.0)
+
+
+def test_cli_center_radius_aoi_is_resolved(monkeypatch: Any) -> None:
+    captured = _capture_build(monkeypatch)
+
+    result = runner.invoke(
+        cli_module.app,
+        [
+            "build",
+            "--dem",
+            "source.tif",
+            "--center",
+            "101.8",
+            "29.6",
+            "--radius-m",
+            "10000",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    resolved = captured.pop()
+    assert resolved.aoi is not None
+    assert resolved.aoi.center_wgs84 == (101.8, 29.6)
+    assert resolved.aoi.radius_m == 10_000.0

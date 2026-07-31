@@ -9,19 +9,23 @@ TopoForge has one Python core used by CLI and future API/worker/Web adapters. Ge
 ```text
 BuildConfig (Pydantic)
   -> local raster open and metadata validation
-  -> north-up metric CRS selection/reprojection when required
+  -> bbox/center-radius WGS84 AOI normalization and explicit source-pixel clipping
+  -> north-up metric CRS selection/reprojection after clipping
   -> source-coverage crop for rotated reprojection corners
-  -> cell-budget average resampling
+  -> deterministic print-aware/source-preserving/custom sampling
+  -> cell/triangle/memory budget enforcement with average resampling
   -> conservative interior-hole NoData fill + preserved binary mask
   -> processed_dem.tif
   -> aspect-preserving horizontal scale
   -> natural / fit-height / auto-perceptual / custom vertical scale
+  -> row flip from raster-north row 0 to manufacturing +Y North
   -> explicit regular-grid top + perimeter walls + flat bottom
   -> in-memory geometry invariants
   -> STL + lib3mf 3MF + GLB
   -> reopened STL validation + strict lib3mf reread + OPC/XML hardening
   -> preview.png + provenance/validation/config/manifest
-  -> optional external slicer adapter and embedded slice evidence
+  -> official Bambu Studio P2S release gate + optional diagnostic slicers
+  -> separate interoperable model.3mf and embedded-settings model.bambu-p2s.3mf
 ```
 
 Builds use a sibling staging directory. Every required file is written and reopened before the stage is atomically renamed to the requested new output directory. A non-empty destination is preserved and rejected.
@@ -29,16 +33,16 @@ Builds use a sibling staging directory. Every required file is written and reope
 ## Package responsibilities
 
 - `models` and `config`: external validation, units, semantics, printer profiles, resolved YAML.
-- `raster`: analytic fixtures, local GeoTIFF ingestion, CRS normalization, resource guard, NoData policy.
+- `raster`: AOI normalization/clipping, analytic fixtures, local GeoTIFF ingestion, CRS normalization, printer-aware sampling/resource guards, and NoData policy.
 - `scaling`: physical horizontal scale, baseline, robust relief, vertical exaggeration.
 - `mesh`: deterministic topology; it does not repair an incomplete solid.
 - `exporters`: format-specific serialization only. lib3mf stable UUIDv5 values make 3MF deterministic.
-- `validation`: measured geometry plus independent OrcaSlicer/PrusaSlicer adapters.
+- `validation`: measured geometry, official Bambu Studio/P2S release checks, and optional OrcaSlicer/PrusaSlicer diagnostics.
 - `rendering`: hillshade/color derived only from measured elevation samples.
 - `provenance`: stable JSON and dependency-free HTML reports.
 - `engine`: atomic orchestration and bundle verification.
 - `cli`: Typer argument parsing and JSON presentation.
-- `providers`: explainable provider contracts and capability registry.
+- `providers`: normalized-AOI provider contracts, Copernicus AWS catalog/tile/ancillary-mask planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
 
 ## Geometry topology
 
@@ -48,8 +52,8 @@ For an `R x C` grid, TopoForge creates matching top and bottom vertex grids. Eac
 
 Manufacturing claims come from the reopened STL, not only the source NumPy arrays. Checks include finite vertices/normals, watertightness, winding, edge manifoldness, positive volume, one component, degenerates, duplicates, dimensions, flat bottom, base thickness, and triangle count. Exhaustive self-intersection is explicitly `not_fully_checked` in the current backend.
 
-The 3MF path adds official lib3mf strict read with zero warnings, unit/object/build/topology checks, independent XML dimensions, safe ZIP paths, supported compression, no encryption, and no external relationships. An actual slicer invocation remains a separate gate.
+The interoperable 3MF path adds official lib3mf strict read with zero warnings, unit/object/build/topology checks, independent XML dimensions, safe ZIP paths, supported compression, no encryption, and no external relationships. For the default P2S target, official Bambu Studio normative slicing and resolved-parameter assertions form a separate mandatory release gate. The Bambu project 3MF remains a second artifact because its vendor project parts are outside the Core-only lib3mf contract.
 
 ## Extension sequence
 
-Phase 3 adds cached global providers and AOI/geocoding resolution without changing the build engine contract. Phase 4 makes sampling printer-aware. Tiling, API, and Web remain consumers of the same core.
+The local AOI, printer-aware sampling, content-addressed cache, and configurable no-key Copernicus AWS GLO-30/GLO-90 provider are complete. Network acquisitions enter the existing local pipeline as a metric AOI raster plus `source_acquisition.json`; no download-first parallel geometry path exists. Quality-mask preservation is complete. Next steps are explainable multi-provider fallback, Nominatim-compatible candidate geocoding, tiling, API, and Web.

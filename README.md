@@ -2,7 +2,7 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Implemented milestone:** validated full-raster local GeoTIFF/synthetic manufacturing core, including deterministic 3MF/provenance and real slicing. Explicit AOI cropping, global providers, geocoding, tiling/connectors, API, and Web remain on the authoritative roadmap in `.agent/PLANS.md`.
+**Implemented milestone (TopoForge 0.2.0):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, bbox/center-radius AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, and real slicing. Geocoding, additional providers/fallback, tiling/connectors, API, and Web remain on the authoritative roadmap in `.agent/PLANS.md`.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
 
@@ -19,12 +19,68 @@ The repository's executed synthetic Gaussian-mountain build produced:
 | Degenerate / duplicate faces | `0 / 0` |
 | Bottom planarity error | `0.0 mm` |
 | 3MF writer / strict reread | `lib3mf 2.5.0 / 0 warnings` |
-| Actual slicer | `PrusaSlicer 2.4.0`, exit `0` |
+| Historical diagnostic slicer | `PrusaSlicer 2.4.0`, exit `0` |
 | Slice result | `140` layers, `5,030,602` bytes G-code |
 | Estimated print time | `7h 11m 41s` |
 | Filament | `40,552.39 mm` / `97.54 cm3` |
 
 The committed evidence copies are under `artifacts/reports/`; manufacturing files and G-code remain ignored under `outputs/` and `artifacts/slicer/`.
+
+## Verified Gongga P2S example
+
+A real Copernicus DEM GLO-30 Gongga terrain example has passed official Bambu Studio `02.07.01.62` software generation, normative checking, slicing, archive/MD5 checks, and an independent reopen/reslice without external presets:
+
+| Measurement | Result |
+| --- | --- |
+| Bambu project 3MF | `outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf` |
+| 3MF SHA-256 | `27aa850ebe666c14cc061dfcba97a42d4729a0bd9a37fd0a4d1888961386a55f` |
+| Model dimensions | `180.0 x 175.359 x 45.0 mm` |
+| Machine / model ID | `Bambu Lab P2S 0.4 nozzle` / `N7` |
+| Plate / material | `Textured PEI Plate` / `Bambu PLA Basic (GFA00)` |
+| Process | `0.20 mm`, 2 walls, 15% grid, 5/3 top/bottom, support off |
+| Temperatures | `220 °C` nozzle / `55 °C` bed |
+| Official slice | exit `0`, `Success.`, `224` layers, `210.99 g`, about `6h48m12s` |
+| Standalone reopen/reslice | exit `0`, `Success.`, no external settings/filaments |
+| Verification record | `outputs/gongga-copernicus-glo30-bambu-p2s/bambu_studio_validation.json` |
+
+This is a software-validated example, not a claim of a completed physical P2S print or vendor certification.
+
+## Printer-aware fidelity rebuild
+
+The existing real source raster was reused without another download and rebuilt under `outputs/gongga-copernicus-glo30-fidelity-v2`:
+
+| Measurement | Source DEM | Processed DEM / model |
+| --- | --- | --- |
+| Grid | `1008 x 1181` | `439 x 451` |
+| Horizontal resolution | `28.8508 m` | `68.9589 m` |
+| Maximum elevation | `7437.5244 m` | `7432.4829 m` |
+| Peak loss / horizontal shift | — | `5.0415 m / 24.5163 m` |
+| Physical mesh sampling | — | `0.40018 mm` |
+| Triangle count | — | `791,952` |
+| Axes | source row 0 north | `+X East, +Y North, +Z Up` |
+| Diagnostic slice | — | PrusaSlicer exit `0`, `149` layers, no floating/empty/out-of-bed/support warning |
+
+The source is a DSM. A previously confirmed published nominal summit elevation is recorded only as context; `terrain_adjustment_applied=false`, so no synthetic spike or elevation correction is introduced. Exact checksums are in `outputs/gongga-copernicus-glo30-fidelity-v2/checksums.sha256`.
+
+## Verified no-key Amazon provider example
+
+A new small Amazon AOI was resolved through the public Copernicus AWS GLO-30 `tileList.txt`, fetched once, stored by SHA-256, acquired again entirely from cache, converted to the recorded local AEQD CRS, built, strict-read, and actually sliced:
+
+| Measurement | Result |
+| --- | --- |
+| AOI | `[-60.02, -3.13, -60.00, -3.11]` WGS84 |
+| Product | `copernicus-dem-glo-30-aws-2021` DSM / EGM2008 |
+| Source COG SHA-256 | `178ae62c3835b603631b5a6259f827d9cbfa2a4bfa4adcdae0adf7c4ee1516d7` |
+| Cache replay | catalog, source COG, asset listing, and four quality masks `hit`; zero temporary files |
+| Source/processed grid | `74 x 74 / 74 x 74` |
+| Source/processed spacing | `29.7638 m / 29.7638 m` |
+| Model | `80 x 80.6587 x 9.7146 mm`, `21,900` triangles |
+| Geometry | watertight/manifold/winding/positive-volume/flat-bottom `true` |
+| Quality masks | EDM, FLM, HEM, WBM; exact DEM grid/crop; raw values + nearest-neighbour reprojection |
+| Strict 3MF | lib3mf `2.5.0`, zero warnings |
+| Diagnostic slice | PrusaSlicer exit `0`, 32 layers, no support/floating/empty/out-of-bed warning |
+
+The first acquisition at the exact one-degree tile edge exposed one 74-pixel reprojection-only column. The retained v1 failure was corrected by reprojecting an independent source-footprint mask and selecting the largest all-covered rectangle; genuine source NoData remains masked. The 0.2.0 quality-mask bundle is `outputs/amazon-copernicus-aws-quality-v2`. Its copied `source_acquisition.json` records the exact S3 prefix listing plus every mask URL, ETag, Last-Modified, byte count, source SHA-256, semantics, value handling, output alignment, and bundle role. The terrain DEM/STL/3MF/GLB/PNG artifacts remain byte-identical to `outputs/amazon-copernicus-aws-v2`; adding masks records source quality without changing elevations.
 
 ## Install
 
@@ -46,6 +102,10 @@ uv run topoforge build \
   --max-height-mm 45 \
   --base-mm 3 \
   --printer-profile bambu-p2s-0.4 \
+  --sampling-mode print-aware \
+  --max-grid-cells 600000 \
+  --max-estimated-memory-mb 768 \
+  --bbox 101.67 29.45 101.998 29.73 \
   --dataset-type dtm \
   --vertical-datum unknown \
   --data-license "DATASET LICENSE" \
@@ -53,7 +113,27 @@ uv run topoforge build \
   --output outputs/local-dem
 ```
 
-A depth of `0` preserves the raster aspect ratio. An explicit depth that conflicts with the geographic aspect ratio is rejected rather than applying hidden horizontal distortion.
+A depth of `0` preserves the raster aspect ratio. An explicit depth that conflicts with the geographic aspect ratio is rejected rather than applying hidden horizontal distortion. `--center LON LAT --radius-m METRES` is the center-radius AOI form. AOIs are normalized in WGS84, clipped to source pixels before metric reprojection, and recorded in provenance.
+
+## Fetch or build from the no-key global provider
+
+```bash
+uv run topoforge fetch-dem \
+  --bbox -60.02 -3.13 -60.00 -3.11 \
+  --output downloads/amazon/source.tif \
+  --cache-dir cache/providers
+
+uv run topoforge build-global \
+  --bbox -60.02 -3.13 -60.00 -3.11 \
+  --output outputs/amazon \
+  --source-dir downloads/amazon \
+  --cache-dir cache/providers \
+  --size-mm 80 0
+
+uv run topoforge cache status --cache-dir cache/providers
+```
+
+`build-global` always uses the normalized AOI contract, authoritative product tile lists, one complete GLO-30 product or whole-AOI GLO-90 fallback, bounded HTTP attempts, and the same local raster/mesh/validation engine. It preserves ETag, Last-Modified, byte count, SHA-256, retry history, licence notices, coverage crop, and cache-hit state in `source_acquisition.json`. Exact S3 tile-prefix listings discover EDM, FLM, HEM, and WBM assets; exposed masks are cached, verified against the source DEM grid, nearest-neighbour reprojected with the DEM transform/window, copied into the final build, and never converted into invented elevation values.
 
 ## Reproduce the synthetic milestone
 
@@ -93,33 +173,52 @@ build_manifest.json
 preview.png
 ```
 
-## Slice the manufacturing model
+## Validate the manufacturing model for the default P2S
+
+The default release target is **Bambu Lab P2S / 0.4 mm nozzle**. Release evidence must come from official Bambu Studio with flattened official presets; OrcaSlicer and PrusaSlicer remain diagnostic tools only.
 
 ```bash
-uv run topoforge slice \
+python scripts/resolve_bambu_profiles.py \
+  --profiles-root /PATH/TO/BambuStudio/resources/profiles/BBL \
+  --output-dir outputs/p2s-profiles \
+  --machine "Bambu Lab P2S 0.4 nozzle" \
+  --process "0.20mm Standard @BBL P2S" \
+  --filament "Bambu PLA Basic @BBL P2S"
+
+TOPOFORGE_BAMBU_STUDIO=/PATH/TO/BambuStudio.AppImage uv run topoforge slice \
   outputs/milestone-01-synthetic/model.3mf \
-  --output artifacts/slicer/milestone-01.gcode
+  --machine-profile outputs/p2s-profiles/machine.json \
+  --process-profile outputs/p2s-profiles/process.json \
+  --filament-profile outputs/p2s-profiles/filament.json \
+  --output artifacts/slicer/milestone-01-p2s.gcode
 ```
 
-Discovery prefers OrcaSlicer and falls back to PrusaSlicer. A successful slice is attached to `validation.json`, `provenance.json`, `build_manifest.json`, and `slicer_validation.json` in the build bundle.
+The release gate hard-checks the resolved `256 x 256 x 256 mm` bed, P2S preset IDs, 0.4 mm nozzle, Textured PEI Plate, 0.20 mm layers, 2 walls, 15% grid infill, support off, and Bambu PLA Basic temperatures. `topoforge slice` performs the official G-code and parameter gate. Creating the self-contained Bambu project also requires Bambu Studio's `--export-3mf`; the exact executed export and standalone reopen commands are preserved as `bambu_studio_build_command.txt` and `bambu_studio_reopen_command.txt` in the verified Gongga bundle.
+
+Evidence is attached to `validation.json`, `provenance.json`, `build_manifest.json`, `slicer_validation.json`, and `bambu_studio_validation.json`. The Bambu project with embedded settings and sliced plate data is stored separately as `model.bambu-p2s.3mf`; the interoperable lib3mf source remains `model.3mf`.
 
 ## CLI
 
 ```text
 topoforge build       local GeoTIFF to complete artifact bundle
+topoforge build-global no-key Copernicus AWS AOI to complete artifact bundle
+topoforge fetch-dem   cache and normalize a Copernicus AWS AOI GeoTIFF
 topoforge synthetic   deterministic analytic GeoTIFF fixtures
 topoforge inspect     raster/STL/GLB/3MF measurements
 topoforge validate    reopened STL geometry report
-topoforge slice       actual OrcaSlicer/PrusaSlicer invocation
+topoforge slice       official Bambu Studio P2S G-code/parameter gate; optional diagnostics
 topoforge preview     bundle verification and preview paths
 topoforge providers   provider semantics and implementation state
-topoforge cache       cache status
+topoforge cache       content-addressed provider cache status
 topoforge doctor      Python/GDAL/PROJ/slicer versions
 ```
 
 ## Correctness policy
 
-- Geographic rasters are reprojected to a north-up metric CRS before mesh construction.
+- Geographic rasters are explicitly AOI-clipped, then reprojected to a north-up metric CRS before mesh construction.
+- `print-aware`, `source-preserving`, and `custom` sampling modes combine source resolution, model size, nozzle/minimum-feature limits, cell count, triangle estimate, and memory estimate.
+- Source and processed resolution, grid shape, peak loss, peak shift, and sampling reasons are reported separately; processed data is never labeled with source resolution.
+- Manufacturing axes are `+X East`, `+Y North`, `+Z Up`; source row 0 is flipped to the model north edge, and STL/GLB/3MF peak coordinates are cross-checked.
 - Rotated raster corner gaps are cropped to the largest source-covered rectangle.
 - Only bounded interior NoData holes are interpolated; the original binary mask is saved.
 - Horizontal scale is aspect-preserving and explicit in `provenance.json`.
@@ -128,6 +227,7 @@ topoforge doctor      Python/GDAL/PROJ/slicer versions
 - The mesh is constructed as an explicit top grid, perimeter walls, and flat bottom in millimetres.
 - STL is reopened with coordinate welding; 3MF is strict-read with lib3mf and independently inspected as OPC/XML.
 - Exhaustive self-intersection remains `not_fully_checked` when no robust backend is available.
+- The default release boundary is official Bambu Studio plus resolved P2S machine/process/filament parameter checks; a slicer exit code alone is insufficient.
 
 ## Quality gates
 
@@ -138,7 +238,7 @@ uv run pyright
 uv run pytest
 ```
 
-The 71-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, resource downsampling, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, slicer parsers/adapters, and an actual PrusaSlicer run.
+The 113-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run.
 
 ## Documentation
 

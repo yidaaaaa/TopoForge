@@ -1,0 +1,377 @@
+{
+  "artifact_reopen_verification": {
+    "archive_command": "unzip -t outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf",
+    "archive_exit_status": 0,
+    "archive_literal_output": "Archive:  outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf\n    testing: [Content_Types].xml      OK\n    testing: Metadata/plate_1.json    OK\n    testing: 3D/3dmodel.model         OK\n    testing: 3D/_rels/3dmodel.model.rels   OK\n    testing: 3D/Objects/object_1.model   OK\n    testing: Metadata/project_settings.config   OK\n    testing: Metadata/plate_1.gcode.md5   OK\n    testing: Metadata/plate_1.gcode   OK\n    testing: Metadata/_rels/model_settings.config.rels   OK\n    testing: Metadata/model_settings.config   OK\n    testing: Metadata/cut_information.xml   OK\n    testing: Metadata/slice_info.config   OK\n    testing: Metadata/filament_sequence.json   OK\n    testing: _rels/.rels              OK\nNo errors detected in compressed data of outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf.",
+    "command": "uv run topoforge preview outputs/gongga-copernicus-glo30-bambu-p2s",
+    "embedded_gcode_matches_primary_file": true,
+    "embedded_gcode_md5": "BC185490BC419CA7E001BF597307AD24",
+    "embedded_gcode_md5_verified": true,
+    "exit_status": 0,
+    "literal_output": {
+      "dataset_name": "Copernicus DEM GLO-30 2021 — Mount Gongga",
+      "manifest_artifact_count": 27,
+      "preview_glb": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/preview.glb",
+      "preview_png": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/preview.png",
+      "raster_crs": "EPSG:32647",
+      "raster_shape": [
+        341,
+        350
+      ],
+      "required_checks_passed": true,
+      "resolved_output_dir": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30"
+    },
+    "resolved_settings_byte_identical": true,
+    "standalone_reopen_return_code": 0
+  },
+  "baseline": {
+    "backup_directory": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/.rollback-pre-final-20260731",
+    "description": "Preserved workspace P2S project and G-code before installing the handoff final artifact.",
+    "gcode": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/.rollback-pre-final-20260731/gongga-copernicus-glo30-bambu-p2s.gcode",
+      "sha256": "27b43eb59965ae93c0f0867ca3c63b38d19fc13f97a5aeba3486366b8a19654d",
+      "size_bytes": 58389210
+    },
+    "project_3mf": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/.rollback-pre-final-20260731/model.bambu-p2s.3mf",
+      "sha256": "898610a7b3094ed51d5ff9bb8e1f5701eee93ecd666c1e1d9e0cf61556f8d27d",
+      "size_bytes": 23422772
+    }
+  },
+  "claim_boundary": "通过官方 Bambu Studio 02.07.01.62 软件验证；未声明实机打印完成或厂商认证。",
+  "modified_artifact": {
+    "changed_branch_or_field": "Default printer and release gate changed to bambu-p2s-0.4; production 3MF requires official Bambu Studio P2S preset and resolved-parameter validation.",
+    "description": "Final self-contained Gongga Bambu Studio project 3MF.",
+    "interoperable_source_3mf": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30/model.3mf",
+      "sha256": "220953d0a71673c0b986f233c60d8981bee6b5996100ddf58790a798f2b325e6",
+      "size_bytes": 5872998
+    },
+    "primary_gcode": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/gongga-copernicus-glo30-bambu-p2s.gcode",
+      "sha256": "2b6373a306f4d82adc2bb5bde2243b9528cb4e7cb5f305a9cf0d016466e050ae",
+      "size_bytes": 57683915
+    },
+    "project_3mf": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf",
+      "sha256": "27aa850ebe666c14cc061dfcba97a42d4729a0bd9a37fd0a4d1888961386a55f",
+      "size_bytes": 23342377
+    },
+    "standalone_reopen_gcode": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/slicer/gongga-copernicus-glo30-bambu-p2s-reopen.gcode",
+      "sha256": "2bf706403e4e82f299246af745e418c98d3a43ae105ca25a3e566cda4cf64d7c",
+      "size_bytes": 57534818
+    }
+  },
+  "official_software_validation": {
+    "build": {
+      "command": "env HOME=/tmp/bambustudio-official/home-p2s-final \\\n    XDG_CONFIG_HOME=/tmp/bambustudio-official/home-p2s-final/.config \\\n    XDG_CACHE_HOME=/tmp/bambustudio-official/home-p2s-final/.cache \\\n    XDG_RUNTIME_DIR=/tmp/bambustudio-official/runtime-p2s-final \\\n  /tmp/bambustudio-official/squashfs-root-2204/appdir/AppRun \\\n    --debug 3 \\\n    --load-settings '/tmp/bambustudio-official/resolved-p2s-recheck/machine.json;/tmp/bambustudio-official/resolved-p2s-recheck/process.json' \\\n    --load-filaments '/tmp/bambustudio-official/resolved-p2s-recheck/filament.json' \\\n    --load-defaultfila \\\n    --curr-bed-type 'Textured PEI Plate' \\\n    --arrange 1 \\\n    --ensure-on-bed \\\n    --normative-check \\\n    --slice 0 \\\n    --export-3mf gongga-p2s-bambu-studio.3mf \\\n    --outputdir /tmp/bambustudio-official/test-p2s-final \\\n    /root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30/model.3mf",
+      "input": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30/model.3mf",
+      "literal_output": {
+        "error_string": "Success.",
+        "export_time": 7175,
+        "layer_height": 0.20000000298023224,
+        "plate_index": 0,
+        "prepare_time": 1334,
+        "return_code": 0,
+        "sliced_plates": [
+          {
+            "feature_type_times": {
+              "Bottom surface": 757.3938598632812,
+              "Bridge": 1031.756103515625,
+              "Custom": 402.0400085449219,
+              "Flush": 26.0,
+              "Gap infill": 466.6101379394531,
+              "Inner wall": 2518.217041015625,
+              "Internal solid infill": 6129.85693359375,
+              "Outer wall": 3198.743408203125,
+              "Sparse infill": 5469.39599609375,
+              "Top surface": 564.1488647460938,
+              "Travel": 3937.275146484375,
+              "Undefined": 3931.54931640625
+            },
+            "filament_change_times": 0,
+            "filaments": [
+              {
+                "filament_id": "GFA00",
+                "id": 1,
+                "main_used_g": 210.98870849609375,
+                "total_used_g": 210.98870849609375
+              }
+            ],
+            "generate_support_material_time": 1630,
+            "id": 1,
+            "infill_time": 39041,
+            "layer_filament_change": 0,
+            "main_predication": 24044.181640625,
+            "make_perimeters_time": 6369,
+            "obj_cached_cnt": 0,
+            "objects": [
+              {
+                "bbox": {
+                  "depth": 175.35911560058594,
+                  "height": 45.0,
+                  "width": 180.0,
+                  "x": 38.0,
+                  "y": 40.32044219970703,
+                  "z": 0.0
+                },
+                "id": 5,
+                "name": "TopoForge terrain",
+                "triangle_count": 477396
+              }
+            ],
+            "sliced_time": 56821,
+            "sliced_time_with_cache": 8137,
+            "total_predication": 24492.49609375,
+            "triangle_count": 477396,
+            "warning_message": ""
+          }
+        ],
+        "sparse_infill_density": 15.0,
+        "wall_loops": 2
+      },
+      "process_exit_status": 0,
+      "stderr": {
+        "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_studio_build.stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "size_bytes": 0
+      },
+      "stdout": {
+        "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_studio_build.stdout.log",
+        "sha256": "960c37748aa1b0d423003b6c4931aace51c1112e396ab0b7c4f1127aab243dbd",
+        "size_bytes": 28727
+      }
+    },
+    "official_release": "https://github.com/bambulab/BambuStudio/releases/tag/v02.07.01.62",
+    "product": "Bambu Studio",
+    "standalone_reopen": {
+      "command": "env HOME=/tmp/bambustudio-official/home-p2s-final-reopen \\\n    XDG_CONFIG_HOME=/tmp/bambustudio-official/home-p2s-final-reopen/.config \\\n    XDG_CACHE_HOME=/tmp/bambustudio-official/home-p2s-final-reopen/.cache \\\n    XDG_RUNTIME_DIR=/tmp/bambustudio-official/runtime-p2s-final-reopen \\\n  /tmp/bambustudio-official/squashfs-root-2204/appdir/AppRun \\\n    --debug 3 \\\n    --normative-check \\\n    --slice 0 \\\n    --outputdir /tmp/bambustudio-official/test-p2s-final-reopen \\\n    /tmp/bambustudio-official/test-p2s-final/gongga-p2s-bambu-studio.3mf",
+      "external_settings_loaded": false,
+      "input": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf",
+      "literal_output": {
+        "error_string": "Success.",
+        "export_time": 0,
+        "layer_height": 0.20000000298023224,
+        "plate_index": 0,
+        "prepare_time": 1886,
+        "return_code": 0,
+        "sliced_plates": [
+          {
+            "feature_type_times": {
+              "Bottom surface": 757.3938598632812,
+              "Bridge": 1031.985595703125,
+              "Custom": 402.0400085449219,
+              "Flush": 26.0,
+              "Gap infill": 466.4971618652344,
+              "Inner wall": 2513.221435546875,
+              "Internal solid infill": 6121.4560546875,
+              "Outer wall": 3203.749755859375,
+              "Sparse infill": 5469.2265625,
+              "Top surface": 564.1410522460938,
+              "Travel": 3936.623046875,
+              "Undefined": 3930.897216796875
+            },
+            "filament_change_times": 0,
+            "filaments": [
+              {
+                "filament_id": "GFA00",
+                "id": 1,
+                "main_used_g": 210.98915100097656,
+                "total_used_g": 210.98915100097656
+              }
+            ],
+            "generate_support_material_time": 1638,
+            "id": 1,
+            "infill_time": 40437,
+            "layer_filament_change": 0,
+            "main_predication": 24034.990234375,
+            "make_perimeters_time": 6174,
+            "obj_cached_cnt": 0,
+            "objects": [
+              {
+                "bbox": {
+                  "depth": 175.35911560058594,
+                  "height": 45.0,
+                  "width": 180.0,
+                  "x": 38.0,
+                  "y": 40.32044219970703,
+                  "z": 0.0
+                },
+                "id": 5,
+                "name": "TopoForge terrain",
+                "triangle_count": 477396
+              }
+            ],
+            "sliced_time": 57831,
+            "sliced_time_with_cache": 7931,
+            "total_predication": 24483.3046875,
+            "triangle_count": 477396,
+            "warning_message": ""
+          }
+        ],
+        "sparse_infill_density": 15.0,
+        "upward_compatible_machine": [
+          "Bambu Lab A1 0.4 nozzle",
+          "Bambu Lab H2S 0.4 nozzle",
+          "Bambu Lab H2D 0.4 nozzle",
+          "Bambu Lab H2D Pro 0.4 nozzle",
+          "Bambu Lab H2C 0.4 nozzle",
+          "Bambu Lab X2D 0.4 nozzle",
+          "Bambu Lab A2L 0.4 nozzle"
+        ],
+        "wall_loops": 2
+      },
+      "process_exit_status": 0,
+      "stderr": {
+        "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_studio_reopen.stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "size_bytes": 0
+      },
+      "stdout": {
+        "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_studio_reopen.stdout.log",
+        "sha256": "2a4437f4464340f32ad538efa97060fb01dd3d0fd9cba2821d27092cf65a574a",
+        "size_bytes": 24360
+      }
+    },
+    "validator": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage",
+      "sha256": "2749917af560f3b9a2681429da9c43d00c65d096e1a1c479cc49466634174549",
+      "size_bytes": 226286072
+    },
+    "version": "02.07.01.62"
+  },
+  "operational_notice": {
+    "code": "1000C001",
+    "instruction": "For PLA on the 55 C Textured PEI profile, follow the P2S workflow to open the door and/or remove the top cover as applicable.",
+    "level": 3,
+    "message": "bed_temperature_too_high_than_filament"
+  },
+  "parameter_assertions": {
+    "all_passed": true,
+    "bed_temperature_c": 55,
+    "bottom_shell_layers": 3,
+    "brim_type": "auto_brim",
+    "brim_width_mm": 5,
+    "build_volume_mm": [
+      256,
+      256,
+      256
+    ],
+    "filament": "Bambu PLA Basic @BBL P2S",
+    "filament_id": "GFA00",
+    "layer_height_mm": 0.2,
+    "machine": "Bambu Lab P2S",
+    "machine_model_id": "N7",
+    "machine_preset": "Bambu Lab P2S 0.4 nozzle",
+    "nozzle_mm": 0.4,
+    "nozzle_temperature_c": 220,
+    "plate": "Textured PEI Plate",
+    "process": "0.20mm Standard @BBL P2S",
+    "sparse_infill_pattern": "grid",
+    "sparse_infill_percent": 15,
+    "support_enabled": false,
+    "top_shell_layers": 5,
+    "wall_loops": 2
+  },
+  "patch": {
+    "excludes_self": true,
+    "files": [
+      ".agent/DECISIONS.md",
+      ".agent/ISSUES.md",
+      ".agent/PLANS.md",
+      ".agent/RUN_LOG.md",
+      ".agent/STATE.md",
+      "AGENTS.md",
+      "README.md",
+      "docs/architecture.md",
+      "docs/printing.md",
+      "docs/provenance.md",
+      "printer_profiles/bambu-p2s-0.4.yaml",
+      "scripts/resolve_bambu_profiles.py",
+      "scripts/rollback-p2s-bambu-validation.sh",
+      "src/topoforge/cli/app.py",
+      "src/topoforge/config/__init__.py",
+      "src/topoforge/config/profiles.py",
+      "src/topoforge/engine/build.py",
+      "src/topoforge/models/domain.py",
+      "src/topoforge/validation/__init__.py",
+      "src/topoforge/validation/manufacturing.py",
+      "src/topoforge/validation/slicers/__init__.py",
+      "src/topoforge/validation/slicers/bambu.py",
+      "src/topoforge/validation/slicers/base.py",
+      "src/topoforge/validation/slicers/discovery.py",
+      "tests/cli/test_build_config_overrides.py",
+      "tests/slicer/test_bambu.py",
+      "tests/slicer/test_metrics.py",
+      "tests/unit/test_bambu_profile_resolver.py",
+      "tests/unit/test_manufacturing_gate.py",
+      "tests/unit/test_printer_profiles.py"
+    ],
+    "forward_and_quality_log_sha256": "76b6b8820e3eaedc415a4aedb28454a093adcca95a0e6b276ba9358a3b150533",
+    "forward_apply": "passed with --whitespace=error-all",
+    "forward_check": "passed in /tmp/topoforge-p2s-final-replay4.CXltdq/repo at HEAD a9f5f5da77ba231f23128fe76e21c6f93890b7ef",
+    "literal_forward_and_quality_log": "$ git worktree add --detach /tmp/topoforge-p2s-final-replay4.CXltdq/repo HEAD\nPreparing worktree (detached HEAD a9f5f5d)\nHEAD is now at a9f5f5d chore: add milestone patch and rollback evidence\n[exit 0]\n$ git apply --check /root/autodl-tmp/bambu/TopoForge/artifacts/patches/p2s-bambu-validation.patch\n[exit 0]\n$ git apply --whitespace=error-all /root/autodl-tmp/bambu/TopoForge/artifacts/patches/p2s-bambu-validation.patch\n[exit 0]\n$ git diff --check\n[exit 0]\n$ /root/autodl-tmp/bambu/TopoForge/.venv/bin/ruff check .\nAll checks passed!\n[exit 0]\n$ /root/autodl-tmp/bambu/TopoForge/.venv/bin/ruff format --check .\n85 files already formatted\n[exit 0]\n$ /root/autodl-tmp/bambu/TopoForge/.venv/bin/pyright --pythonpath /root/autodl-tmp/bambu/TopoForge/.venv/bin/python\n0 errors, 0 warnings, 0 informations\n[exit 0]\n$ env PYTHONPATH=/tmp/topoforge-p2s-final-replay4.CXltdq/repo/src /root/autodl-tmp/bambu/TopoForge/.venv/bin/pytest\n============================= test session starts ==============================\nplatform linux -- Python 3.12.3, pytest-8.4.2, pluggy-1.6.0\nrootdir: /tmp/topoforge-p2s-final-replay4.CXltdq/repo\nconfigfile: pyproject.toml\ntestpaths: tests\nplugins: cov-6.3.0, hypothesis-6.164.0, anyio-4.14.2\ncollected 80 items\n\ntests/cli/test_build_config_overrides.py ...                             [  3%]\ntests/geometry/test_mesh_exporters.py ...                                [  7%]\ntests/geometry/test_mesh_validation.py ...                               [ 11%]\ntests/geometry/test_rectangular_terrain_mesh.py .............            [ 27%]\ntests/integration/test_local_build.py .                                  [ 28%]\ntests/integration/test_raster_crs_cases.py ....                          [ 33%]\ntests/integration/test_reproducible_build.py .                           [ 35%]\ntests/integration/test_synthetic_catalog.py ...........                  [ 48%]\ntests/property/test_mesh_properties.py .                                 [ 50%]\ntests/providers/test_registry.py .                                       [ 51%]\ntests/slicer/test_adapters.py ......                                     [ 58%]\ntests/slicer/test_bambu.py ..                                            [ 61%]\ntests/slicer/test_metrics.py ....                                        [ 66%]\ntests/slicer/test_real_prusa.py .                                        [ 67%]\ntests/unit/test_3mf.py ..                                                [ 70%]\ntests/unit/test_bambu_profile_resolver.py .                              [ 71%]\ntests/unit/test_manufacturing_gate.py ..                                 [ 73%]\ntests/unit/test_preview.py .                                             [ 75%]\ntests/unit/test_printer_profiles.py ..                                   [ 77%]\ntests/unit/test_scaling.py .....                                         [ 83%]\ntests/unit/test_synthetic_raster.py .............                        [100%]\n\n=============================== warnings summary ===============================\ntests/integration/test_local_build.py: 1 warning\ntests/integration/test_raster_crs_cases.py: 3 warnings\ntests/integration/test_reproducible_build.py: 2 warnings\ntests/integration/test_synthetic_catalog.py: 11 warnings\ntests/unit/test_synthetic_raster.py: 2 warnings\n  /root/autodl-tmp/bambu/TopoForge/.venv/lib/python3.12/site-packages/numpy/ma/core.py:3505: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    super(MaskedArray, type(self)).shape.__set__(self, shape)\n\ntests/integration/test_local_build.py::test_synthetic_geotiff_to_complete_validated_bundle\ntests/integration/test_local_build.py::test_synthetic_geotiff_to_complete_validated_bundle\ntests/integration/test_local_build.py::test_synthetic_geotiff_to_complete_validated_bundle\ntests/integration/test_reproducible_build.py::test_same_raster_and_settings_produce_identical_geometry\ntests/integration/test_reproducible_build.py::test_same_raster_and_settings_produce_identical_geometry\n  /tmp/topoforge-p2s-final-replay4.CXltdq/repo/src/topoforge/engine/build.py:331: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    if dataset.count != 1 or dataset.crs is None or not np.all(np.isfinite(dataset.read(1))):\n\ntests/integration/test_local_build.py::test_synthetic_geotiff_to_complete_validated_bundle\ntests/integration/test_local_build.py::test_synthetic_geotiff_to_complete_validated_bundle\ntests/integration/test_local_build.py::test_synthetic_geotiff_to_complete_validated_bundle\ntests/integration/test_reproducible_build.py::test_same_raster_and_settings_produce_identical_geometry\ntests/integration/test_reproducible_build.py::test_same_raster_and_settings_produce_identical_geometry\n  /tmp/topoforge-p2s-final-replay4.CXltdq/repo/src/topoforge/engine/build.py:336: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    mask_values = np.unique(dataset.read(1))\n\ntests/integration/test_reproducible_build.py::test_same_raster_and_settings_produce_identical_geometry\n  /tmp/topoforge-p2s-final-replay4.CXltdq/repo/tests/integration/test_reproducible_build.py:39: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    first_values = first_raster.read(1)\n\ntests/integration/test_reproducible_build.py::test_same_raster_and_settings_produce_identical_geometry\n  /tmp/topoforge-p2s-final-replay4.CXltdq/repo/tests/integration/test_reproducible_build.py:41: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    second_values = second_raster.read(1)\n\ntests/unit/test_synthetic_raster.py::test_process_metric_geotiff_and_preserve_original_nodata_mask\n  /tmp/topoforge-p2s-final-replay4.CXltdq/repo/tests/unit/test_synthetic_raster.py:50: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    assert int(np.sum(mask_dataset.read(1))) == 16\n\ntests/unit/test_synthetic_raster.py::test_large_or_edge_nodata_is_rejected\n  /tmp/topoforge-p2s-final-replay4.CXltdq/repo/tests/unit/test_synthetic_raster.py:56: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    values = dataset.read(1)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n======================= 80 passed, 33 warnings in 5.70s ========================\n[exit 0]\n",
+    "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/patches/p2s-bambu-validation.patch",
+    "post_apply_quality": {
+      "pyright": "0 errors, 0 warnings, 0 informations",
+      "pytest": "80 passed, 33 warnings in 5.70s",
+      "ruff_check": "All checks passed!",
+      "ruff_format_check": "85 files already formatted"
+    },
+    "sha256": "85d2f1a22876915183b4da64f3d3f5d3e7048ff4f04e75cf9e1f8fb1d17b6e70",
+    "size_bytes": 87236,
+    "verification_record_is_external": true
+  },
+  "rollback": {
+    "command": "bash scripts/rollback-p2s-bambu-validation.sh --confirm-rollback --patch /root/autodl-tmp/bambu/TopoForge/artifacts/patches/p2s-bambu-validation.patch",
+    "exit_status": 0,
+    "literal_output": "$ git worktree add --detach /tmp/topoforge-p2s-artifact-rollback.7fdcCW/repo HEAD\nPreparing worktree (detached HEAD a9f5f5d)\nHEAD is now at a9f5f5d chore: add milestone patch and rollback evidence\n[exit 0]\n$ git apply --check /root/autodl-tmp/bambu/TopoForge/artifacts/patches/p2s-bambu-validation.patch\n[exit 0]\n$ git apply --whitespace=error-all /root/autodl-tmp/bambu/TopoForge/artifacts/patches/p2s-bambu-validation.patch\n[exit 0]\n$ cp --reflink=auto /root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf /tmp/topoforge-p2s-artifact-rollback.7fdcCW/repo/outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf\n[exit 0]\n$ cp --reflink=auto /root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/.rollback-pre-final-20260731/model.bambu-p2s.3mf /tmp/topoforge-p2s-artifact-rollback.7fdcCW/repo/outputs/gongga-copernicus-glo30-bambu-p2s/.rollback-pre-final-20260731/model.bambu-p2s.3mf\n[exit 0]\n$ cp --reflink=auto /root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/.rollback-pre-final-20260731/gongga-copernicus-glo30-bambu-p2s.gcode /tmp/topoforge-p2s-artifact-rollback.7fdcCW/repo/outputs/gongga-copernicus-glo30-bambu-p2s/.rollback-pre-final-20260731/gongga-copernicus-glo30-bambu-p2s.gcode\n[exit 0]\n$ bash scripts/rollback-p2s-bambu-validation.sh --confirm-rollback --patch /root/autodl-tmp/bambu/TopoForge/artifacts/patches/p2s-bambu-validation.patch\nBaseline HEAD: a9f5f5da77ba231f23128fe76e21c6f93890b7ef\nPatch: /root/autodl-tmp/bambu/TopoForge/artifacts/patches/p2s-bambu-validation.patch\nrestored_3mf_sha256=898610a7b3094ed51d5ff9bb8e1f5701eee93ecd666c1e1d9e0cf61556f8d27d\nrestored_gcode_sha256=27b43eb59965ae93c0f0867ca3c63b38d19fc13f97a5aeba3486366b8a19654d\nRollback applied successfully.\n## HEAD (no branch)\n[exit 0]\n$ sha256sum /tmp/topoforge-p2s-artifact-rollback.7fdcCW/repo/outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf /tmp/topoforge-p2s-artifact-rollback.7fdcCW/repo/artifacts/slicer/gongga-copernicus-glo30-bambu-p2s.gcode\n898610a7b3094ed51d5ff9bb8e1f5701eee93ecd666c1e1d9e0cf61556f8d27d  /tmp/topoforge-p2s-artifact-rollback.7fdcCW/repo/outputs/gongga-copernicus-glo30-bambu-p2s/model.bambu-p2s.3mf\n27b43eb59965ae93c0f0867ca3c63b38d19fc13f97a5aeba3486366b8a19654d  /tmp/topoforge-p2s-artifact-rollback.7fdcCW/repo/artifacts/slicer/gongga-copernicus-glo30-bambu-p2s.gcode\n[exit 0]\npost_rollback_status=''\n[exit 0]\n$ git rev-parse HEAD\na9f5f5da77ba231f23128fe76e21c6f93890b7ef\n[exit 0]\n",
+    "literal_output_sha256": "f47d2e24f79e607c1af49894cf550148f6d3ffc5e7b669d680ff52e965c3ddba",
+    "path": "/root/autodl-tmp/bambu/TopoForge/scripts/rollback-p2s-bambu-validation.sh",
+    "restored_3mf_sha256": "898610a7b3094ed51d5ff9bb8e1f5701eee93ecd666c1e1d9e0cf61556f8d27d",
+    "restored_gcode_sha256": "27b43eb59965ae93c0f0867ca3c63b38d19fc13f97a5aeba3486366b8a19654d",
+    "sha256": "4e171f529ed1294370f149a687535ecdf0e8b9c1001251e9fa02f431fdc547db",
+    "size_bytes": 3540,
+    "source_diff_after_rollback": "clean; git status --porcelain returned an empty string",
+    "test_worktree": "/tmp/topoforge-p2s-artifact-rollback.7fdcCW/repo (removed after successful verification)"
+  },
+  "schema_version": "1.0",
+  "scope": "Default Bambu Lab P2S policy, official Bambu Studio software generation/slicing, final 3MF packaging, parameter verification, patch replay, and runnable rollback. No physical printer run.",
+  "source_quality": {
+    "main_worktree": {
+      "command": "uv run ruff format . && uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest",
+      "exit_status": 0,
+      "literal_result": "85 files left unchanged; All checks passed!; 85 files already formatted; 0 errors, 0 warnings, 0 informations; 80 passed, 33 warnings in 5.49s"
+    },
+    "patched_clean_worktree": {
+      "pyright": "0 errors, 0 warnings, 0 informations",
+      "pytest": "80 passed, 33 warnings in 5.70s",
+      "ruff_check": "All checks passed!",
+      "ruff_format_check": "85 files already formatted"
+    }
+  },
+  "status": "passed",
+  "verification_record": {
+    "full_bambu_report": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_studio_validation.json",
+      "sha256": "c3889c7ba32ba2928d3edb796784a2e8763b2713af815575c335dc4904870db8",
+      "size_bytes": 18544
+    },
+    "manifest_json": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/build_manifest.json",
+      "sha256": "d4c290bda20009538747af43cfa52e4ee5e35c14dc4252548a237cbfdbd1b14c",
+      "size_bytes": 4135
+    },
+    "provenance_json": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/provenance.json",
+      "sha256": "dfc0c62021a32a37ed605a436efe37e227cdf281995a50ba7c532fabab0de932",
+      "size_bytes": 17070
+    },
+    "validation_json": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/validation.json",
+      "sha256": "ff9548ca55a33fc71738b3802242363cc51cf9c3cdc5d8a252f5084f5620f6af",
+      "size_bytes": 35284
+    }
+  }
+}

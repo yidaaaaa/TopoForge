@@ -1,0 +1,128 @@
+=== VERIFY BUNDLE ===
+{
+  "raster_shape": [
+    439,
+    451
+  ],
+  "raster_crs": "EPSG:32647",
+  "required_checks_passed": true,
+  "dataset_name": "Copernicus DEM GLO-30 2021 — Mount Gongga",
+  "resolved_output_dir": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-fidelity-v2",
+  "manifest_artifact_count": 11,
+  "preview_png": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-fidelity-v2/preview.png",
+  "preview_glb": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-fidelity-v2/preview.glb"
+}
+=== INSPECT STL ===
+{
+  "units": "mm",
+  "dimensions_mm": [
+    180.0,
+    175.35911560058594,
+    45.0
+  ],
+  "expected_dimensions_mm": null,
+  "dimension_error_mm": null,
+  "dimensions_within_tolerance": null,
+  "finite_vertices": true,
+  "finite_face_normals": true,
+  "watertight": true,
+  "winding_consistent": true,
+  "manifold": true,
+  "positive_volume": true,
+  "volume_mm3": 639175.1232061993,
+  "connected_components": 1,
+  "degenerate_faces": 0,
+  "duplicate_faces": 0,
+  "flat_bottom": true,
+  "bottom_planarity_error_mm": 0.0,
+  "minimum_base_thickness_mm": 3.0,
+  "triangle_count": 791952,
+  "self_intersection_status": "not_fully_checked",
+  "self_intersection_method": "No exhaustive robust self-intersection predicate is available in the Phase 1 backend.",
+  "sha256": "dfd6ad58f8998b11f02e6b253b83593393b8296bd449d30f65c4714da14235cc"
+}
+=== INSPECT GLB ===
+{
+  "units": "mm",
+  "dimensions_mm": [
+    180.0,
+    175.35911560058594,
+    45.0
+  ],
+  "expected_dimensions_mm": null,
+  "dimension_error_mm": null,
+  "dimensions_within_tolerance": null,
+  "finite_vertices": true,
+  "finite_face_normals": true,
+  "watertight": true,
+  "winding_consistent": true,
+  "manifold": true,
+  "positive_volume": true,
+  "volume_mm3": 639175.1232061993,
+  "connected_components": 1,
+  "degenerate_faces": 0,
+  "duplicate_faces": 0,
+  "flat_bottom": true,
+  "bottom_planarity_error_mm": 0.0,
+  "minimum_base_thickness_mm": 3.0,
+  "triangle_count": 791952,
+  "self_intersection_status": "not_fully_checked",
+  "self_intersection_method": "No exhaustive robust self-intersection predicate is available in the Phase 1 backend.",
+  "sha256": "e7b25b54e58457a22ab5203f20d6e34195464e6ddf53e5048b476e6d19eb7fdf"
+}
+=== INSPECT 3MF ===
+{
+  "unit": "millimeter",
+  "object_count": 1,
+  "build_item_count": 1,
+  "vertex_count": 395978,
+  "triangle_count": 791952,
+  "dimensions_mm": [
+    180.0,
+    175.35912,
+    45.0
+  ],
+  "peak_coordinate_mm": [
+    115.6,
+    91.282832,
+    45.0
+  ],
+  "peak_coordinates_mm": [
+    [
+      115.6,
+      91.282832,
+      45.0
+    ]
+  ],
+  "metadata": {
+    "Title": "TopoForge terrain",
+    "Application": "TopoForge",
+    "customXMLNS0:dataset_name": "Copernicus DEM GLO-30 2021 — Mount Gongga",
+    "customXMLNS0:dataset_type": "dsm",
+    "customXMLNS0:east_axis": "+X = East",
+    "customXMLNS0:horizontal_crs": "EPSG:4326",
+    "customXMLNS0:north_axis": "+Y = North",
+    "customXMLNS0:north_edge": "y=model_depth_mm",
+    "customXMLNS0:orientation_transform": "mesh_heightfield=flipud(processed_dem); source row 0 north maps to y=model_depth_mm",
+    "customXMLNS0:source_bounds": "{\"full_grid_shape\":[1008,1181],\"native\":[101.66986111111112,29.450138888888887,101.99791666666667,29.730138888888888],\"native_crs\":\"EPSG:4326\",\"wgs84\":[101.66986111111112,29.450138888888887,101.99791666666667,29.730138888888888]}",
+    "customXMLNS0:vertical_datum": "EGM2008",
+    "customXMLNS0:vertical_exaggeration": "1.48746447"
+  },
+  "object_names": [
+    "TopoForge terrain"
+  ],
+  "strict_warning_count": 0,
+  "lib3mf_version": [
+    2,
+    5,
+    0
+  ]
+}
+=== STRICT REPORT RELOAD ===
+provenance.json json_type= dict keys= ['dataset', 'downsampling_factor', 'elevation_reference_comparison', 'estimated_triangle_count', 'formats', 'generated_at', 'geometry', 'license_note', 'orientation', 'peak_elevation_loss_m', 'peak_horizontal_shift_m', 'physical_sample_spacing_mm', 'processed_elevation_max_m', 'processed_elevation_min_m', 'processed_grid_shape', 'processed_horizontal_resolution_m', 'processed_peak_coordinate', 'processing', 'provider_selection', 'raw_elevation_max_m']
+validation.json json_type= dict keys= ['bottom_planarity_error_mm', 'connected_components', 'degenerate_faces', 'dimension_error_mm', 'dimensions_mm', 'dimensions_within_tolerance', 'downsampling_factor', 'duplicate_faces', 'estimated_memory_mb', 'estimated_triangle_count', 'expected_dimensions_mm', 'finite_face_normals', 'finite_vertices', 'flat_bottom', 'height_limit_mm', 'height_limit_passed', 'manifold', 'mesh_units', 'minimum_base_thickness_mm', 'minimum_base_thickness_passed']
+build_manifest.json json_type= dict keys= ['artifacts', 'generated_at', 'resolved_config_sha256', 'sha256', 'source_sha256', 'topoforge_version']
+build_config.resolved.yaml sampling_mode= print-aware output_dir= /root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-fidelity-v2
+processed_dem.tif (439, 451) EPSG:32647 (68.92967665527287, 0.0, 758930.6153090111, 0.0, -68.98808746958954, 3291874.779605538) {'ESTIMATED_TRIANGLE_COUNT': '791952', 'ORIENTATION': 'row 0 is north; model export maps north to +Y', 'ORIGINAL_NODATA_MASK': 'original_nodata_mask.tif', 'PROCESSING': 'metric reprojection; deterministic sampling; conservative small-hole interpolation', 'UNITS': 'metre', 'AREA_OR_POINT': 'Area'}
+original_nodata_mask.tif (439, 451) [0]
+preview.png (960, 1006) PNG

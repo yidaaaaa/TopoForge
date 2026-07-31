@@ -1,0 +1,232 @@
+--- a/outputs/great-trango-tower-example/build_manifest.json
++++ b/outputs/great-trango-tower-example/build_manifest.json
+@@ -13,7 +13,16 @@
+     "slicer_validation": "slicer_validation.json",
+     "source_acquisition": "source_acquisition.json",
+     "validation_html": "validation.html",
+-    "validation_json": "validation.json"
++    "validation_json": "validation.json",
++    "model_bambu_p2s": "model.bambu-p2s.3mf",
++    "bambu_project_validation": "bambu_project_validation.json",
++    "bambu_project_build_result": "bambu_project_build_result.json",
++    "bambu_project_reopen_result": "bambu_project_reopen_result.json",
++    "bambu_project_build_stdout": "bambu_project_build.stdout.log",
++    "bambu_project_build_stderr": "bambu_project_build.stderr.log",
++    "bambu_project_reopen_stdout": "bambu_project_reopen.stdout.log",
++    "bambu_project_reopen_stderr": "bambu_project_reopen.stderr.log",
++    "bambu_open_guide": "OPEN_IN_BAMBU_STUDIO.txt"
+   },
+   "generated_at": "2026-07-31T03:11:18.447950+00:00",
+   "resolved_config_sha256": "4b3e9c40809e94f8bda902e72a73785706c53f73ca8db903d23a640e0faaef3d",
+@@ -25,12 +34,21 @@
+     "preview_glb": "edf2eb775d9f5645026d717bf911d8b27f1e68e8589460dc72628a6e9a384247",
+     "preview_png": "201ac864fd7b2148efe5fafe685df0241caf8ee10fead357b840266eee1d6a44",
+     "processed_dem": "4d93788bb3f91b166c6ca8ffeca12b3e75c8c619adb8b75d70cd5d70f096af97",
+-    "provenance": "83119a14a764bcc79efae3b39058c8f372450117cfe4842b7c85357e8cdfc908",
++    "provenance": "f46dfa9b7e28c25ea5e3657cfc8db6310b7342dfcd52eccb508ba6811d9ef682",
+     "resolved_config": "4b3e9c40809e94f8bda902e72a73785706c53f73ca8db903d23a640e0faaef3d",
+     "slicer_validation": "457255feb40bac6372b299dbdae873b921106dc8afe6e107aef590c14559f32d",
+     "source_acquisition": "e661887d00288f66ac97e0c2973832467a7618e2caf9c59814b1d19571833a0a",
+-    "validation_html": "1217f768a2b8ae34629cb4fc59b97523b72bbe6183683ebc115f5166a6d88184",
+-    "validation_json": "26f29379099d1eea4c6222ec1c4993e806d0529ec471a7ee32a932d941262ed6"
++    "validation_html": "4e1bcf1a66476fad1bc8203554a1bb7e5b64461c8a44b7aa74d844f3bbe7c448",
++    "validation_json": "08bbbab631742c09632a43fd5c465cd8552a6d64b73dcd5aae6fb34bcae1b098",
++    "model_bambu_p2s": "61e28bab1c64e423125dc11b90af6e5aa07de939efbd3cb86237e7ce213e042e",
++    "bambu_project_validation": "67a04ab5d208eb08fd6a6e2fd4c3bd639a668f534009eabe9f0bf3c8cf87750e",
++    "bambu_project_build_result": "bbf056985b2d7a39a4d6c6a3577cbff5739152fe5cd20abc2e8b4abac46830ea",
++    "bambu_project_reopen_result": "da27c4f40d05f7ee7057817ef2f841fe45cf73b25d2cc8f5e351e9af1205fb51",
++    "bambu_project_build_stdout": "fa9ea4fbcca50005d90962580679fbaa16d7ad24fcaf69912999f54d311c0e3e",
++    "bambu_project_build_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
++    "bambu_project_reopen_stdout": "691094f82fa6094edc732fd6250e4de29c71762cb098498d3855629c37cbc445",
++    "bambu_project_reopen_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
++    "bambu_open_guide": "13fcff3b377223ac02910add81fba05bff5eba34565186c48447b2e2da8030c8"
+   },
+   "source_sha256": "7539ad8dcaf2300658f6e945e63baf42d7185924322cab149d3c3ec1e0734833",
+   "topoforge_version": "0.1.0"
+--- a/outputs/great-trango-tower-example/validation.json
++++ b/outputs/great-trango-tower-example/validation.json
+@@ -494,5 +494,14 @@
+   "validation_source": "reopened model.stl",
+   "volume_mm3": 647779.9530453328,
+   "watertight": true,
+-  "winding_consistent": true
++  "winding_consistent": true,
++  "bambu_project_validation": {
++    "project_3mf": "model.bambu-p2s.3mf",
++    "report": "bambu_project_validation.json",
++    "generic_is_geometry_only": true,
++    "bambu_project_marker_verified": true,
++    "standalone_reopen_and_reslice_succeeded": true,
++    "embedded_settings_verified": true,
++    "embedded_gcode_integrity_verified": true
++  }
+ }
+--- a/outputs/great-trango-tower-example/provenance.json
++++ b/outputs/great-trango-tower-example/provenance.json
+@@ -705,5 +705,13 @@
+   ],
+   "source_horizontal_resolution_m": 29.96579087860559,
+   "terrain_fidelity_status": "source-resolution-preserved",
+-  "topoforge_version": "0.1.0"
++  "topoforge_version": "0.1.0",
++  "bambu_project_3mf": {
++    "path": "model.bambu-p2s.3mf",
++    "sha256": "61e28bab1c64e423125dc11b90af6e5aa07de939efbd3cb86237e7ce213e042e",
++    "application": "BambuStudio 02.07.01.62",
++    "profile": "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic",
++    "standalone_reopen_success": true,
++    "report": "bambu_project_validation.json"
++  }
+ }
+diff --git a/outputs/great-trango-tower-example/OPEN_IN_BAMBU_STUDIO.txt b/outputs/great-trango-tower-example/OPEN_IN_BAMBU_STUDIO.txt
+new file mode 100644
+index 0000000..0c078bf
+--- /dev/null
++++ b/outputs/great-trango-tower-example/OPEN_IN_BAMBU_STUDIO.txt
+@@ -0,0 +1,8 @@
++请在 Bambu Studio 中打开：model.bambu-p2s.3mf
++
++model.bambu-p2s.3mf 是 Bambu Studio 02.07.01.62 生成的完整 P2S 工程，
++内含打印机、0.20 mm 工艺、Bambu PLA Basic、热床类型及切片数据。
++
++model.3mf 保留为跨软件兼容的标准 Core 3MF，仅含几何；直接用 Bambu Studio
++打开它会出现“不是来自 Bambu Lab，仅载入几何和颜色”的正常提示。
++
+--- a/outputs/mount-thor-example/build_manifest.json
++++ b/outputs/mount-thor-example/build_manifest.json
+@@ -13,7 +13,16 @@
+     "slicer_validation": "slicer_validation.json",
+     "source_acquisition": "source_acquisition.json",
+     "validation_html": "validation.html",
+-    "validation_json": "validation.json"
++    "validation_json": "validation.json",
++    "model_bambu_p2s": "model.bambu-p2s.3mf",
++    "bambu_project_validation": "bambu_project_validation.json",
++    "bambu_project_build_result": "bambu_project_build_result.json",
++    "bambu_project_reopen_result": "bambu_project_reopen_result.json",
++    "bambu_project_build_stdout": "bambu_project_build.stdout.log",
++    "bambu_project_build_stderr": "bambu_project_build.stderr.log",
++    "bambu_project_reopen_stdout": "bambu_project_reopen.stdout.log",
++    "bambu_project_reopen_stderr": "bambu_project_reopen.stderr.log",
++    "bambu_open_guide": "OPEN_IN_BAMBU_STUDIO.txt"
+   },
+   "generated_at": "2026-07-31T03:12:16.708255+00:00",
+   "resolved_config_sha256": "cecbcf2c1a2044f4387d8ac2e814f499d09b615aad5e1d9f7606e768d8a1aaf3",
+@@ -25,12 +34,21 @@
+     "preview_glb": "40f703123d24150cf7df2f692bb3e608d24e36af40511df6049a8233ac9a309a",
+     "preview_png": "77fcc8ff84dcd43cc81df9d785fb44d5bb9c2b83434bf42b19c1252c86e5d76f",
+     "processed_dem": "e6d501d87def5073541171b17d6fe22e3cd194d2a810ea7313d8b82134cee954",
+-    "provenance": "d444ba6031318de3f9fce4a3dd47724966c437fb87f1f40b5e3ce9ee213d26a0",
++    "provenance": "cbfbbe26c7703be3ec2755e222ee84d6b0cfd61c21d9b1f6849d2c46f08f9a82",
+     "resolved_config": "cecbcf2c1a2044f4387d8ac2e814f499d09b615aad5e1d9f7606e768d8a1aaf3",
+     "slicer_validation": "f51264456f9ee00631e404f4359e23906a830b73d61650e465b4fd16e6f2835b",
+     "source_acquisition": "204cfd9042f1be896636767b5607e2812ccf1164cd8bc590d37ed21914c40aa1",
+-    "validation_html": "c0d4548c6c5b6d927d367cc84f52db826567e183aedc0e6867596a5cd5ae597d",
+-    "validation_json": "1ec7146be24ab39dda9faa93776f095a7b1eb0cac22ce6c1b31f30fcb0581cad"
++    "validation_html": "5ceac431ec22d241632698089dc6ff7c61e1b515d1b3f947630cce3979b3fb81",
++    "validation_json": "ce48131c10ffe83f57d0c85b96579a59bd0bd4cd3cd499bcfe7f26c0599b5ab5",
++    "model_bambu_p2s": "1c1f16ed4634e6fa68f555637532e885187dfa4903be06cd6f4a49705e19e26b",
++    "bambu_project_validation": "aff54b6a853d529bc1ecb6694e93dd7e97ee540dd45ffc771241732ab6a3b2c4",
++    "bambu_project_build_result": "6db4ed8ba677e05a757217d85fc4aaec461c39de13c33ae361feb3d913ad3ac0",
++    "bambu_project_reopen_result": "551b0521d8a6b9f5a9d99080c0e09c41933142f4d539f1003db7d01706897569",
++    "bambu_project_build_stdout": "320c46fe1d2925c34144930fe6f5f3bd228eca9148f03490b04b436e7d399af2",
++    "bambu_project_build_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
++    "bambu_project_reopen_stdout": "ac6e292116fb74bdfb72f6669f6534b473ffec64fa2f88fe40f2e1353f55e4c7",
++    "bambu_project_reopen_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
++    "bambu_open_guide": "13fcff3b377223ac02910add81fba05bff5eba34565186c48447b2e2da8030c8"
+   },
+   "source_sha256": "6c85376e74a5df5997d1cb4caf7d76727c7b83c79f1c553be7bfceab1601415e",
+   "topoforge_version": "0.1.0"
+--- a/outputs/mount-thor-example/validation.json
++++ b/outputs/mount-thor-example/validation.json
+@@ -490,5 +490,14 @@
+   "validation_source": "reopened model.stl",
+   "volume_mm3": 781298.25342843,
+   "watertight": true,
+-  "winding_consistent": true
++  "winding_consistent": true,
++  "bambu_project_validation": {
++    "project_3mf": "model.bambu-p2s.3mf",
++    "report": "bambu_project_validation.json",
++    "generic_is_geometry_only": true,
++    "bambu_project_marker_verified": true,
++    "standalone_reopen_and_reslice_succeeded": true,
++    "embedded_settings_verified": true,
++    "embedded_gcode_integrity_verified": true
++  }
+ }
+--- a/outputs/mount-thor-example/provenance.json
++++ b/outputs/mount-thor-example/provenance.json
+@@ -701,5 +701,13 @@
+   ],
+   "source_horizontal_resolution_m": 29.933828957089247,
+   "terrain_fidelity_status": "source-resolution-preserved",
+-  "topoforge_version": "0.1.0"
++  "topoforge_version": "0.1.0",
++  "bambu_project_3mf": {
++    "path": "model.bambu-p2s.3mf",
++    "sha256": "1c1f16ed4634e6fa68f555637532e885187dfa4903be06cd6f4a49705e19e26b",
++    "application": "BambuStudio 02.07.01.62",
++    "profile": "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic",
++    "standalone_reopen_success": true,
++    "report": "bambu_project_validation.json"
++  }
+ }
+diff --git a/outputs/mount-thor-example/OPEN_IN_BAMBU_STUDIO.txt b/outputs/mount-thor-example/OPEN_IN_BAMBU_STUDIO.txt
+new file mode 100644
+index 0000000..0c078bf
+--- /dev/null
++++ b/outputs/mount-thor-example/OPEN_IN_BAMBU_STUDIO.txt
+@@ -0,0 +1,8 @@
++请在 Bambu Studio 中打开：model.bambu-p2s.3mf
++
++model.bambu-p2s.3mf 是 Bambu Studio 02.07.01.62 生成的完整 P2S 工程，
++内含打印机、0.20 mm 工艺、Bambu PLA Basic、热床类型及切片数据。
++
++model.3mf 保留为跨软件兼容的标准 Core 3MF，仅含几何；直接用 Bambu Studio
++打开它会出现“不是来自 Bambu Lab，仅载入几何和颜色”的正常提示。
++
+diff --git a/scripts/rollback-bambu-project-3mf.sh b/scripts/rollback-bambu-project-3mf.sh
+new file mode 100755
+index 0000000..4b62a20
+--- /dev/null
++++ b/scripts/rollback-bambu-project-3mf.sh
+@@ -0,0 +1,38 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++mode="${1:---check}"
++
++for slug in great-trango-tower mount-thor; do
++  bundle="$root/outputs/${slug}-example"
++  backup="$root/artifacts/verification/${slug}-pre-bambu-project"
++  case "$mode" in
++    --check)
++      test -f "$bundle/model.bambu-p2s.3mf"
++      test -f "$bundle/bambu_project_validation.json"
++      test -f "$backup/build_manifest.json"
++      printf 'ready  %s\n' "$slug"
++      ;;
++    --apply)
++      cp "$backup/build_manifest.json" "$bundle/build_manifest.json"
++      cp "$backup/validation.json" "$bundle/validation.json"
++      cp "$backup/provenance.json" "$bundle/provenance.json"
++      rm -f -- \
++        "$bundle/model.bambu-p2s.3mf" \
++        "$bundle/bambu_project_validation.json" \
++        "$bundle/bambu_project_build_result.json" \
++        "$bundle/bambu_project_reopen_result.json" \
++        "$bundle/bambu_project_build.stdout.log" \
++        "$bundle/bambu_project_build.stderr.log" \
++        "$bundle/bambu_project_reopen.stdout.log" \
++        "$bundle/bambu_project_reopen.stderr.log" \
++        "$bundle/OPEN_IN_BAMBU_STUDIO.txt"
++      printf 'restored  %s\n' "$slug"
++      ;;
++    *)
++      printf 'Usage: %s [--check|--apply]\n' "$0" >&2
++      exit 2
++      ;;
++  esac
++done

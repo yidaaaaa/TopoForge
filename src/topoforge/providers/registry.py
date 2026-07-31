@@ -18,12 +18,13 @@ def list_provider_descriptors() -> list[ProviderDescriptor]:
         ProviderDescriptor(
             provider_id="copernicus-aws",
             name="Copernicus DEM GLO-30/GLO-90 AWS COG mirror",
-            implemented=False,
+            implemented=True,
             requires_api_key=False,
             dataset_types=[DatasetType.DSM],
             notes=(
-                "Planned Phase 3 no-key route; configurable 2021 COG endpoints and "
-                "dataset-specific GLO-30/GLO-90 attribution."
+                "No-key configurable 2021 COG route with authoritative tile lists, "
+                "GLO-30-first whole-product fallback, SHA-256 cache, timeout/retry/rate limits, "
+                "and normalized-AOI metric raster acquisition."
             ),
         ),
         ProviderDescriptor(

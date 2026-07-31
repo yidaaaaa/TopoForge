@@ -1,0 +1,3 @@
+fidelity/AOI source patch reversed
+Only in /tmp/topoforge-fidelity-patch-work/pre: downloads
+Only in /tmp/topoforge-fidelity-patch-work/pre: scripts

@@ -7,7 +7,7 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from topoforge.models import DatasetMetadata, DatasetType
+from topoforge.models import AreaOfInterest, DatasetMetadata, DatasetType
 
 
 class CoverageInfo(BaseModel):
@@ -42,14 +42,14 @@ class ElevationProvider(Protocol):
 
     provider_id: str
 
-    def probe(self, bounds_wgs84: tuple[float, float, float, float]) -> CoverageInfo:
-        """Return explainable coverage for longitude/latitude bounds."""
+    def probe(self, aoi: AreaOfInterest) -> CoverageInfo:
+        """Return explainable coverage for a normalized AOI."""
         ...
 
     def metadata(self) -> DatasetMetadata:
-        """Return current dataset semantics and license metadata."""
+        """Return default dataset semantics and license metadata."""
         ...
 
-    def fetch(self, destination: Path) -> Path:
-        """Fetch or copy provider data into a cache-controlled path."""
+    def fetch(self, aoi: AreaOfInterest, destination: Path) -> object:
+        """Fetch a normalized AOI into a cache-controlled local raster."""
         ...

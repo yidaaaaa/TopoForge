@@ -6,7 +6,7 @@ def test_copernicus_aws_is_the_explicit_no_key_global_route() -> None:
 
     aws = descriptors["copernicus-aws"]
     assert aws.requires_api_key is False
-    assert aws.implemented is False
+    assert aws.implemented is True
     assert "GLO-30/GLO-90" in aws.name
 
     cdse = descriptors["copernicus-cdse"]

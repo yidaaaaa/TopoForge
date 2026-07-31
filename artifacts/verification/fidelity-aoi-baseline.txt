@@ -1,0 +1,44 @@
+baseline_utc=2026-07-31
+repo=/root/autodl-tmp/bambu/TopoForge
+source_dem_sha256=00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc
+git_status_begin
+## main
+ M .agent/DECISIONS.md
+ M .agent/ISSUES.md
+ M .agent/PLANS.md
+ M .agent/RUN_LOG.md
+ M .agent/STATE.md
+ M AGENTS.md
+ M README.md
+ M docs/architecture.md
+ M docs/printing.md
+ M docs/provenance.md
+ M printer_profiles/bambu-p2s-0.4.yaml
+ M src/topoforge/cli/app.py
+ M src/topoforge/config/__init__.py
+ M src/topoforge/config/profiles.py
+ M src/topoforge/engine/build.py
+ M src/topoforge/models/domain.py
+ M src/topoforge/validation/__init__.py
+ M src/topoforge/validation/slicers/__init__.py
+ M src/topoforge/validation/slicers/base.py
+ M src/topoforge/validation/slicers/discovery.py
+ M tests/cli/test_build_config_overrides.py
+ M tests/slicer/test_metrics.py
+?? artifacts/patches/p2s-bambu-validation.patch
+?? artifacts/verification/fidelity-aoi-baseline.txt
+?? artifacts/verification/p2s-bambu-validation.json
+?? scripts/resolve_bambu_profiles.py
+?? scripts/rollback-p2s-bambu-validation.sh
+?? src/topoforge/validation/manufacturing.py
+?? src/topoforge/validation/slicers/bambu.py
+?? tests/slicer/test_bambu.py
+?? tests/unit/test_bambu_profile_resolver.py
+?? tests/unit/test_manufacturing_gate.py
+?? tests/unit/test_printer_profiles.py
+git_status_end
+recent_commits_begin
+a9f5f5d (HEAD -> main) chore: add milestone patch and rollback evidence
+c8a1ef3 feat: deliver validated local terrain manufacturing pipeline
+10112b0 chore: capture empty repository baseline
+recent_commits_end
