@@ -292,3 +292,13 @@ Result: Git treated standard unified-diff context markers inside the committed `
 Command: amend the final evidence commit with scoped `.patch` whitespace attributes and create annotated tag `v0.3.1`.
 
 Result: `git show --check` is clean, the working tree is clean, and `v0.3.1` points to the final rollback/evidence commit.
+
+### Phase 5 deterministic tile layout foundation
+
+Command: implement `topoforge-tile-layout-v1` with stable layout digests, fixed-width `tile-r####-c####` IDs, row 0 north/column 0 west mapping, deterministic cell partitioning, physical +X East/+Y North bounds, seam-sharing core samples, clipped overlap halos, canonical JSON, strict reopen, and bundle-backed `topoforge tile-plan`.
+
+Result: focused layout and CLI tests report 9 passed. A 24 x 30 synthetic bundle plans a deterministic two-column layout, writes a canonical JSON artifact, and strictly reopens it. The core cell windows cover every source cell exactly once; adjacent tiles share seam samples and interior overlap windows expand by the configured halo.
+
+Command: full gate after Phase 5 layout work: `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, and `git diff --check`.
+
+Result: Ruff passed; format `111 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `150 passed, 55 warnings in 10.43s`; diff whitespace passed. Warnings remain the tracked Rasterio/NumPy masked-array deprecations and non-exhaustive self-intersection classification.

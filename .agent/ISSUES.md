@@ -167,3 +167,10 @@
 - **Reproduction:** Request source-preserving sampling above the configured cell/memory budget before 0.3.1; the build adapts but there is no separate printer-fit/resource report or explicit strict rejection mode.
 - **Expected behavior:** Users can inspect resolved dimensions, headroom, cells, exact triangles, memory, physical spacing, and vertical adjustment before mesh export and choose deterministic adaptation or rejection.
 - **Resolution:** Added typed adapt/strict budgets, exact triangle limits, early build-volume checks, reusable CLI/core preflight, cross-checked bundle evidence, focused tests, and a retained-DEM Gongga rebuild/repeat/slice.
+## TF-019 — Phase 5 lacked a stable tile identity and overlap contract
+
+- **Severity:** High
+- **Status:** Resolved for layout planning; extraction/assembly remain open roadmap work
+- **Reproduction:** There was no canonical partition for processed sample grids, no fixed row/column origin, and no machine-readable overlap window for later tile workers.
+- **Expected behavior:** Identical grid/model/tile-size/overlap inputs produce byte-identical layout JSON, stable IDs, complete non-overlapping core cell coverage, shared seam samples, and clipped outer halos.
+- **Resolution:** Added `topoforge.tiling` layout models, deterministic layout digest and tile IDs, north/west mapping, physical bounds, neighbor metadata, overlap windows, strict canonical write/reopen, bundle-backed `topoforge tile-plan`, and unit/CLI regressions.

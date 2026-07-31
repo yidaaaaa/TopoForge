@@ -2,7 +2,7 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Implemented milestone (TopoForge 0.3.1):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, explicit adapt/strict cell-triangle-memory budgets, build-volume/vertical-scale preflight, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Phase 5 tiling/assembly/connectors is next; worker API and Web follow stable tile contracts.
+**Implemented milestone (TopoForge 0.3.1):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, explicit adapt/strict cell-triangle-memory budgets, build-volume/vertical-scale preflight, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Phase 5 tiling/assembly/connectors is next; the first deterministic tile-layout contract and `topoforge tile-plan` command are now available. Worker API and Web follow stable tile contracts.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
 
@@ -230,6 +230,7 @@ Evidence is attached to `validation.json`, `provenance.json`, `build_manifest.js
 topoforge build       local GeoTIFF to complete artifact bundle
 topoforge build-global no-key Copernicus AWS AOI to complete artifact bundle
 topoforge preflight   printer fit, sampling, triangles, memory, and vertical-scale report
+topoforge tile-plan   deterministic tile IDs, overlap windows, and physical bounds
 topoforge fetch-dem   cache and normalize a Copernicus AWS AOI GeoTIFF
 topoforge synthetic   deterministic analytic GeoTIFF fixtures
 topoforge inspect     raster/STL/GLB/3MF measurements
@@ -258,6 +259,7 @@ topoforge doctor      Python/GDAL/PROJ/slicer versions
 - STL is reopened with coordinate welding; 3MF is strict-read with lib3mf and independently inspected as OPC/XML.
 - Exhaustive self-intersection remains `not_fully_checked` when no robust backend is available.
 - The default release boundary is official Bambu Studio plus resolved P2S machine/process/filament parameter checks; a slicer exit code alone is insufficient.
+- `topoforge tile-plan` plans only after a validated bundle exists; it does not redownload, resample, or silently alter the DEM. Per-tile extraction and assembly remain separate quality-gated steps.
 
 ## Quality gates
 
@@ -268,7 +270,7 @@ uv run pyright
 uv run pytest
 ```
 
-The 141-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, adapt/strict manufacturing preflight and build-volume gates, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run.
+The 150-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, adapt/strict manufacturing preflight and build-volume gates, deterministic tile IDs/overlap windows/canonical layout reopen, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run.
 
 ## Documentation
 

@@ -1,6 +1,6 @@
 # Current State
 
-- **Current milestone:** Phase 4 manufacturing resource/preflight hardening is complete in source and real evidence. Phase 5 deterministic tiling/assembly contracts are the next roadmap work.
+- **Current milestone:** Phase 4 manufacturing resource/preflight hardening is complete in source and real evidence. Phase 5 is in progress: deterministic tile layout and overlap contracts are implemented; per-tile artifacts, assembly manifests, seams, and connectors remain.
 - **Current version/branch/worktree:** TopoForge `0.3.1`, branch `main`, `/root/autodl-tmp/bambu/TopoForge`; release baseline is `1284a17`. Implementation commit `c975560` is complete; source-patch and isolated rollback verification both pass. The final evidence commit is published at annotated tag `v0.3.1`.
 - **Resource behavior:** `max_grid_cells`, `max_estimated_triangles`, and `max_estimated_memory_mb` form one deterministic effective budget. `adapt` coarsens and records the limiting resource; `strict` reports the requested grid/cells/triangles/memory and stops.
 - **Manufacturing preflight:** `topoforge preflight` reuses raster/scaling logic without publishing a build. Every build emits `manufacturing_preflight.json`; validation and provenance contain the identical object, and bundle verification cross-checks all three. Hard booleans cover printer volume, cell, triangle, memory, and height gates.
@@ -9,6 +9,7 @@
 - **Determinism/slice:** processed DEM, NoData mask, preflight JSON, STL, 3MF, GLB, and PNG match the repeat build byte-for-byte. PrusaSlicer 2.4.0 exited 0: 149 layers, 30,325,346-byte G-code, 15h14m13s, support false, and no floating/empty/out-of-bed warnings.
 - **Verification records:** `artifacts/verification/topoforge-0.3.1-gongga-resource-v3.json`, `artifacts/verification/topoforge-0.3.1-gongga-resource-v3-checksums.sha256`, and `artifacts/verification/topoforge-0.3.1-gongga-resource-v3-determinism.txt`, and `artifacts/verification/topoforge-0.3.1-verification.json`.
 - **Quality gates:** Ruff passed; format reported 106 files; Pyright 0 errors/0 warnings; Pytest 141 passed with 50 tracked warnings; `git diff --check` passed. Log: `artifacts/logs/topoforge-0.3.1-quality-gates.log`.
+- **Phase 5 layout gate:** full Ruff/format/Pyright gate passed; Pytest `150 passed, 55 warnings`; diff whitespace passed. The layout-specific additions are 9 focused passes.
 - **Known warnings:** TF-006 Rasterio/NumPy masked-array deprecations and TF-005 non-exhaustive self-intersection classification remain open. PrusaSlicer remains diagnostic; official Bambu Studio is the P2S production release boundary.
 - **Rollback:** `scripts/rollback-topoforge-0.3.1.sh` resets a clean worktree to baseline `1284a17`; isolated execution and source-patch forward/reverse checks pass. Patch: `artifacts/patches/topoforge-0.3.1-source.patch`.
-- **Next exact action:** begin Phase 5 deterministic tile schema and stable tile ID design; do not start worker API or Web implementation until tile/assembly contracts stabilize.
+- **Next exact action:** implement per-tile DEM/mask/provenance/validation extraction and an assembly manifest using the committed tile-layout contract; do not start worker API or Web implementation until tile/assembly contracts stabilize.

@@ -88,13 +88,14 @@ Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> wi
 
 ## Current Phase 5 sequence
 
-1. [ ] Define a deterministic map-tile schema, tile IDs, and stable row/column mapping.
-2. [ ] Define overlap/edge sampling and per-tile DEM/mask/provenance/validation contracts.
-3. [ ] Publish an assembly manifest and tile coverage map.
-4. [ ] Verify seam consistency and multi-tile mesh assembly.
-5. [ ] Add connector geometry and printer-profile tolerance tests.
-6. [ ] Stabilize tile/assembly contracts before worker API implementation.
-7. [ ] Stabilize worker API contracts before Web/MapLibre/Three.js implementation.
+1. [x] Define a deterministic map-tile schema, tile IDs, and stable row/column mapping.
+2. [x] Define deterministic overlap/edge sampling windows with clipped outer boundaries.
+3. [ ] Define per-tile DEM/mask/provenance/validation contracts.
+4. [ ] Publish an assembly manifest and tile coverage map.
+5. [ ] Verify seam consistency and multi-tile mesh assembly.
+6. [ ] Add connector geometry and printer-profile tolerance tests.
+7. [ ] Stabilize tile/assembly contracts before worker API implementation.
+8. [ ] Stabilize worker API contracts before Web/MapLibre/Three.js implementation.
 
 ## Milestone 02 acceptance — passed in 0.3.0
 

@@ -55,6 +55,7 @@ from topoforge.providers import (
     list_provider_descriptors,
 )
 from topoforge.raster import SyntheticTerrain, create_synthetic_geotiff
+from topoforge.tiling import TileLayoutConfig, plan_tile_layout, write_tile_layout
 from topoforge.util import sha256_file
 from topoforge.validation import validate_mesh
 
@@ -539,6 +540,55 @@ def preview(
         evidence["preview_glb"] = str((build_dir / "preview.glb").resolve())
         _emit(evidence)
     except (TopoForgeError, ValueError, OSError) as exc:
+        _fail(exc)
+
+
+@app.command("tile-plan")
+def tile_plan(
+    build_dir: Annotated[Path, typer.Argument(help="Completed TopoForge artifact directory.")],
+    max_tile_size_mm: Annotated[
+        tuple[float, float],
+        typer.Option("--max-tile-size-mm", metavar="WIDTH DEPTH"),
+    ] = (180.0, 180.0),
+    overlap_cells: Annotated[int, typer.Option("--overlap-cells", min=0)] = 1,
+    output: Annotated[Path | None, typer.Option("--output", "-o")] = None,
+) -> None:
+    """Plan deterministic north-to-south/west-to-east terrain tiles from a bundle."""
+    try:
+        bundle = build_dir.expanduser().resolve()
+        verify_artifact_bundle(bundle)
+        with rasterio.open(bundle / "processed_dem.tif") as dataset:
+            source_grid_shape = (dataset.height, dataset.width)
+        validation = json.loads((bundle / "validation.json").read_text(encoding="utf-8"))
+        dimensions = validation.get("dimensions_mm")
+        if not isinstance(dimensions, list) or len(dimensions) < 2:
+            raise ValueError("validation.json does not contain model dimensions")
+        config = TileLayoutConfig(
+            source_grid_shape=source_grid_shape,
+            model_width_mm=float(dimensions[0]),
+            model_depth_mm=float(dimensions[1]),
+            maximum_tile_width_mm=max_tile_size_mm[0],
+            maximum_tile_depth_mm=max_tile_size_mm[1],
+            overlap_cells=overlap_cells,
+        )
+        layout = plan_tile_layout(config)
+        published = write_tile_layout(layout, output) if output is not None else None
+        result: dict[str, Any] = {
+            "status": "planned",
+            "bundle": str(bundle),
+            "layout_id": layout.layout_id,
+            "tile_grid_shape": layout.tile_grid_shape,
+            "tile_count": layout.tile_count,
+            "overlap_cells": layout.overlap_cells,
+            "row_origin": layout.row_origin,
+            "column_origin": layout.column_origin,
+        }
+        if published is not None:
+            result["output"] = str(published)
+        else:
+            result["layout"] = layout.model_dump(mode="json")
+        _emit(result)
+    except (TopoForgeError, ValueError, OSError, RasterioError) as exc:
         _fail(exc)
 
 
