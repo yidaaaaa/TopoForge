@@ -78,6 +78,26 @@ topoforge wizard/run/resume + saved WorkflowLaunchConfig
 
 Each stage identity binds its upstream manifest SHA-256 values and effective content settings. For global acquisition, AOI and provider-selection policy determine the stage identity while cache location, timeout, attempts, and rate-limit timing remain operational controls. Reuse strictly reopens the metric single-band raster, normalized AOI, provider/dataset trace, NoData count, source-acquisition manifest hash, and every aligned quality mask through canonical `acquire.json`; file existence alone is never sufficient. Changed settings choose another content-addressed path, failures receive retained status records, and reviewed evidence is never silently overwritten. The execution-specific CLI summary reports newly completed versus reused stages without making canonical artifacts depend on invocation history.
 
+Phase 7 adds an optional content-addressed overlay stage after the immutable terrain build:
+
+```text
+verified build bundle + local OverlayConfig
+  -> strict GPX or GeoJSON parse, or DEM-derived threshold contours
+  -> explicit source CRS to processed metric CRS transformation
+  -> clip to the exact model footprint and reject empty results
+  -> map XY to the fixed-diagonal terrain triangles without changing elevations
+  -> reject original NoData overlap unless explicitly allowed
+  -> printer minimum-feature and triangle-budget gates
+  -> independent watertight raised/embed overlay meshes
+  -> per-layer STL + plan GeoJSON
+  -> named terrain/overlay mesh resources
+  -> one single-material components object + one top-level 3MF build item
+  -> colored GLB + north-marked PNG
+  -> provenance/validation HTML/JSON + strict checksum manifest
+```
+
+The overlay stage identity includes the source build manifest, complete overlay settings, and every local source SHA-256. Workflow backup/restore includes referenced external overlay files. Strict reuse reopens all STL, 3MF, GLB, PNG, JSON, YAML, source hashes, terrain hashes, assembly counts, and material assignments.
+
 ## Package responsibilities
 
 - `models` and `config`: external validation, units, semantics, printer profiles, resolved YAML.
@@ -94,6 +114,7 @@ Each stage identity binds its upstream manifest SHA-256 values and effective con
 - `providers`: normalized-AOI provider contracts, explainable deterministic selection/fetch fallback, Copernicus AWS catalog/tile/ancillary-mask planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
 - `geocoding`: cached Nominatim-compatible candidate search and explicit ambiguity resolution; selected candidates become ordinary recorded AOIs before provider selection.
 - `tiling`: versioned deterministic layout/extraction, numerical and mesh seam measurement, global-frame assembly, printer-derived connectors, reversible print-local placement, actual per-tile slicer evidence, deterministic maps/previews, complete SHA-256 binding, canonical JSON, and atomic publication. Overlap halos remain evidence rather than duplicate solids; terrain tops remain unchanged by base-only connector booleans.
+- `overlays`: strict local GPX/GeoJSON and DEM-contour sources, CRS transformation, exact terrain-triangle surface mapping, NoData/minimum-feature/resource gates, deterministic label geometry, independent watertight meshes, components-assembly 3MF, colored preview artifacts, provenance, validation, and strict reuse.
 
 ## Geometry topology
 
@@ -107,4 +128,4 @@ The interoperable 3MF path adds official lib3mf strict read with zero warnings, 
 
 ## Extension sequence
 
-The local/resolved-place AOI, provider/cache path, printer-aware manufacturing core, Phase 5 manufacturing tiling, and Phase 6 single-workstation workflow contracts are complete. Physical connector calibration is retained as deferred, non-blocking evidence. Phase 7 adds local provenance-aware overlays, followed by Phase 8 packaging/release hardening. Worker-backed FastAPI and Web/MapLibre/Three.js remain deferred Phase 9 and must still call the same Python core when implemented.
+The local/resolved-place AOI, provider/cache path, printer-aware manufacturing core, Phase 5 manufacturing tiling, Phase 6 single-workstation workflow, and Phase 7 local overlay contracts are complete. Physical connector calibration is retained as deferred, non-blocking evidence. Phase 8 now covers packaging, CI, benchmarks, reference regions, and offline release hardening. Worker-backed FastAPI and Web/MapLibre/Three.js remain deferred Phase 9 and must still call the same Python core when implemented.

@@ -383,7 +383,15 @@ def test_global_workflow_reuses_acquisition_and_rejects_manifest_tampering(
         acquisition_descriptors=descriptors,
     )
     assert repeated.completed_stages == ()
-    assert repeated.reused_stages == tuple(WorkflowStage)[:-2]
+    assert repeated.reused_stages == (
+        WorkflowStage.ACQUIRE,
+        WorkflowStage.SOURCE,
+        WorkflowStage.BUILD,
+        WorkflowStage.LAYOUT,
+        WorkflowStage.EXTRACT,
+        WorkflowStage.MESH,
+        WorkflowStage.CONNECT,
+    )
     assert provider.fetch_count == 1
     assert repeated.manifest_path.read_bytes() == manifest_bytes
 

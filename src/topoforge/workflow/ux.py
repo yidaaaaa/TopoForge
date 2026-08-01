@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from topoforge.exceptions import ConfigurationError
 from topoforge.models import BuildConfig
+from topoforge.overlays import OverlayConfig
 from topoforge.provenance import write_json
 from topoforge.util import sha256_file
 from topoforge.validation.slicers import (
@@ -48,6 +49,7 @@ class WorkflowLaunchConfig(BaseModel):
     workspace_dir: Path
     build: BuildConfig
     global_source: GlobalAcquisitionConfig | None = None
+    overlay: OverlayConfig | None = None
     maximum_tile_width_mm: float = Field(default=180.0, gt=0)
     maximum_tile_depth_mm: float = Field(default=180.0, gt=0)
     overlap_cells: int = Field(default=1, ge=0)
@@ -77,6 +79,7 @@ class WorkflowLaunchConfig(BaseModel):
             workspace_dir=self.workspace_dir,
             build=self.build,
             global_source=self.global_source,
+            overlay=self.overlay,
             maximum_tile_width_mm=self.maximum_tile_width_mm,
             maximum_tile_depth_mm=self.maximum_tile_depth_mm,
             overlap_cells=self.overlap_cells,
@@ -269,6 +272,18 @@ def inspect_workflow_workspace(
         if key in validation:
             metrics[key] = validation[key]
     for stage, keys in (
+        (
+            WorkflowStage.OVERLAY,
+            (
+                "source_count",
+                "layer_count",
+                "feature_count",
+                "triangle_count",
+                "combined_3mf_object_count",
+                "combined_glb_geometry_count",
+                "terrain_artifacts_unchanged",
+            ),
+        ),
         (WorkflowStage.LAYOUT, ("tile_count", "tile_grid_shape")),
         (WorkflowStage.CONNECT, ("connector_count", "connector_fit_status")),
         (
@@ -289,6 +304,7 @@ def inspect_workflow_workspace(
                     metrics[key] = record.verification[key]
 
     connect_dir = stage_paths.get(WorkflowStage.CONNECT)
+    overlay_dir = stage_paths.get(WorkflowStage.OVERLAY)
     slice_dir = stage_paths.get(WorkflowStage.SLICE)
     project_dir = stage_paths.get(WorkflowStage.PROJECT)
     candidates = {
@@ -318,6 +334,19 @@ def inspect_workflow_workspace(
                 "connector_map": connect_dir / "connector-map.png",
                 "connector_assembly_glb": connect_dir / "connector-assembly.global.glb",
                 "connector_validation": connect_dir / "print-tile-assembly-validation.json",
+            }
+        )
+    if overlay_dir is not None:
+        candidates.update(
+            {
+                "overlay_directory": overlay_dir,
+                "overlay_manifest": overlay_dir / "overlay_manifest.json",
+                "overlay_validation": overlay_dir / "validation.json",
+                "overlay_provenance": overlay_dir / "provenance.json",
+                "overlay_preview_png": overlay_dir / "overlay-preview.png",
+                "overlay_preview_glb": overlay_dir / "preview-with-overlays.glb",
+                "overlay_model_3mf": overlay_dir / "model-with-overlays.3mf",
+                "overlay_plan_geojson": overlay_dir / "overlay-plan.geojson",
             }
         )
     if slice_dir is not None:

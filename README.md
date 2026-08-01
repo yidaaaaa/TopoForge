@@ -2,7 +2,7 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Implemented milestone (TopoForge 0.5.0):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, explicit adapt/strict cell-triangle-memory budgets, build-volume/vertical-scale preflight, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Phase 5 manufacturing tiling remains frozen at 0.4.0. Phase 6 single-user local software is complete: one reviewed launch, resumable local/global stages, measured summaries, static artifact browsing, disk estimates, confirmed cleanup, checksum-bound backup/restore, offline recovery documentation, and dependency hardening. API/Web remains planned but is deferred until overlays and release hardening are complete.
+**Implemented milestone (TopoForge 0.6.0):** the validated local/no-key terrain core, deterministic tiling, and Phase 6 single-workstation workflow now include provenance-aware local GPX, road, river, coast, label, and DEM-derived contour overlays. Overlay inputs are checksum-bound, CRS-transformed into the existing +X East/+Y North/+Z Up model frame, mapped to the exact fixed-diagonal terrain surface, checked against original NoData, exported as independent STL layers plus one deterministic components-assembly 3MF, and presented in colored GLB/PNG previews. API/Web remains planned but is deferred until Phase 8 release hardening is complete.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
 
@@ -82,6 +82,43 @@ A new small Amazon AOI was resolved through the public Copernicus AWS GLO-30 `ti
 | Diagnostic slice | PrusaSlicer exit `0`, 32 layers, no support/floating/empty/out-of-bed warning |
 
 The first acquisition at the exact one-degree tile edge exposed one 74-pixel reprojection-only column. The retained v1 failure was corrected by reprojecting an independent source-footprint mask and selecting the largest all-covered rectangle; genuine source NoData remains masked. The 0.2.0 quality-mask bundle is `outputs/amazon-copernicus-aws-quality-v2`. Its copied `source_acquisition.json` records the exact S3 prefix listing plus every mask URL, ETag, Last-Modified, byte count, source SHA-256, semantics, value handling, output alignment, and bundle role. The terrain DEM/STL/3MF/GLB/PNG artifacts remain byte-identical to `outputs/amazon-copernicus-aws-v2`; adding masks records source quality without changing elevations.
+
+## Add local overlays
+
+`topoforge overlay` consumes an existing verified build and a local overlay YAML. It never changes `processed_dem.tif`, the source terrain STL/3MF/GLB, or elevation values.
+
+```bash
+uv run topoforge overlay outputs/completed-bundle \
+  --config overlays.yaml \
+  --output outputs/completed-bundle-overlays
+
+TOPOFORGE_BAMBU_STUDIO=/PATH/TO/BambuStudio.AppImage uv run topoforge slice \
+  outputs/completed-bundle-overlays/model-with-overlays.3mf \
+  --output outputs/completed-bundle-overlays/model-with-overlays.gcode \
+  --slicer bambu-studio \
+  --machine-profile MACHINE.json \
+  --process-profile PROCESS.json \
+  --filament-profile FILAMENT.json
+```
+
+Local GeoJSON road/river/coast lines and label points require an explicit source CRS. GPX is WGS84. Generated contours come only from measured DEM threshold-cell boundaries and do not add or sharpen elevation detail. Original NoData intersections are rejected unless `allow_original_nodata: true` is explicit. Width, raised height, embed depth, label size, feature count, triangle count, and source hashes are all bounded and recorded.
+
+The combined 3MF retains one named terrain mesh and one named mesh per overlay source, assigns every mesh to one Core base-material resource, places them in one identity-transform components object, and publishes one top-level build item. This fixes relative placement in slicers without flattening provenance identities. Per-layer STL, colored GLB, north-marked PNG, plan GeoJSON, resolved YAML, provenance, validation JSON/HTML, and a checksum manifest remain separate roles. See [docs/overlays.md](docs/overlays.md).
+
+The retained Amazon Phase 7 release reused the existing DEM without network access or terrain rebuild:
+
+| Measurement | Result |
+| --- | --- |
+| Overlay sources / features | `6 / 76` |
+| Overlay triangles | `14,320` |
+| Combined 3MF | `7` mesh objects, `7` components, `1` build item, `36,220` triangles |
+| Terrain source roles | all SHA-256 values unchanged |
+| Determinism | all `14` manifest artifact roles byte-identical in a second output directory |
+| Official P2S slice | exit `0`, `49` layers, `23.74 g`, `1h 3m 3s` |
+| Slice gates | no floating region, empty layer, out-of-bed result, or support material |
+| Verification | `artifacts/verification/topoforge-0.6.0-phase7-overlays-verification.json` |
+
+The local road, river, coast, label, and GPX files in `artifacts/phase7-inputs` are explicitly synthetic verification vectors, not claims about real mapped features. Contours are derived from the retained real DEM. Bambu Studio logs the official P2S `T65535` AMS unload sentinel and internal `ZFiller` diagnostics for both this build and previously accepted single-terrain baselines; the verification record preserves the literal diagnostics and does not relabel them as overlay geometry failures.
 
 ## Install
 

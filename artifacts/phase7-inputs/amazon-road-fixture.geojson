@@ -1,0 +1,21 @@
+{
+  "features": [
+    {
+      "geometry": {
+        "coordinates": [
+          [-60.019, -3.129],
+          [-60.010, -3.120],
+          [-60.001, -3.111]
+        ],
+        "type": "LineString"
+      },
+      "id": "synthetic-road",
+      "properties": {
+        "fixture": true,
+        "name": "Synthetic road verification line"
+      },
+      "type": "Feature"
+    }
+  ],
+  "type": "FeatureCollection"
+}

@@ -1,0 +1,21 @@
+{
+  "features": [
+    {
+      "geometry": {
+        "coordinates": [
+          [-60.0185, -3.112],
+          [-60.0105, -3.121],
+          [-60.002, -3.1285]
+        ],
+        "type": "LineString"
+      },
+      "id": "synthetic-river",
+      "properties": {
+        "fixture": true,
+        "name": "Synthetic river verification line"
+      },
+      "type": "Feature"
+    }
+  ],
+  "type": "FeatureCollection"
+}

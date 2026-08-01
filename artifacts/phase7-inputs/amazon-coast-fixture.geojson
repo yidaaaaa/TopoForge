@@ -1,0 +1,22 @@
+{
+  "features": [
+    {
+      "geometry": {
+        "coordinates": [
+          [-60.0188, -3.126],
+          [-60.012, -3.124],
+          [-60.006, -3.1265],
+          [-60.0015, -3.124]
+        ],
+        "type": "LineString"
+      },
+      "id": "synthetic-coast",
+      "properties": {
+        "fixture": true,
+        "name": "Synthetic coast verification line"
+      },
+      "type": "Feature"
+    }
+  ],
+  "type": "FeatureCollection"
+}

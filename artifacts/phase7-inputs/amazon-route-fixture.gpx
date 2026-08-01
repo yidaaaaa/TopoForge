@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="TopoForge Phase 7 verification"
+  xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Synthetic local GPX verification fixture</name>
+  </metadata>
+  <trk>
+    <name>Synthetic verification route</name>
+    <trkseg>
+      <trkpt lat="-3.1280" lon="-60.0175"><ele>0</ele></trkpt>
+      <trkpt lat="-3.1200" lon="-60.0100"><ele>0</ele></trkpt>
+      <trkpt lat="-3.1120" lon="-60.0025"><ele>0</ele></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

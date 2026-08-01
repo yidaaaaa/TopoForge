@@ -1,6 +1,6 @@
 # Offline Local Workflow
 
-TopoForge 0.5.0 can configure, run, inspect, back up, restore, and resume a completed local workflow without an API or Web server. A new global AOI still needs either network access or every required provider request already present in the content-addressed cache.
+TopoForge 0.6.0 can configure, run, inspect, back up, restore, resume, and add checksum-bound local overlays without an API or Web server. A new global AOI still needs either network access or every required provider request already present in the content-addressed cache.
 
 ## Prepare the locked environment
 

@@ -217,7 +217,7 @@ def test_local_run_resumes_after_slice_failure_and_reuses_verified_stages(
     expected_stages = tuple(
         stage
         for stage in WorkflowStage
-        if stage not in {WorkflowStage.ACQUIRE, WorkflowStage.PROJECT}
+        if stage not in {WorkflowStage.ACQUIRE, WorkflowStage.OVERLAY, WorkflowStage.PROJECT}
     )
     assert reused.reused_stages == expected_stages
     assert manifest_path.read_bytes() == recovered_bytes

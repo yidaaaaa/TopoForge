@@ -12,8 +12,8 @@ Updated: 2026-08-02
 - [x] Phase 4 — build-volume/resource UX, adapt/strict budgets, vertical-scaling preflight, real rebuild, and slice evidence. Completed in 0.3.1.
 - [x] Phase 5 — tiling, assembly manifest/map, labels, verified connectors, print-local files, and per-tile slicing. Completed in 0.4.0.
 - [x] Phase 6 — local software completion: resumable one-command workflow, local UX, recovery, and core hardening. Completed in 0.5.0 on 2026-08-02.
-- [ ] Phase 7 — local provenance-aware GPX/road/river/contour/label/coast overlays.
-- [ ] Phase 8 — local release hardening: packaging, CI, benchmarks, reference regions, and offline documentation.
+- [x] Phase 7 — local provenance-aware GPX/road/river/contour/label/coast overlays. Completed in 0.6.0 on 2026-08-02.
+- [ ] Phase 8 — local release hardening: packaging, CI, benchmarks, reference regions, and offline documentation. Current.
 - [ ] Phase 9 (deferred) — worker-backed FastAPI and React/MapLibre/Three.js Web application, only after local-use completion.
 
 ## Completed Milestone 01 gate
@@ -118,6 +118,25 @@ Real evidence: eight connectors over four seams, `0.2 mm` total lateral / `0.2 m
 Real global-workflow evidence: `artifacts/verification/topoforge-0.4.0-amazon-global-workflow-phase6-cache-replay.json`. The production Copernicus AWS provider replayed the retained Amazon bbox with 7/7 cache hits and a fail-on-network opener that recorded zero network attempts. The retained and replayed 74 x 74 elevation arrays match exactly; all seven stages strictly reopen and the repeat/CLI runs reuse all seven stages with a byte-identical workflow manifest.
 
 Phase 6 closure evidence: `artifacts/verification/topoforge-0.5.0-phase6-local-software-verification.json`. The retained Amazon workflow reused all seven stages without acquisition or terrain rebuild, reported sufficient disk headroom and zero cleanup candidates, produced two byte-identical 3,320,977-byte backups, restored 57/57 stage files byte-identically, and passed strict static browsing. TF-005 and TF-006 evidence are retained beside it. Final suite: 179 passed with no warnings.
+
+## Completed Phase 7 — local provenance-aware overlays (0.6.0)
+
+1. [x] Define strict typed local GPX, GeoJSON, and generated-contour source/config/provenance contracts.
+2. [x] Implement road, river, coast, GPX, label, and DEM-derived contour layers without changing terrain elevations.
+3. [x] Transform explicit source CRS values into the processed metric CRS, including antimeridian and 85-degree high-latitude AEQD cases.
+4. [x] Map overlay points to the exact fixed-diagonal terrain triangles in +X East/+Y North/+Z Up coordinates.
+5. [x] Reject original NoData intersections by default and record explicit opt-in overlap.
+6. [x] Enforce printer minimum features, feature count, triangle budget, model bounds, watertightness, winding, and positive volume.
+7. [x] Publish per-layer STL, plan GeoJSON, colored GLB, north-marked PNG, provenance, validation JSON/HTML, resolved YAML, and checksums.
+8. [x] Export seven named mesh resources through one identity-transform components assembly, one top-level build item, and one explicit Core base-material group.
+9. [x] Integrate `topoforge overlay`, optional workflow/wizard overlay config, content-addressed reuse, static browsing, storage estimates, and backup/restore of external sources.
+10. [x] Prove strict reread, tamper rejection, CLI behavior, source terrain hash preservation, format orientation, and byte determinism.
+11. [x] Reuse the retained Amazon build without download/rebuild; generate primary/repeat 0.6.0 bundles and actual official Bambu Studio P2S slicing.
+12. [x] Freeze Phase 7 with 186 passing tests, release documentation, verification JSON, SHA256SUMS, commit, and tag.
+
+Real evidence: `outputs/amazon-phase7-overlays-0.6.0-v1` and `artifacts/verification/topoforge-0.6.0-phase7-overlays-verification.json`. Six sources produce 76 features and 14,320 overlay triangles. The combined 3MF has seven named mesh objects, seven components, one components object, one top-level build item, one base-material group, seven material assignments, 36,220 triangles, and zero lib3mf warnings. All 14 manifest artifact roles repeat byte-for-byte and source terrain hashes are unchanged.
+
+Official Bambu Studio `02.07.01.62` exits 0 with 49 layers, 23.74 g, and 1h 3m 3s. Floating, empty-layer, out-of-bed, and support checks are false. The literal official P2S `T65535` AMS unload sentinel and internal `ZFiller` diagnostics are retained and classified against accepted Gongga build/reopen baselines; no logs or presets are hidden or modified.
 
 ## Deferred non-blocking physical validation
 

@@ -1,0 +1,109 @@
+allow_original_nodata: false
+clip_to_model: true
+max_features: 20000
+max_triangles: 500000
+preview_width_px: 1200
+sources:
+  - acquisition_period: local synthetic verification fixture
+    attribution: TopoForge Phase 7 verification fixture; not real road data
+    dataset_name: Synthetic Amazon road overlay fixture
+    dataset_version: "1"
+    format: geojson
+    kind: road
+    license: CC0-1.0
+    path: artifacts/phase7-inputs/amazon-road-fixture.geojson
+    source_crs: EPSG:4326
+    source_id: road
+    style:
+      color: "#e9c46a"
+      embed_depth_mm: 0.2
+      label_font_height_mm: 4.0
+      line_width_mm: 0.8
+      raised_height_mm: 0.4
+      simplify_tolerance_mm: 0.0
+  - acquisition_period: local synthetic verification fixture
+    attribution: TopoForge Phase 7 verification fixture; not real river data
+    dataset_name: Synthetic Amazon river overlay fixture
+    dataset_version: "1"
+    format: geojson
+    kind: river
+    license: CC0-1.0
+    path: artifacts/phase7-inputs/amazon-river-fixture.geojson
+    source_crs: EPSG:4326
+    source_id: river
+    style:
+      color: "#277da1"
+      embed_depth_mm: 0.2
+      label_font_height_mm: 4.0
+      line_width_mm: 0.8
+      raised_height_mm: 0.4
+      simplify_tolerance_mm: 0.0
+  - acquisition_period: local synthetic verification fixture
+    attribution: TopoForge Phase 7 verification fixture; not real coast data
+    dataset_name: Synthetic Amazon coast overlay fixture
+    dataset_version: "1"
+    format: geojson
+    kind: coast
+    license: CC0-1.0
+    path: artifacts/phase7-inputs/amazon-coast-fixture.geojson
+    source_crs: EPSG:4326
+    source_id: coast
+    style:
+      color: "#0096c7"
+      embed_depth_mm: 0.2
+      label_font_height_mm: 4.0
+      line_width_mm: 0.8
+      raised_height_mm: 0.4
+      simplify_tolerance_mm: 0.0
+  - acquisition_period: local synthetic verification fixture
+    attribution: TopoForge Phase 7 verification fixture
+    dataset_name: Synthetic Amazon label overlay fixture
+    dataset_version: "1"
+    format: geojson
+    kind: label
+    label_property: name
+    license: CC0-1.0
+    path: artifacts/phase7-inputs/amazon-label-fixture.geojson
+    source_crs: EPSG:4326
+    source_id: label
+    style:
+      color: "#111111"
+      embed_depth_mm: 0.2
+      label_font_height_mm: 4.0
+      line_width_mm: 0.8
+      raised_height_mm: 0.4
+      simplify_tolerance_mm: 0.0
+  - acquisition_period: local synthetic verification fixture
+    attribution: TopoForge Phase 7 verification fixture; not a recorded real route
+    dataset_name: Synthetic Amazon GPX overlay fixture
+    dataset_version: "1"
+    format: gpx
+    kind: gpx
+    license: CC0-1.0
+    path: artifacts/phase7-inputs/amazon-route-fixture.gpx
+    source_crs: EPSG:4326
+    source_id: route
+    style:
+      color: "#d1495b"
+      embed_depth_mm: 0.2
+      label_font_height_mm: 4.0
+      line_width_mm: 0.8
+      raised_height_mm: 0.4
+      simplify_tolerance_mm: 0.0
+  - acquisition_period: derived during local Phase 7 verification
+    attribution: Derived by TopoForge from the retained Copernicus processed DEM
+    contour_interval_m: 10.0
+    dataset_name: Retained Amazon DEM derived contours
+    dataset_version: "1"
+    format: generated-contours
+    kind: contour
+    license: Inherits retained Copernicus DEM terms
+    source_crs: EPSG:4326
+    source_id: contour
+    style:
+      color: "#7f5539"
+      embed_depth_mm: 0.2
+      label_font_height_mm: 4.0
+      line_width_mm: 0.6
+      raised_height_mm: 0.4
+      simplify_tolerance_mm: 0.0

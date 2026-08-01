@@ -466,3 +466,25 @@ Result: an attempted validation-method text update was first rejected by strict 
 Command: final full `uv run pytest` in a persistent PTY after shorter tool calls hit the executor's 30-second boundary.
 
 Result: `179 passed in 63.32s`, exit 0, with no warning summary. Log: `artifacts/logs/topoforge-0.5.0-phase6-pytest.log`.
+
+### Phase 7 local overlay completion
+
+Command: implement strict local GPX/GeoJSON/generated-contour models, CRS transformation, exact terrain-triangle mapping, road/river/coast/label/route/contour mesh generation, per-layer STL, combined 3MF/GLB/PNG, provenance/validation/manifests, CLI, workflow integration, maintenance integration, and focused tests.
+
+Result: all six overlay kinds, NoData rejection/opt-in, tamper detection, determinism, antimeridian AEQD, 85-degree AEQD, orientation, strict format reread, CLI, content-addressed reuse, browser roles, storage estimates, and backup/restore source binding are implemented.
+
+Command: replace seven top-level 3MF build items with seven named mesh resources in one components assembly, add one base-material group and seven material assignments, and make the complete assembly shape a required validation gate.
+
+Result: strict reread reports seven mesh objects, seven components, one components object, one top-level build item, one base-material group, seven material assignments, 36,220 triangles, and zero warnings. Focused overlay/workflow suite reports 15 passed.
+
+Command: reuse the retained Amazon Phase 6 build and local Phase 7 verification vectors to generate `outputs/amazon-phase7-overlays-0.6.0-v1` and an independent repeat; run official Bambu Studio P2S slicing and the release verifier.
+
+Result: no network fetch or terrain rebuild occurred. Six sources produce 76 features and 14,320 overlay triangles. All 14 manifest artifact roles repeat byte-for-byte and terrain hashes remain unchanged. Bambu Studio exits 0 with 49 layers, 23.74 g, 1h 3m 3s, and no floating/empty/out-of-bed/support result. Evidence: `artifacts/verification/topoforge-0.6.0-phase7-overlays-verification.json`.
+
+Command: compare Bambu `T65535` and `ZFiller` diagnostics with the official resolved P2S machine profile and retained accepted Gongga build/reopen logs.
+
+Result: `T65535` is the literal official AMS unload sentinel in `machine_end_gcode` and generated G-code; the same diagnostic appears in both Gongga baselines. `ZFiller` also appears in accepted single-terrain baselines. Raw logs are retained and no preset or warning is hidden.
+
+Command: run `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, final release verification, and `sha256sum -c SHA256SUMS`.
+
+Result: Ruff `All checks passed!`; format `140 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `186 passed in 73.59s`; all 20 final output files report `OK`.

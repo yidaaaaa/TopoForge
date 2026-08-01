@@ -168,6 +168,8 @@ def _disk_probe(path: Path) -> Path:
 
 def _external_reference_paths(config: WorkflowLaunchConfig) -> tuple[Path, ...]:
     values = [config.build.dem_path, *config.slicer_settings, *config.slicer_filaments]
+    if config.overlay is not None:
+        values.extend(source.path for source in config.overlay.sources if source.path is not None)
     if config.build.source_acquisition_manifest is not None:
         values.append(config.build.source_acquisition_manifest)
     unique: dict[Path, None] = {}
@@ -225,6 +227,14 @@ def estimate_workflow_storage(
     cells, triangles, basis = _measured_counts(config, summary)
     tile_count = _tile_count(config, summary)
     current_bytes = _directory_size(root)
+    overlay_triangles = 0
+    if config.overlay is not None:
+        measured_overlay = summary.metrics.get("triangle_count") if summary is not None else None
+        overlay_triangles = (
+            measured_overlay
+            if isinstance(measured_overlay, int) and measured_overlay > 0
+            else config.overlay.max_triangles
+        )
     source_mode: Literal["local", "global"] = (
         "global" if config.global_source is not None else "local"
     )
@@ -235,6 +245,7 @@ def estimate_workflow_storage(
         "tile_rasters_and_seam_evidence": int(cells * 8 * 1.15) + tile_count * 512 * 1024,
         "tile_mesh_formats": triangles * 105 + tile_count * 2 * 1024 * 1024,
         "connector_and_print_local_formats": triangles * 210 + tile_count * 3 * 1024 * 1024,
+        "overlay_formats_and_reports": overlay_triangles * 180,
         "slice_outputs": triangles * 128 if config.slicing_enabled else 0,
         "project_outputs": triangles * 120 if config.project_evidence_enabled else 0,
     }
@@ -687,6 +698,31 @@ def restore_workflow_backup(
                 "workspace_dir": destination,
                 "build": build,
                 "global_source": global_source,
+                "overlay": (
+                    None
+                    if launch.overlay is None
+                    else launch.overlay.model_copy(
+                        update={
+                            "sources": tuple(
+                                source_config.model_copy(
+                                    update={
+                                        "path": (
+                                            None
+                                            if source_config.path is None
+                                            else _remap_path(
+                                                source_config.path,
+                                                original_root=original_root,
+                                                restored_root=destination,
+                                                external_map=external_map,
+                                            )
+                                        )
+                                    }
+                                )
+                                for source_config in launch.overlay.sources
+                            )
+                        }
+                    )
+                ),
                 "slicer_settings": tuple(
                     _remap_path(
                         path,

@@ -1,0 +1,209 @@
+{
+  "determinism": {
+    "artifact_hashes_byte_identical": true,
+    "artifact_role_count": 14,
+    "manifest_byte_identical": true
+  },
+  "diagnostic_classification": {
+    "empty_layer_diagnostic_present": false,
+    "floating_diagnostic_present": false,
+    "gongga_build_zfiller_diagnostic_count": 7,
+    "gongga_reopen_zfiller_diagnostic_count": 6,
+    "invalid_object_material_assignment": false,
+    "out_of_bed_diagnostic_present": false,
+    "support_required": false,
+    "t65535_classification": "official P2S machine_end_gcode AMS unload sentinel; identical diagnostic is retained in the accepted Gongga build and project-reopen baselines",
+    "t65535_diagnostic_present": true,
+    "zfiller_classification": "non-gating Bambu Studio polygon diagnostic also present in accepted single-terrain baselines; result.json warning_message is empty and required slice metrics pass",
+    "zfiller_diagnostic_count": 10
+  },
+  "inputs": {
+    "bambu_executable": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage",
+      "sha256": "2749917af560f3b9a2681429da9c43d00c65d096e1a1c479cc49466634174549",
+      "size_bytes": 226286072
+    },
+    "filament_profile": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_p2s_filament_profile.json",
+      "sha256": "0b7ed93d3d09b7298d03d0c721de176a02b7aea79020b8414be609e952865ca5",
+      "size_bytes": 7156
+    },
+    "gongga_build_log": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_studio_build.stdout.log",
+      "sha256": "960c37748aa1b0d423003b6c4931aace51c1112e396ab0b7c4f1127aab243dbd",
+      "size_bytes": 28727
+    },
+    "gongga_reopen_log": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_studio_reopen.stdout.log",
+      "sha256": "2a4437f4464340f32ad538efa97060fb01dd3d0fd9cba2821d27092cf65a574a",
+      "size_bytes": 24360
+    },
+    "machine_profile": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_p2s_machine_profile.json",
+      "sha256": "e92546df81147afc47197c2a95e5b8bfa7e3ddcedc5a429ed63a56518032b68c",
+      "size_bytes": 30957
+    },
+    "process_profile": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_p2s_process_profile.json",
+      "sha256": "d58d437b9294c3957dd041b4bd09078681fa46a058d6242a1e86f7d318abc3da",
+      "size_bytes": 7625
+    }
+  },
+  "official_bambu_slice": {
+    "command": [
+      "/root/autodl-tmp/bambu/TopoForge/downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage",
+      "--debug",
+      "2",
+      "--load-settings",
+      "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_p2s_machine_profile.json;/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_p2s_process_profile.json",
+      "--load-filaments",
+      "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-bambu-p2s/bambu_p2s_filament_profile.json",
+      "--load-defaultfila",
+      "--curr-bed-type",
+      "Textured PEI Plate",
+      "--normative-check",
+      "--ensure-on-bed",
+      "--arrange",
+      "1",
+      "--slice",
+      "0",
+      "--outputdir",
+      "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-phase7-overlays-0.6.0-v1/.topoforge-orca-25dd98_g/output",
+      "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-phase7-overlays-0.6.0-v1/model-with-overlays.3mf"
+    ],
+    "gcode": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-phase7-overlays-0.6.0-v1/model-with-overlays.bambu-p2s.gcode",
+      "sha256": "527e24f84ab8c9adb9280dcd45f2d3a996a46a21e0956c36db81ac41a3315c41",
+      "size_bytes": 5203428
+    },
+    "metrics": {
+      "empty_layer_warning": false,
+      "estimated_time_seconds": 3783,
+      "estimated_time_text": "1h 3m 3s",
+      "filament_used_cm3": 18.838990000000003,
+      "filament_used_g": 23.74,
+      "filament_used_mm": 7832.34,
+      "floating_region_warning": false,
+      "layer_count": 49,
+      "out_of_bed": false,
+      "settings": {
+        "bed_temperature_c": 55.0,
+        "bed_type": "Textured PEI Plate",
+        "bottom_shell_layers": 3,
+        "brim_type": "auto_brim",
+        "brim_width_mm": 5.0,
+        "filament_density_g_cm3": 1.26,
+        "filament_diameter_mm": 1.75,
+        "filament_flow_ratio": 0.98,
+        "filament_max_volumetric_speed_mm3_s": 21.0,
+        "filament_settings_ids": [
+          "Bambu PLA Basic @BBL P2S"
+        ],
+        "filament_type": "PLA",
+        "filament_vendor": "Bambu Lab",
+        "initial_layer_height_mm": 0.2,
+        "layer_height_mm": 0.2,
+        "nozzle_diameter_mm": 0.4,
+        "nozzle_temperature_c": 220.0,
+        "printable_depth_mm": 256.0,
+        "printable_height_mm": 256.0,
+        "printable_width_mm": 256.0,
+        "printer_model": "Bambu Lab P2S",
+        "printer_settings_id": "Bambu Lab P2S 0.4 nozzle",
+        "printer_variant": "0.4",
+        "process_settings_id": "0.20mm Standard @BBL P2S",
+        "sparse_infill_density_percent": 15.0,
+        "sparse_infill_pattern": "grid",
+        "support_enabled": false,
+        "support_type": "tree(auto)",
+        "top_shell_layers": 5,
+        "wall_loops": 2
+      },
+      "support_material": false,
+      "warnings": [
+        "[warning] cli mode, Current BambuStudio Version 02.07.01.62",
+        "[warning] no filament colors found in projects",
+        "[error]   ZFiller: encounter idx from clip: 6",
+        "[error]   ZFiller: encounter idx from clip: 965",
+        "[error]   ZFiller: encounter idx from clip: 955",
+        "[error]   ZFiller: encounter idx from clip: 1224",
+        "[error]   ZFiller: encounter idx from clip: 1069",
+        "[error]   ZFiller: both point in subject : 37, 36, 0, 1",
+        "[error]   ZFiller: both point in subject : 1, 2, 37, 36",
+        "[error]   ZFiller: encounter idx from clip: 1031",
+        "[warning] tree support default to organic support",
+        "[error]   Invalid T command (T65535)."
+      ]
+    },
+    "process_exit_status": 0,
+    "profile": "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic",
+    "slice_json": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-phase7-overlays-0.6.0-v1/bambu-p2s-slice.json",
+      "sha256": "ce0dd38da37a767c665c3822d4e4ce1a73a1cdfeecd4db7e613f8b2b23814378",
+      "size_bytes": 5434
+    },
+    "slicer": {
+      "detail": null,
+      "executable": "/root/autodl-tmp/bambu/TopoForge/downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage",
+      "name": "BambuStudio",
+      "status": "available",
+      "version": "02.07.01.62"
+    },
+    "status": "succeeded",
+    "stderr_log": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-phase7-overlays-0.6.0-v1/bambu-p2s-slice.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    "stdout_log": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-phase7-overlays-0.6.0-v1/bambu-p2s-slice.stdout.log",
+      "sha256": "2f07f7ad45f4545db5e947ac1bfbb384bcb454c58ea979eb04ef05511334ccc3",
+      "size_bytes": 1505
+    }
+  },
+  "overlay_summary": {
+    "combined_3mf_build_item_count": 1,
+    "combined_3mf_component_count": 7,
+    "combined_3mf_object_count": 7,
+    "combined_glb_geometry_count": 7,
+    "feature_count": 76,
+    "layer_count": 6,
+    "required_checks_passed": true,
+    "source_count": 6,
+    "terrain_artifacts_unchanged": true,
+    "triangle_count": 14320
+  },
+  "primary_overlay_bundle": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-phase7-overlays-0.6.0-v1",
+  "repeat_overlay_bundle": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-phase7-overlays-0.6.0-repeat-v1",
+  "schema_version": "topoforge-phase7-overlay-release-verification-v1",
+  "source_bundle": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-cache-replay-v1/stages/10-build/78776e0b243876b14d0934c0af45d6941b35f6c4809a6a6b07c55fd5d46e759d",
+  "source_terrain_sha256": {
+    "model.3mf": "67a09bfd158769ec921fdf38fd62dce9d63999501a1f1701d17ffe10e134be11",
+    "model.stl": "e76ccd7f39b31db23512b595ff36cc31d48e008bea626548566e22da59062f9a",
+    "original_nodata_mask.tif": "5ece74e9e42295cab147c16aa1b7c5f485e410084303a053f48ad42e33e2a4b9",
+    "preview.glb": "32f159e88b3f8e3a3f25e8a6078347edc1306882099d99fa1d02c39b1e893597",
+    "processed_dem.tif": "7e32a4bf3f9646d14f858205ca86f5f2091fe3a0b7bc088053b46d95c571553e"
+  },
+  "status": "passed",
+  "three_mf": {
+    "base_material_group_count": 1,
+    "component_count": 7,
+    "components_object_count": 1,
+    "material_assigned_object_count": 7,
+    "mesh_object_count": 7,
+    "object_names": [
+      "TopoForge terrain",
+      "TopoForge overlay road",
+      "TopoForge overlay river",
+      "TopoForge overlay coast",
+      "TopoForge overlay label",
+      "TopoForge overlay route",
+      "TopoForge overlay contour"
+    ],
+    "path": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-phase7-overlays-0.6.0-v1/model-with-overlays.3mf",
+    "strict_warning_count": 0,
+    "top_level_build_item_count": 1,
+    "triangle_count": 36220
+  },
+  "topoforge_version": "0.6.0"
+}

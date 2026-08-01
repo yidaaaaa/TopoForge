@@ -1,0 +1,17 @@
+{
+  "features": [
+    {
+      "geometry": {
+        "coordinates": [-60.0105, -3.1165],
+        "type": "Point"
+      },
+      "id": "fixture-label",
+      "properties": {
+        "fixture": true,
+        "name": "LOCAL FIXTURE"
+      },
+      "type": "Feature"
+    }
+  ],
+  "type": "FeatureCollection"
+}

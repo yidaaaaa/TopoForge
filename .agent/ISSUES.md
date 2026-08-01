@@ -251,3 +251,28 @@
 - **Reproduction:** Before Phase 6 closure, users could not estimate workflow disk use, identify only unreferenced stage identities, back up external local source/config files, or strictly restore a completed workspace.
 - **Expected behavior:** Maintenance is measurable, review-first, workspace-contained, checksum-bound, and usable without an API or server.
 - **Resolution:** Added `topoforge storage`, `cleanup`, `backup`, and `restore`; configured-ceiling/completed-measurement estimates; exact workflow-id deletion confirmation; deterministic safe-path ZIPs with per-file SHA-256; external source/config inclusion; atomic restore and launch remapping; tamper/determinism/offline-resume tests; and `docs/offline-workflow.md`. The real Amazon backup repeats byte-for-byte and restores 57/57 stage files exactly.
+
+## TF-030 — Multi-object overlay 3MF sliced as floating independent parts
+
+- **Severity:** High
+- **Status:** Resolved in 0.6.0
+- **Reproduction:** Slice the first Phase 7 smoke 3MF in Bambu Studio; terrain and six overlay meshes are seven top-level build items.
+- **Expected behavior:** Named overlay resources keep exact relative placement and slice as one manufacturing assembly.
+- **Resolution:** Added one stable-UUID components object, seven stable component instances, one assembly build item, one Core base-material group, seven material assignments, strict XML/lib3mf count checks, and regression coverage. The final official slice reports no floating region.
+
+## TF-031 — Overlay format gate did not enforce the new assembly shape
+
+- **Severity:** High
+- **Status:** Resolved in 0.6.0
+- **Reproduction:** After changing to one build item, the old report still expected one build item per mesh, while `required_checks_passed` did not include `format_reopen_checks_passed`.
+- **Expected behavior:** A report cannot pass when its own strict format contract fails.
+- **Resolution:** Added typed build-item/components/material counts, updated strict bundle reopen, made the complete format result mandatory, added provenance assembly detail, and expanded integration assertions.
+
+## TF-032 — Bambu P2S logs label the official AMS unload sentinel invalid
+
+- **Severity:** Low
+- **Status:** Accepted upstream diagnostic with retained evidence
+- **Reproduction:** Slice the final Phase 7 3MF or retained accepted Gongga build/project through Bambu Studio 02.07.01.62.
+- **Expected behavior:** Manufacturing failures and official preset sentinels are distinguishable without altering the preset.
+- **Actual behavior:** Bambu logs `Invalid T command (T65535)`; the literal command is present in official `machine_end_gcode` as the AMS unload sequence. `ZFiller` internal diagnostics also appear in accepted single-terrain baselines.
+- **Resolution:** The release verifier binds the preset, G-code, raw logs, accepted baseline logs, result JSON, and all required slice gates. Diagnostics remain visible; no filtering or preset modification is applied.

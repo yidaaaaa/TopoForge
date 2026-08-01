@@ -17,6 +17,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from topoforge.engine import build_local_terrain, verify_artifact_bundle
 from topoforge.exceptions import ConfigurationError
 from topoforge.models import BuildConfig
+from topoforge.overlays import (
+    OverlayConfig,
+    generate_overlay_bundle,
+    overlay_identity_payload,
+    verify_overlay_bundle,
+)
 from topoforge.providers import ElevationProvider, ProviderDescriptor
 from topoforge.tiling import (
     TileLayoutConfig,
@@ -58,6 +64,7 @@ class WorkflowStage(StrEnum):
     ACQUIRE = "acquire"
     SOURCE = "source"
     BUILD = "build"
+    OVERLAY = "overlay"
     LAYOUT = "layout"
     EXTRACT = "extract"
     MESH = "mesh"
@@ -82,6 +89,7 @@ class LocalWorkflowConfig(BaseModel):
     workspace_dir: Path
     build: BuildConfig
     global_source: GlobalAcquisitionConfig | None = None
+    overlay: OverlayConfig | None = None
     maximum_tile_width_mm: float = Field(default=180.0, gt=0)
     maximum_tile_depth_mm: float = Field(default=180.0, gt=0)
     overlap_cells: int = Field(default=1, ge=0)
@@ -356,6 +364,7 @@ def _request_payload(
     source_sha256: str | None,
     slicer_identity: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    overlay_payload = None if config.overlay is None else overlay_identity_payload(config.overlay)
     common = {
         "schema_version": _WORKFLOW_SCHEMA_VERSION,
         "maximum_tile_width_mm": config.maximum_tile_width_mm,
@@ -368,7 +377,7 @@ def _request_payload(
     if config.global_source is None:
         if source_sha256 is None:
             raise AssertionError("local workflow source SHA-256 disappeared")
-        return {
+        payload = {
             "schema_version": _WORKFLOW_SCHEMA_VERSION,
             "build": _build_identity_payload(config.build, source_sha256),
             "maximum_tile_width_mm": config.maximum_tile_width_mm,
@@ -378,11 +387,17 @@ def _request_payload(
             "project_evidence_enabled": config.project_evidence_enabled,
             "slicer": slicer_identity,
         }
-    return {
+        if overlay_payload is not None:
+            payload["overlay"] = overlay_payload
+        return payload
+    payload = {
         **common,
         "global_source": config.global_source.identity_payload(),
         "build_template": _global_build_template_payload(config.build),
     }
+    if overlay_payload is not None:
+        payload["overlay"] = overlay_payload
+    return payload
 
 
 def _summary(value: dict[str, Any]) -> dict[str, Any]:
@@ -394,6 +409,13 @@ def _summary(value: dict[str, Any]) -> dict[str, Any]:
         "acquisition_manifest_sha256",
         "quality_mask_count",
         "raster_shape",
+        "source_count",
+        "layer_count",
+        "feature_count",
+        "triangle_count",
+        "combined_3mf_object_count",
+        "combined_glb_geometry_count",
+        "terrain_artifacts_unchanged",
         "layout_id",
         "tile_grid_shape",
         "tile_count",
@@ -766,6 +788,46 @@ def run_local_workflow(
             )
         )
         outputs[current] = build_dir
+
+        if config.overlay is not None:
+            current = WorkflowStage.OVERLAY
+            _status(
+                root,
+                workflow_id=workflow_id,
+                state=WorkflowState.RUNNING,
+                current_stage=current,
+                records=records,
+            )
+            overlay_identity = _identity(
+                {
+                    "source_build_manifest_sha256": sha256_file(build_manifest),
+                    "overlay": overlay_identity_payload(config.overlay),
+                }
+            )
+            overlay_dir = _stage_directory(root, 15, current, overlay_identity)
+            overlay_verification = _existing_stage(
+                current,
+                overlay_dir,
+                lambda: verify_overlay_bundle(overlay_dir, build_dir),
+            )
+            if overlay_verification is None:
+                generate_overlay_bundle(build_dir, config.overlay, overlay_dir)
+                overlay_verification = verify_overlay_bundle(overlay_dir, build_dir)
+                completed.append(current)
+            else:
+                reused.append(current)
+            overlay_manifest = overlay_dir / "overlay_manifest.json"
+            records.append(
+                _record(
+                    root,
+                    stage=current,
+                    identity=overlay_identity,
+                    output=overlay_dir,
+                    manifest=overlay_manifest,
+                    verification=overlay_verification,
+                )
+            )
+            outputs[current] = overlay_dir
 
         current = WorkflowStage.LAYOUT
         _status(

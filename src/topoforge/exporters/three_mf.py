@@ -22,12 +22,36 @@ _UUID_NAMESPACE = uuid.UUID("d70c7f97-1a8c-5b66-8e4d-fde90514c885")
 
 
 @dataclass(frozen=True, slots=True)
+class ThreeMFObject:
+    """One named, independently printable mesh in a multi-object package."""
+
+    name: str
+    mesh: trimesh.Trimesh
+    part_number: str
+
+
+@dataclass(frozen=True, slots=True)
+class ThreeMFObjectInspection:
+    """Independent topology and bounds for one reopened 3MF mesh object."""
+
+    name: str
+    vertex_count: int
+    triangle_count: int
+    bounds_mm: tuple[tuple[float, float, float], tuple[float, float, float]]
+    geometry_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
 class ThreeMFInspection:
     """Measurements obtained by strictly reopening the serialized 3MF package."""
 
     unit: str
     object_count: int
     build_item_count: int
+    components_object_count: int
+    component_count: int
+    base_material_group_count: int
+    material_assigned_object_count: int
     vertex_count: int
     triangle_count: int
     dimensions_mm: tuple[float, float, float]
@@ -36,6 +60,7 @@ class ThreeMFInspection:
     peak_coordinates_mm: tuple[tuple[float, float, float], ...]
     metadata: dict[str, str]
     object_names: tuple[str, ...]
+    objects: tuple[ThreeMFObjectInspection, ...]
     strict_warning_count: int
     lib3mf_version: tuple[int, int, int]
 
@@ -145,6 +170,124 @@ def export_3mf(
     return destination
 
 
+def export_3mf_objects(
+    objects: tuple[ThreeMFObject, ...],
+    path: str | Path,
+    *,
+    title: str,
+    metadata: dict[str, str] | None = None,
+) -> Path:
+    """Export stable independent mesh objects through the official lib3mf writer."""
+    destination = Path(path)
+    if destination.suffix.lower() != ".3mf":
+        raise ValueError(f"expected a .3mf output path, got {destination}")
+    if not objects:
+        raise ValueError("multi-object 3MF export requires at least one object")
+    names = [item.name for item in objects]
+    if len(names) != len(set(names)):
+        raise ValueError("multi-object 3MF object names must be unique")
+    normalized_metadata = {str(key): str(value) for key, value in (metadata or {}).items()}
+    digest = hashlib.sha256()
+    digest.update(title.encode("utf-8"))
+    digest.update(json.dumps(normalized_metadata, sort_keys=True).encode("utf-8"))
+    prepared: list[tuple[ThreeMFObject, np.ndarray, np.ndarray]] = []
+    for item in objects:
+        vertices = np.asarray(item.mesh.vertices, dtype=np.float64)
+        faces = np.asarray(item.mesh.faces, dtype=np.int64)
+        if vertices.size == 0 or faces.size == 0 or not bool(np.all(np.isfinite(vertices))):
+            raise ValueError(f"3MF object {item.name!r} requires a finite non-empty mesh")
+        if (
+            not bool(item.mesh.is_watertight)
+            or not bool(item.mesh.is_winding_consistent)
+            or float(item.mesh.volume) <= 0
+        ):
+            raise ValueError(
+                f"3MF object {item.name!r} must be watertight, consistently wound, "
+                "and positive-volume"
+            )
+        if int(np.min(faces)) < 0 or int(np.max(faces)) >= len(vertices):
+            raise ValueError(f"3MF object {item.name!r} has an out-of-range triangle index")
+        digest.update(item.name.encode("utf-8"))
+        digest.update(item.part_number.encode("utf-8"))
+        digest.update(np.asarray(vertices, dtype="<f8").tobytes(order="C"))
+        digest.update(np.asarray(faces, dtype="<u4").tobytes(order="C"))
+        prepared.append((item, vertices, faces))
+
+    identity = digest.hexdigest()
+    wrapper = get_wrapper()
+    model = wrapper.CreateModel()
+    if model is None:
+        raise RuntimeError("lib3mf did not create a model")
+    model.SetUnit(lib3mf.ModelUnit.MilliMeter)
+    model.SetLanguage("en-US")
+    model.SetBuildUUID(str(uuid.uuid5(_UUID_NAMESPACE, f"multi-build:{identity}")))
+    metadata_group = model.GetMetaDataGroup()
+    metadata_group.AddMetaData("", "Title", title, "xs:string", False)
+    metadata_group.AddMetaData("", "Application", "TopoForge", "xs:string", False)
+    for key, value in sorted(normalized_metadata.items()):
+        metadata_group.AddMetaData(METADATA_NS, key, value, "xs:string", True)
+
+    material_group = model.AddBaseMaterialGroup()
+    material_property_id = material_group.AddMaterial(
+        "TopoForge single material",
+        wrapper.RGBAToColor(255, 255, 255, 255),
+    )
+    material_resource_id = material_group.GetUniqueResourceID()
+    mesh_resources: list[tuple[lib3mf.MeshObject, uuid.UUID]] = []
+    for index, (item, vertices, faces) in enumerate(prepared):
+        object_uuid = uuid.uuid5(_UUID_NAMESPACE, f"multi-object:{identity}:{index}:{item.name}")
+        mesh_object = model.AddMeshObject()
+        mesh_object.SetName(item.name)
+        mesh_object.SetPartNumber(item.part_number)
+        mesh_object.SetUUID(str(object_uuid))
+        mesh_object.SetGeometry(
+            [_position(*vertex) for vertex in vertices],
+            [_triangle(*face) for face in faces],
+        )
+        mesh_object.SetObjectLevelProperty(material_resource_id, material_property_id)
+        mesh_resources.append((mesh_object, object_uuid))
+
+    assembly_uuid = uuid.uuid5(_UUID_NAMESPACE, f"multi-assembly:{identity}")
+    assembly = model.AddComponentsObject()
+    assembly.SetName(f"{title} assembly")
+    assembly.SetPartNumber("topoforge-assembly")
+    assembly.SetUUID(str(assembly_uuid))
+    for index, (mesh_object, object_uuid) in enumerate(mesh_resources):
+        component_uuid = uuid.uuid5(
+            _UUID_NAMESPACE,
+            f"multi-component:{assembly_uuid}:{index}:{object_uuid}:identity",
+        )
+        component = assembly.AddComponent(mesh_object, wrapper.GetIdentityTransform())
+        component.SetUUID(str(component_uuid))
+    build_item_uuid = uuid.uuid5(_UUID_NAMESPACE, f"multi-assembly-item:{assembly_uuid}:identity")
+    build_item = model.AddBuildItem(assembly, wrapper.GetIdentityTransform())
+    build_item.SetPartNumber("topoforge-assembly-instance")
+    build_item.SetUUID(str(build_item_uuid))
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.stem}.tmp.3mf")
+    writer = model.QueryWriter("3mf")
+    writer.SetStrictModeActive(True)
+    writer.WriteToFile(str(temporary))
+    if writer.GetWarningCount() != 0:
+        warnings = [writer.GetWarning(index) for index in range(writer.GetWarningCount())]
+        temporary.unlink(missing_ok=True)
+        raise ValueError(f"lib3mf writer emitted strict warnings: {warnings}")
+    temporary.replace(destination)
+    inspection = inspect_3mf(destination)
+    if (
+        inspection.object_names != tuple(names)
+        or inspection.build_item_count != 1
+        or inspection.components_object_count != 1
+        or inspection.component_count != len(objects)
+        or inspection.base_material_group_count != 1
+        or inspection.material_assigned_object_count != len(objects)
+    ):
+        destination.unlink(missing_ok=True)
+        raise ValueError("multi-object 3MF failed strict component-assembly reopen")
+    return destination
+
+
 def _inspect_package(path: Path) -> ET.Element:
     with ZipFile(path, "r") as package:
         names = set(package.namelist())
@@ -204,6 +347,15 @@ def inspect_3mf(path: str | Path) -> ThreeMFInspection:
         build_item_count += 1
 
     namespace = {"m": CORE_NS}
+    components_elements = root.findall("m:resources/m:object/m:components", namespace)
+    component_count = sum(
+        len(components.findall("m:component", namespace)) for components in components_elements
+    )
+    base_material_groups = root.findall("m:resources/m:basematerials", namespace)
+    material_assigned_object_count = sum(
+        "pid" in object_element.attrib and "pindex" in object_element.attrib
+        for object_element in root.findall("m:resources/m:object", namespace)
+    )
     vertices = root.findall(".//m:mesh/m:vertices/m:vertex", namespace)
     triangles = root.findall(".//m:mesh/m:triangles/m:triangle", namespace)
     if not vertices or not triangles:
@@ -227,10 +379,62 @@ def inspect_3mf(path: str | Path) -> ThreeMFInspection:
         str(element.attrib.get("name", "")): str(element.text or "")
         for element in root.findall("m:metadata", namespace)
     }
+    object_inspections: list[ThreeMFObjectInspection] = []
+    for object_element in root.findall("m:resources/m:object", namespace):
+        mesh_element = object_element.find("m:mesh", namespace)
+        if mesh_element is None:
+            continue
+        object_vertices = mesh_element.findall("m:vertices/m:vertex", namespace)
+        object_triangles = mesh_element.findall("m:triangles/m:triangle", namespace)
+        if not object_vertices or not object_triangles:
+            continue
+        object_coordinates = np.asarray(
+            [
+                [float(vertex.attrib[axis]) for axis in ("x", "y", "z")]
+                for vertex in object_vertices
+            ],
+            dtype=np.float64,
+        )
+        object_faces = np.asarray(
+            [
+                [int(triangle.attrib[axis]) for axis in ("v1", "v2", "v3")]
+                for triangle in object_triangles
+            ],
+            dtype=np.uint32,
+        )
+        object_digest = hashlib.sha256()
+        object_digest.update(np.asarray(object_coordinates, dtype="<f8").tobytes(order="C"))
+        object_digest.update(np.asarray(object_faces, dtype="<u4").tobytes(order="C"))
+        object_minimum = np.min(object_coordinates, axis=0)
+        object_maximum = np.max(object_coordinates, axis=0)
+        object_inspections.append(
+            ThreeMFObjectInspection(
+                name=object_element.attrib.get("name", ""),
+                vertex_count=len(object_vertices),
+                triangle_count=len(object_triangles),
+                bounds_mm=(
+                    (
+                        float(object_minimum[0]),
+                        float(object_minimum[1]),
+                        float(object_minimum[2]),
+                    ),
+                    (
+                        float(object_maximum[0]),
+                        float(object_maximum[1]),
+                        float(object_maximum[2]),
+                    ),
+                ),
+                geometry_sha256=object_digest.hexdigest(),
+            )
+        )
     return ThreeMFInspection(
         unit="millimeter",
         object_count=len(object_names),
         build_item_count=build_item_count,
+        components_object_count=len(components_elements),
+        component_count=component_count,
+        base_material_group_count=len(base_material_groups),
+        material_assigned_object_count=material_assigned_object_count,
         vertex_count=len(vertices),
         triangle_count=len(triangles),
         dimensions_mm=(float(dimensions[0]), float(dimensions[1]), float(dimensions[2])),
@@ -245,6 +449,7 @@ def inspect_3mf(path: str | Path) -> ThreeMFInspection:
         ),
         metadata=metadata,
         object_names=tuple(object_names),
+        objects=tuple(object_inspections),
         strict_warning_count=warning_count,
         lib3mf_version=(
             int(wrapper.GetLibraryVersion()[0]),

@@ -233,3 +233,19 @@
 - **Decision:** Constrain NumPy below 2.5 only after before/after artifact and performance proof. Do not add a self-intersection backend unless it passes clean/adjacent/overlap/connected fixtures, deterministic real-mesh benchmarks, Apache-compatible distribution, and acceptable resource cost. Preserve existing validation field bytes when no behavior is added; record evaluated non-adoption in separate evidence and keep `not_fully_checked` literal.
 - **Alternatives:** Suppress warnings; accept any backend that imports; add non-commercial/GPL runtime dependencies without distribution review; label unchecked geometry passed; rewrite historical validation fields during reuse.
 - **Impact:** TopoForge 0.5.0 has a warning-free 179-test environment with byte-identical core build roles, retains Apache-2.0 distribution boundaries, and continues to reopen 0.4.0 stage evidence exactly.
+
+## ADR-031 — Local overlays are immutable terrain companions in one fixed 3MF assembly
+
+- **Date:** 2026-08-02
+- **Context:** Local routes, roads, rivers, coasts, labels, and contours need independent provenance and preview colors while preserving exact placement on an already validated terrain. Publishing every mesh as a top-level 3MF build item made Bambu Studio treat overlays as independent floating parts.
+- **Decision:** Keep the terrain and every overlay as independent named mesh resources and per-layer STL evidence. Map them through the processed metric CRS to the exact fixed-diagonal terrain surface without changing DEM values. Publish one identity-transform components object containing every mesh, one top-level build item, and one explicit Core base-material group assigned to every mesh. Strict validation measures all object/component/material/build-item counts and includes the format result in the required gate.
+- **Alternatives:** Modify the terrain heightfield; fabricate or sharpen contours; flatten all identities into one unnamed mesh; publish each overlay as a separate build item; rely on file existence or slicer arrangement.
+- **Impact:** Relative placement is deterministic, terrain hashes remain unchanged, strict lib3mf reread reports zero warnings, source identities remain auditable, and official P2S slicing has no floating result.
+
+## ADR-032 — Official slicer diagnostics are classified from literal preset and baseline evidence
+
+- **Date:** 2026-08-02
+- **Context:** Bambu Studio labels `T65535` as invalid even though the exact command is the official P2S machine end G-code AMS unload sentinel. Its `ZFiller` internal polygon diagnostics also occur in accepted single-terrain Gongga build and reopen logs.
+- **Decision:** Preserve complete stdout, stderr, command, result JSON, G-code, preset hashes, and baseline logs. Gate exit status, G-code creation, printer parameters, floating, empty layers, out-of-bed, and support directly. Classify `T65535` only after proving the literal sequence exists in the official resolved machine preset and generated G-code and appears in both retained baselines. Record `ZFiller` counts without suppressing them or treating an internal diagnostic alone as a geometry failure when result.json and required gates pass.
+- **Alternatives:** Delete official end G-code; filter log lines; label every internal error-level line a failed print; ignore raw logs.
+- **Impact:** Phase 7 makes no false claim that the diagnostics are absent, does not modify official presets, and separates measured manufacturing failures from documented upstream diagnostics.

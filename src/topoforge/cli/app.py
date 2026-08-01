@@ -44,6 +44,11 @@ from topoforge.models import (
     TerrainMode,
     VerticalScaleMode,
 )
+from topoforge.overlays import (
+    generate_overlay_bundle,
+    read_overlay_config,
+    verify_overlay_bundle,
+)
 from topoforge.provenance import write_json
 from topoforge.providers import (
     CachingHttpClient,
@@ -606,6 +611,32 @@ def preview(
         _fail(exc)
 
 
+@app.command("overlay")
+def build_overlays(
+    build_dir: Annotated[Path, typer.Argument(help="Completed TopoForge build bundle.")],
+    config: Annotated[Path, typer.Option("--config", help="Strict local overlay YAML.")],
+    output: Annotated[Path, typer.Option("--output", "-o", help="New overlay bundle.")],
+) -> None:
+    """Generate and strictly verify local GPX/vector/contour overlay objects."""
+    try:
+        result = generate_overlay_bundle(build_dir, read_overlay_config(config), output)
+        verification = verify_overlay_bundle(result.output_dir, build_dir)
+        _emit(
+            {
+                "status": "ready",
+                "output": str(result.output_dir),
+                "manifest": str(result.manifest_path),
+                "validation": str(result.validation_path),
+                "model_3mf": str(result.model_3mf_path),
+                "preview_glb": str(result.preview_glb_path),
+                "preview_png": str(result.preview_png_path),
+                **verification,
+            }
+        )
+    except (ImportError, TopoForgeError, ValueError, OSError, RasterioError) as exc:
+        _fail(exc)
+
+
 @app.command("run")
 def run_local(
     ctx: typer.Context,
@@ -616,6 +647,10 @@ def run_local(
     output: Annotated[
         Path | None,
         typer.Option("--output", "-o", help="Workflow workspace; defaults to config output_dir."),
+    ] = None,
+    overlay_config: Annotated[
+        Path | None,
+        typer.Option("--overlay-config", help="Optional local overlay YAML."),
     ] = None,
     bbox: Annotated[
         tuple[float, float, float, float] | None,
@@ -743,6 +778,9 @@ def run_local(
                 "workspace_dir": workspace,
                 "build": resolved,
                 "global_source": global_source,
+                "overlay": (
+                    read_overlay_config(overlay_config) if overlay_config is not None else None
+                ),
                 "maximum_tile_width_mm": max_tile_size_mm[0],
                 "maximum_tile_depth_mm": max_tile_size_mm[1],
                 "overlap_cells": overlap_cells,
@@ -950,6 +988,10 @@ def workflow_wizard(
     build_template: Annotated[
         Path | None,
         typer.Option("--build-template", help="Existing BuildConfig YAML to use as defaults."),
+    ] = None,
+    overlay_config: Annotated[
+        Path | None,
+        typer.Option("--overlay-config", help="Optional local overlay YAML."),
     ] = None,
     model_width_mm: Annotated[float | None, typer.Option("--model-width-mm", min=0.1)] = None,
     model_depth_mm: Annotated[float | None, typer.Option("--model-depth-mm", min=0.1)] = None,
@@ -1177,6 +1219,9 @@ def workflow_wizard(
                 "workspace_dir": workspace,
                 "build": build,
                 "global_source": global_source,
+                "overlay": (
+                    read_overlay_config(overlay_config) if overlay_config is not None else None
+                ),
                 "maximum_tile_width_mm": tile_size[0],
                 "maximum_tile_depth_mm": tile_size[1],
                 "overlap_cells": overlap_cells,
@@ -1905,7 +1950,10 @@ def slice(
             raise ValueError("--slicer must be bambu-studio, orca, prusa, or auto")
         result = adapter.slice(model, output, profile=slicer_profile)
         serialized_result = result.model_dump(mode="json")
-        if result.status is SliceStatus.SUCCEEDED and (model.parent / "validation.json").is_file():
+        if (
+            result.status is SliceStatus.SUCCEEDED
+            and (model.parent / "build_manifest.json").is_file()
+        ):
             report_path = record_slice_validation(model.parent, serialized_result)
             serialized_result["bundle_report"] = str(report_path)
         _emit(serialized_result)
