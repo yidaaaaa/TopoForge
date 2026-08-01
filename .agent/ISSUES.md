@@ -276,3 +276,26 @@
 - **Expected behavior:** Manufacturing failures and official preset sentinels are distinguishable without altering the preset.
 - **Actual behavior:** Bambu logs `Invalid T command (T65535)`; the literal command is present in official `machine_end_gcode` as the AMS unload sequence. `ZFiller` internal diagnostics also appear in accepted single-terrain baselines.
 - **Resolution:** The release verifier binds the preset, G-code, raw logs, accepted baseline logs, result JSON, and all required slice gates. Diagnostics remain visible; no filtering or preset modification is applied.
+## TF-033 — Default sdist leaked private and generated repository state
+
+- **Severity:** High
+- **Status:** Resolved in 0.7.0
+- **Reproduction:** Run `uv build --no-sources` before Phase 8 and list the sdist; it contains `.agent`, 166 Hypothesis cache files, 92 historical artifact files, and other non-release state.
+- **Expected behavior:** Source releases contain an intentional source/test/documentation set and no private agent state, caches, downloads, outputs, or large evidence.
+- **Resolution:** Added a Hatch sdist allowlist, cache exclusions, archive path/link validation, required content checks, double-build equality, tests, and CI release verification. Final sdist contains 167 bounded members and zero forbidden members.
+
+## TF-034 — A repository build did not prove an installable standalone CLI
+
+- **Severity:** High
+- **Status:** Resolved in 0.7.0
+- **Reproduction:** Build the pre-Phase 8 wheel and run only `uv run topoforge`; imports can still resolve through the editable checkout and package metadata/licence contents are not independently checked.
+- **Expected behavior:** A fresh environment installs the wheel and dependencies, imports outside the checkout, runs the console entry point, builds a real artifact bundle, and strict-reads 3MF.
+- **Resolution:** Added `scripts/verify_release.py`. The final test installs 51 packages in a fresh Python 3.12 venv, reports no repository import leakage, completes doctor/synthetic/build/inspect with exit 0, and reports zero strict 3MF warnings.
+
+## TF-035 — A TopoForge wheel alone is not a complete offline install set
+
+- **Severity:** Medium
+- **Status:** Accepted platform packaging constraint; documented
+- **Reproduction:** Install only `topoforge-0.7.0-py3-none-any.whl` with `uv pip install --offline` in an empty environment; lib3mf and other platform wheels are unavailable.
+- **Expected behavior:** Offline instructions distinguish the project wheel from a complete same-platform dependency wheelhouse.
+- **Resolution:** `docs/release.md` provides connected wheelhouse creation, SHA-256 verification, `--no-index --find-links` installation, platform matching, upgrade, and rollback. The verified platform is Linux x86_64 / CPython 3.12; other targets require separate release evidence.

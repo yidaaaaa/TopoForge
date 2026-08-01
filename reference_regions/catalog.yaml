@@ -1,0 +1,133 @@
+schema_version: 1
+regions:
+  - id: amazon-low-relief
+    purpose: Retained low-relief equatorial provider example at a source tile edge.
+    aoi:
+      bbox_wgs84: [-60.02, -3.13, -60.0, -3.11]
+    expected:
+      kind: bbox
+      bounds_wgs84: [-60.02, -3.13, -60.0, -3.11]
+      crosses_antimeridian: false
+      target_local_crs: "+proj=aeqd +lat_0=-3.1200000000 +lon_0=-60.0100000000 +datum=WGS84 +units=m +no_defs +type=crs"
+      area_m2: 4916525.719334841
+    retained_evidence:
+      source_path: downloads/amazon-copernicus-aws-v2/copernicus-aws-aoi.tif
+      source_sha256: 33732b7df5699bd8a2237484dc34cee1ab6a516095e03b06167ca9ac98d39d95
+      provenance_path: outputs/amazon-copernicus-aws-v2/provenance.json
+      validation_path: outputs/amazon-copernicus-aws-v2/validation.json
+      expected_metrics:
+        source_grid_shape: [74, 74]
+        processed_grid_shape: [74, 74]
+        source_horizontal_resolution_m: 29.763799211548566
+        processed_horizontal_resolution_m: 29.763799211548566
+        peak_elevation_loss_m: 0.0
+        peak_horizontal_shift_m: 0.0
+        estimated_triangle_count: 21900
+
+  - id: gongga-high-relief
+    purpose: Retained high-relief fidelity and printer-aware sampling reference.
+    aoi:
+      bbox_wgs84: [101.66986111111112, 29.450138888888887, 101.99791666666667, 29.730138888888888]
+    expected:
+      kind: bbox
+      bounds_wgs84: [101.66986111111112, 29.450138888888887, 101.99791666666667, 29.730138888888888]
+      crosses_antimeridian: false
+      target_local_crs: "EPSG:32647"
+      area_m2: 986413695.8991852
+    retained_evidence:
+      source_path: downloads/gongga-copernicus-glo30/gongga-copernicus-glo30-crop.tif
+      source_sha256: 00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc
+      provenance_path: outputs/gongga-copernicus-glo30-resource-v3/provenance.json
+      validation_path: outputs/gongga-copernicus-glo30-resource-v3/validation.json
+      expected_metrics:
+        source_grid_shape: [1008, 1181]
+        processed_grid_shape: [439, 451]
+        source_horizontal_resolution_m: 28.850813554696742
+        processed_horizontal_resolution_m: 68.9588820624312
+        peak_elevation_loss_m: 5.04150390625
+        peak_horizontal_shift_m: 24.51627596861209
+        estimated_triangle_count: 791952
+
+  - id: great-trango-center-radius
+    purpose: Retained mid-latitude center-radius reference in UTM zone 43 north.
+    aoi:
+      center_wgs84: [76.2014796, 35.7574728]
+      radius_m: 6500.0
+    expected:
+      kind: center-radius
+      bounds_wgs84: [76.12960792255495, 35.698889947963785, 76.27335127744504, 35.816055080289075]
+      crosses_antimeridian: false
+      target_local_crs: "EPSG:32643"
+      area_m2: 168999938.5105896
+    retained_evidence:
+      source_path: downloads/examples/great-trango-tower-glo30.tif
+      source_sha256: 7539ad8dcaf2300658f6e945e63baf42d7185924322cab149d3c3ec1e0734833
+      provenance_path: outputs/great-trango-tower-example/provenance.json
+      validation_path: outputs/great-trango-tower-example/validation.json
+      expected_metrics:
+        source_grid_shape: [439, 439]
+        processed_grid_shape: [439, 439]
+        source_horizontal_resolution_m: 29.96579087860559
+        processed_horizontal_resolution_m: 29.96579087860559
+        peak_elevation_loss_m: 0.0
+        peak_horizontal_shift_m: 0.0
+        estimated_triangle_count: 770880
+
+  - id: mount-thor-high-latitude
+    purpose: Retained high-latitude center-radius terrain reference in UTM zone 20 north.
+    aoi:
+      center_wgs84: [-65.3203097, 66.5380298]
+      radius_m: 6500.0
+    expected:
+      kind: center-radius
+      bounds_wgs84: [-65.4665538596351, 66.47974157953497, -65.1740655403649, 66.5963175830641]
+      crosses_antimeridian: false
+      target_local_crs: "EPSG:32620"
+      area_m2: 168999102.62332153
+    retained_evidence:
+      source_path: downloads/examples/mount-thor-glo30.tif
+      source_sha256: 6c85376e74a5df5997d1cb4caf7d76727c7b83c79f1c553be7bfceab1601415e
+      provenance_path: outputs/mount-thor-example/provenance.json
+      validation_path: outputs/mount-thor-example/validation.json
+      expected_metrics:
+        source_grid_shape: [450, 450]
+        processed_grid_shape: [450, 450]
+        source_horizontal_resolution_m: 29.933828957089247
+        processed_horizontal_resolution_m: 29.933828957089247
+        peak_elevation_loss_m: 0.0
+        peak_horizontal_shift_m: 0.0
+        estimated_triangle_count: 809996
+
+  - id: antimeridian-bbox
+    purpose: Geometry-only regression for a bbox split across the date line.
+    aoi:
+      bbox_wgs84: [179.8, -16.0, -179.7, -15.5]
+    expected:
+      kind: bbox
+      bounds_wgs84: [179.8, -16.0, -179.7, -15.5]
+      crosses_antimeridian: true
+      target_local_crs: "+proj=aeqd +lat_0=-15.7500000000 +lon_0=-179.9500000000 +datum=WGS84 +units=m +no_defs +type=crs"
+      area_m2: 2964651486.1714783
+
+  - id: polar-center-radius
+    purpose: Geometry-only regression above the UTM latitude limit.
+    aoi:
+      center_wgs84: [20.0, 85.0]
+      radius_m: 25000.0
+    expected:
+      kind: center-radius
+      bounds_wgs84: [17.433303011172256, 84.77615618231249, 22.566696988827744, 85.22384228261419]
+      crosses_antimeridian: false
+      target_local_crs: "+proj=aeqd +lat_0=84.9999992325 +lon_0=20.0000000000 +datum=WGS84 +units=m +no_defs +type=crs"
+      area_m2: 2495247326.1567383
+
+  - id: cross-zone-bbox
+    purpose: Geometry-only regression spanning UTM zones 31 and 32.
+    aoi:
+      bbox_wgs84: [5.9, 45.0, 6.1, 45.2]
+    expected:
+      kind: bbox
+      bounds_wgs84: [5.9, 45.0, 6.1, 45.2]
+      crosses_antimeridian: false
+      target_local_crs: "+proj=aeqd +lat_0=45.1000000000 +lon_0=6.0000000000 +datum=WGS84 +units=m +no_defs +type=crs"
+      area_m2: 349891135.71325684

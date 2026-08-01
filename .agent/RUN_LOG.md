@@ -488,3 +488,32 @@ Result: `T65535` is the literal official AMS unload sentinel in `machine_end_gco
 Command: run `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, final release verification, and `sha256sum -c SHA256SUMS`.
 
 Result: Ruff `All checks passed!`; format `140 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `186 passed in 73.59s`; all 20 final output files report `OK`.
+### Phase 8 local release hardening
+
+Command: audit package defaults with `uv build --no-sources`, list sdist/wheel members, and attempt an empty-environment offline install.
+
+Result: the wheel contained only runtime package files but the default sdist included `.agent`, 166 Hypothesis cache files, and 92 artifact files. An isolated offline install with only the TopoForge wheel correctly exposed the missing dependency-wheelhouse requirement.
+
+Command: add explicit Hatch sdist content, SPDX/licence metadata, version 0.7.0, pinned CI, `verify_release.py`, release archive tests, and remove the unused API extra while retaining Phase 9.
+
+Result: final sdist has 167 bounded members and zero forbidden members. The wheel has 74 members, the console entry point, `License-Expression: Apache-2.0`, and all three notice files. Two sdist and wheel builds are byte-identical.
+
+Command: install the final wheel in a fresh Python 3.12 environment outside the checkout; run doctor, synthetic generation, source-preserving strict build, and 3MF inspection.
+
+Result: 51 runtime packages installed; TopoForge imported from temporary site-packages with no repository leakage. Doctor, 16 x 20 DEM generation, 40 x 32 x 20 mm model build, and strict 3MF inspection all exited 0; required build checks passed and strict warning count is zero.
+
+Command: run the three-case benchmark twice, compare six core artifact roles, and enforce exact topology plus wall/RSS thresholds.
+
+Result: 64 x 80 / 20,476 triangles, 128 x 160 / 81,916 triangles, and 256 x 320 / 327,676 triangles all pass. Maximum wall times are 1.479, 4.044, and 15.692 s; largest peak RSS is 956.504 MiB; every selected role repeats byte-for-byte.
+
+Command: verify seven reference AOIs and reread four retained Amazon/Gongga/Great Trango/Mount Thor sources, provenance, and validation reports.
+
+Result: all normalized bounds/CRS/areas match; four retained source SHA-256 values, directions, grids, resolutions, peak loss/shift, triangle counts, and required gates pass with `network_attempts=0`. No source was rewritten, downloaded, or rebuilt.
+
+Command: rerun the retained Phase 7 20-file `SHA256SUMS` and release verifier using its exact Phase 6 source-stage bundle.
+
+Result: all 20 files report `OK`; official Bambu slice evidence remains exit 0, 49 layers, 23.74 g, 1h 3m 3s, no floating/empty/out-of-bed/support, 36,220 3MF triangles, and zero strict warnings.
+
+Command: final `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, `uv lock --check`, `git diff --check`, and Phase 8 checksum verification.
+
+Result: Ruff `All checks passed!`; format `148 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `192 passed in 73.32s`; lock and whitespace pass; all 15 Phase 8 checksum entries report `OK`.

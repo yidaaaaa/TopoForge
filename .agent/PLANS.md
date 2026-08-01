@@ -13,7 +13,7 @@ Updated: 2026-08-02
 - [x] Phase 5 — tiling, assembly manifest/map, labels, verified connectors, print-local files, and per-tile slicing. Completed in 0.4.0.
 - [x] Phase 6 — local software completion: resumable one-command workflow, local UX, recovery, and core hardening. Completed in 0.5.0 on 2026-08-02.
 - [x] Phase 7 — local provenance-aware GPX/road/river/contour/label/coast overlays. Completed in 0.6.0 on 2026-08-02.
-- [ ] Phase 8 — local release hardening: packaging, CI, benchmarks, reference regions, and offline documentation. Current.
+- [x] Phase 8 — local release hardening: packaging, CI, benchmarks, reference regions, and offline documentation. Completed in 0.7.0 on 2026-08-02.
 - [ ] Phase 9 (deferred) — worker-backed FastAPI and React/MapLibre/Three.js Web application, only after local-use completion.
 
 ## Completed Milestone 01 gate
@@ -137,6 +137,22 @@ Phase 6 closure evidence: `artifacts/verification/topoforge-0.5.0-phase6-local-s
 Real evidence: `outputs/amazon-phase7-overlays-0.6.0-v1` and `artifacts/verification/topoforge-0.6.0-phase7-overlays-verification.json`. Six sources produce 76 features and 14,320 overlay triangles. The combined 3MF has seven named mesh objects, seven components, one components object, one top-level build item, one base-material group, seven material assignments, 36,220 triangles, and zero lib3mf warnings. All 14 manifest artifact roles repeat byte-for-byte and source terrain hashes are unchanged.
 
 Official Bambu Studio `02.07.01.62` exits 0 with 49 layers, 23.74 g, and 1h 3m 3s. Floating, empty-layer, out-of-bed, and support checks are false. The literal official P2S `T65535` AMS unload sentinel and internal `ZFiller` diagnostics are retained and classified against accepted Gongga build/reopen baselines; no logs or presets are hidden or modified.
+
+## Completed Phase 8 — local release hardening (0.7.0)
+
+1. [x] Define bounded Hatch sdist/wheel contents and exclude private agent state, generated caches, historical artifacts, downloads, outputs, and large manufacturing evidence.
+2. [x] Publish SPDX `Apache-2.0` metadata and include code, dataset, and third-party notice files in the wheel.
+3. [x] Remove the unused API dependency extra while preserving the complete API/Web design as deferred Phase 9.
+4. [x] Prove byte-reproducible sdist and wheel builds under a fixed `SOURCE_DATE_EPOCH`.
+5. [x] Install the wheel with all dependencies into a fresh Python 3.12 environment outside the checkout and run doctor, synthetic DEM, complete build, and strict 3MF inspection.
+6. [x] Add pinned GitHub Actions quality, release, reference-region, and benchmark jobs.
+7. [x] Add three deterministic full-build benchmark cases with exact topology, resource ceilings, and two-run core artifact hash equality.
+8. [x] Add seven AOI reference definitions and offline reread of four retained real terrain sources without network access or rebuild.
+9. [x] Document connected/offline installation, same-platform wheelhouses, upgrade, workflow backup/restore, and non-destructive rollback.
+10. [x] Revalidate the retained Phase 7 official slice and 20-file checksum list without rerunning terrain acquisition or slicing.
+11. [x] Freeze Phase 8 with 192 passing tests, final verification JSON, checksum manifest, commit, and tag.
+
+Final package evidence: sdist SHA-256 `067f63e50ada269970ca6aace2d64c635e09b5eab76269b6083319e98e00a900`; wheel SHA-256 `ca56d0bb8824fd3a441bab1fc8cff187ff33d69fbdf36918c2be95d4d3d141d1`. Installed smoke used Python 3.12.3, imported only from the temporary venv, built a 40 x 32 x 20 mm model, and strict-read 3MF with zero warnings. Benchmark maximums were 15.692 s and 956.504 MiB for 256 x 320 / 327,676 triangles. Verification: `artifacts/verification/topoforge-0.7.0-phase8-release-verification.json`.
 
 ## Deferred non-blocking physical validation
 

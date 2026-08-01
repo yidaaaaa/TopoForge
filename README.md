@@ -2,7 +2,7 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Implemented milestone (TopoForge 0.6.0):** the validated local/no-key terrain core, deterministic tiling, and Phase 6 single-workstation workflow now include provenance-aware local GPX, road, river, coast, label, and DEM-derived contour overlays. Overlay inputs are checksum-bound, CRS-transformed into the existing +X East/+Y North/+Z Up model frame, mapped to the exact fixed-diagonal terrain surface, checked against original NoData, exported as independent STL layers plus one deterministic components-assembly 3MF, and presented in colored GLB/PNG previews. API/Web remains planned but is deferred until Phase 8 release hardening is complete.
+**Implemented milestone (TopoForge 0.7.0):** the validated local/no-key terrain core, deterministic tiling, resumable single-workstation workflow, and provenance-aware local overlays now ship with Phase 8 release hardening: bounded sdist/wheel contents, SPDX and dataset notices, byte-reproducible archives, isolated installed-CLI verification, CI, deterministic full-build benchmarks, reference-region contracts, and offline install/upgrade/rollback documentation. API/Web remains saved as deferred Phase 9.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
 
@@ -122,13 +122,20 @@ The local road, river, coast, label, and GPX files in `artifacts/phase7-inputs` 
 
 ## Install
 
+For source development:
+
 ```bash
 python3.12 -m pip install uv
-uv sync
+uv sync --locked --all-groups
 uv run topoforge doctor
 ```
 
-The lock includes Rasterio/GDAL, PyProj, NumPy, SciPy, Trimesh, Pillow, Pydantic, Typer, and the official `lib3mf==2.5.0` binding.
+For local release use, install the verified wheel into a dedicated Python 3.12
+environment. The Phase 8 verifier installs outside the checkout, clears `PYTHONPATH`,
+runs `topoforge doctor`, creates a synthetic DEM, builds a complete model bundle, and
+strict-reads the installed 3MF. A disconnected workstation needs a same-platform
+wheelhouse containing all dependencies; the TopoForge wheel alone is insufficient. See
+[`docs/release.md`](docs/release.md).
 
 ## Build a local GeoTIFF
 
@@ -429,9 +436,24 @@ uv run ruff check .
 uv run ruff format --check .
 uv run pyright
 uv run pytest
+SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/primary
+SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/repeat
+uv run python scripts/verify_release.py \
+  --primary-dir dist/primary --repeat-dir dist/repeat \
+  --version 0.7.0 --install \
+  --report artifacts/logs/phase8-release-verification.json
+uv run python scripts/verify_reference_regions.py \
+  --catalog reference_regions/catalog.yaml --definitions-only \
+  --report artifacts/logs/reference-definitions.json
+uv run python scripts/run_benchmarks.py \
+  --baseline benchmarks/baseline.json --repeat 2 \
+  --report artifacts/logs/phase8-benchmarks.json
 ```
 
-The 175-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, adapt/strict manufacturing preflight and build-volume gates, deterministic tile IDs/overlap windows/canonical layout reopen, per-tile raster/mask extraction, assembly-bound raster seams, global-frame tile STL/3MF/GLB bounds and peak consistency, mesh-boundary seams, volume/footprint assembly, coverage PNG, tamper detection, and repeat-byte determinism, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run. The current run reports 2278 visible tracked warnings under TF-006.
+The suite covers terrain, CRS/AOI, sampling, orientation, exporters, workflows, overlays,
+tiling/connectors, provider/cache behavior, slicers, release archives, reference regions,
+and benchmark contracts. Large DEM, mesh, cache, slicer, and benchmark output files
+remain outside Git.
 
 ## Documentation
 
@@ -443,6 +465,11 @@ The 175-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs,
 - `docs/printing.md`
 - `docs/tiling.md`
 - `docs/provider-development.md`
+- `docs/overlays.md`
+- `docs/offline-workflow.md`
+- `docs/release.md`
+- `docs/benchmarks.md`
+- `docs/reference-regions.md`
 
 ## Licenses
 

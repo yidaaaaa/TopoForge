@@ -1,0 +1,61 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.24"
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pyright
+      - run: uv run pytest
+
+  release:
+    needs: quality
+    runs-on: ubuntu-22.04
+    env:
+      SOURCE_DATE_EPOCH: "1580601600"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.24"
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+      - run: uv build --no-sources --out-dir dist/primary
+      - run: uv build --no-sources --out-dir dist/repeat
+      - run: >-
+          uv run python scripts/verify_release.py
+          --primary-dir dist/primary
+          --repeat-dir dist/repeat
+          --version 0.7.0
+          --install
+          --report artifacts/logs/ci-release-verification.json
+      - run: >-
+          uv run python scripts/verify_reference_regions.py
+          --catalog reference_regions/catalog.yaml
+          --definitions-only
+          --report artifacts/logs/ci-reference-regions.json
+      - run: >-
+          uv run python scripts/run_benchmarks.py
+          --baseline benchmarks/baseline.json
+          --repeat 2
+          --report artifacts/logs/ci-benchmarks.json

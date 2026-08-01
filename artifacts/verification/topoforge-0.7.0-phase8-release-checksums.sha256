@@ -1,0 +1,15 @@
+a66d99fd08ebd9908fc6d0a891e1fc295b15782bfc969596b940d95bb82b6eaf  .github/workflows/ci.yml
+f54fa164728ebde16fe43f43207a8ac2b1b5aabc33bb7276392f7b93118f202a  artifacts/logs/phase8-reference-regions.json
+643437dea597ceaecea7965524ce1bdff07f07b0dad549151bdd97b62683846a  artifacts/logs/topoforge-0.7.0-phase8-benchmarks.json
+4198529f07449b5c78343553dd1e97c0ce973488c5469a4dc7cd36d3ea55bb78  artifacts/logs/topoforge-0.7.0-phase8-release-verification.json
+fdd017d332dd3cec11a8ab541682c24092ae96b7911570db4cd632757f648606  artifacts/logs/topoforge-0.7.0-phase8-retained-slice-verification.json
+ecc0337f85a525dd94b210b937b08dcf6d4848c5a6fb8cb8404bfafd080b0fa7  artifacts/verification/topoforge-0.7.0-phase8-release-verification.json
+05486dab28f5657ef6dd43e4e9b16fa3772d5fedcca9d2ee8b4d1ec2ff8a538f  benchmarks/baseline.json
+ca56d0bb8824fd3a441bab1fc8cff187ff33d69fbdf36918c2be95d4d3d141d1  dist/topoforge-0.7.0-primary/topoforge-0.7.0-py3-none-any.whl
+067f63e50ada269970ca6aace2d64c635e09b5eab76269b6083319e98e00a900  dist/topoforge-0.7.0-primary/topoforge-0.7.0.tar.gz
+ca56d0bb8824fd3a441bab1fc8cff187ff33d69fbdf36918c2be95d4d3d141d1  dist/topoforge-0.7.0-repeat/topoforge-0.7.0-py3-none-any.whl
+067f63e50ada269970ca6aace2d64c635e09b5eab76269b6083319e98e00a900  dist/topoforge-0.7.0-repeat/topoforge-0.7.0.tar.gz
+a45eb8ae0a44c57721a5130a2804233cb02431acbb37cc437de7a327926bdb9f  docs/benchmarks.md
+4574cdbe914d6ee15cef90607fe098049b6d5b43003af506692c5a523a25a5d2  docs/reference-regions.md
+64c56fe7b5c9cae6a7b5cce693ee08ec0bc840c9bde852548aed1174dacef743  docs/release.md
+99b77f823913c4a24048929f496f731ac90ceefdbbb37dfe6fd33b7889d1cd62  reference_regions/catalog.yaml

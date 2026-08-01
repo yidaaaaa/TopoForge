@@ -249,3 +249,18 @@
 - **Decision:** Preserve complete stdout, stderr, command, result JSON, G-code, preset hashes, and baseline logs. Gate exit status, G-code creation, printer parameters, floating, empty layers, out-of-bed, and support directly. Classify `T65535` only after proving the literal sequence exists in the official resolved machine preset and generated G-code and appears in both retained baselines. Record `ZFiller` counts without suppressing them or treating an internal diagnostic alone as a geometry failure when result.json and required gates pass.
 - **Alternatives:** Delete official end G-code; filter log lines; label every internal error-level line a failed print; ignore raw logs.
 - **Impact:** Phase 7 makes no false claim that the diagnostics are absent, does not modify official presets, and separates measured manufacturing failures from documented upstream diagnostics.
+## ADR-033 — Release archives are bounded, reproducible, and installed outside the checkout
+
+- **Date:** 2026-08-02
+- **Context:** Hatch's default sdist included private agent state, Hypothesis caches, historical verification assets, and other files unrelated to source installation. A wheel that can be built inside the repository also does not prove that an installed CLI works without source-tree import leakage.
+- **Decision:** Define an explicit sdist allowlist and generated-file exclusions. Use SPDX license metadata and include code, dataset, and third-party notices. Build twice with a fixed `SOURCE_DATE_EPOCH`, require byte equality, inspect archive paths and metadata, install the wheel into a fresh Python 3.12 venv, clear `PYTHONPATH`, change to a directory outside the checkout, then run doctor, synthetic generation, a complete terrain build, and strict 3MF inspection.
+- **Alternatives:** Trust Hatch defaults; publish only a wheel; run smoke commands through `uv run` in the checkout; describe installation without executing it.
+- **Impact:** TopoForge 0.7.0 has measured package boundaries, byte-reproducible archives, complete license files, and direct evidence that the installed console entry point and core engine work independently of repository imports.
+
+## ADR-034 — Benchmarks and reference regions are executable offline release contracts
+
+- **Date:** 2026-08-02
+- **Context:** Early benchmark prose was stale and real-region examples lacked one bounded catalog tying AOI normalization to retained evidence. Rebuilding or redownloading real terrain during routine release checks would be expensive and would discard the value of retained source identity.
+- **Decision:** Use deterministic synthetic full builds for performance and artifact-repeat contracts, with exact shapes/triangles and generous wall/RSS ceilings. Separately freeze seven AOI definitions and hash/reread four retained real source/provenance/validation sets using a verifier with no network client. CI runs definitions only; the development workstation additionally checks retained local evidence.
+- **Alternatives:** Time only isolated functions; pin fragile exact timings; rebuild every real terrain sample; require network access in CI; treat documentation examples as verification.
+- **Impact:** Performance regressions, AOI projection changes, source tampering, and orientation regressions have explicit gates while real datasets remain untouched and unbundled.
