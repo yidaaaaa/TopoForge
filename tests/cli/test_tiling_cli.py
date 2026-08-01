@@ -6,7 +6,7 @@ from topoforge.cli.app import app
 from topoforge.engine import build_local_terrain
 from topoforge.models import BuildConfig
 from topoforge.raster import SyntheticTerrain, create_synthetic_geotiff
-from topoforge.tiling import read_tile_layout, verify_tile_set
+from topoforge.tiling import read_tile_layout, verify_tile_mesh_set, verify_tile_set
 
 runner = CliRunner()
 
@@ -75,3 +75,26 @@ def test_tile_plan_and_extract_cli_publish_verified_artifacts(tmp_path: Path) ->
     assert '"status": "extracted"' in extraction.output
     assert str((tile_output / "assembly_manifest.json").resolve()) in extraction.output
     assert str((tile_output / "seam_report.json").resolve()) in extraction.output
+
+    mesh_output = tmp_path / "tile-mesh-set"
+    meshed = runner.invoke(
+        app,
+        [
+            "tile-mesh",
+            str(tile_output),
+            "--source-bundle",
+            str(bundle),
+            "--output",
+            str(mesh_output),
+        ],
+    )
+
+    assert meshed.exit_code == 0, meshed.output
+    mesh_evidence = verify_tile_mesh_set(mesh_output, tile_output, bundle)
+    assert mesh_evidence["tile_count"] == 2
+    assert mesh_evidence["mesh_seam_count"] == 1
+    assert mesh_evidence["mesh_seam_status"] == "passed"
+    assert mesh_evidence["required_checks_passed"] is True
+    assert '"status": "meshed"' in meshed.output
+    assert str((mesh_output / "tile-mesh-assembly-manifest.json").resolve()) in meshed.output
+    assert str((mesh_output / "tile-coverage.png").resolve()) in meshed.output

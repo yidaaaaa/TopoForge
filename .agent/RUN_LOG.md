@@ -338,3 +338,17 @@ Result: exit 0; Ruff `All checks passed!`; format `114 files already formatted`;
 Command: reuse the retained Gongga `resource-v3` bundle and existing layout to extract `outputs/gongga-copernicus-glo30-resource-v3-tiles-100mm-v2` and `-repeat`, strictly reopen both, compare every relative file, and run `sha256sum -c artifacts/verification/topoforge-0.3.1-gongga-tile-seams-100mm-v2-checksums.sha256`.
 
 Result: no source download occurred. Layout `layout-694b1e78d24ba9f5920e` has four seams, 892 shared-core samples, and 2,688 overlap samples. Core/overlap maximum elevation differences, elevation mismatches, mask mismatches, and maximum transform alignment error are all zero; all CRS match and status is `passed`. Primary/repeat roles are 24/24 byte-identical, and every checksum reports `OK`. Verification: `artifacts/verification/topoforge-0.3.1-gongga-tile-seams-100mm-v2.json`.
+
+### Phase 5 global-frame tile meshes and assembly
+
+Command: implement `topoforge-tile-mesh-artifact-v1`, `topoforge-tile-mesh-assembly-v1`, `topoforge-tile-mesh-assembly-validation-v1`, `generate_tile_mesh_set()`, `verify_tile_mesh_set()`, 3MF global bounds inspection, deterministic coverage rendering, and `topoforge tile-mesh`.
+
+Result: geometry uses only core samples, the exact source `ScalingResult`, one north-row flip, and translation into shared +X East/+Y North/+Z Up bounds. Every tile publishes STL, strict 3MF, GLB, validation, and manifest roles. Root verification reopens every role, compares mesh boundary samples, global bounds, footprint partition, summed volume versus source STL, and coverage PNG. Focused 3MF/integration/CLI tests report 5 passed.
+
+Command: reuse `outputs/gongga-copernicus-glo30-resource-v3-tiles-100mm-v2` and the retained `resource-v3` bundle to generate `outputs/gongga-copernicus-glo30-resource-v3-tile-meshes-100mm-v1` and `-repeat`.
+
+Result: both commands exit 0 without acquisition. Four tiles each contain 198,876 triangles. Four mesh seams have 0.0 mm planar error, 0.0 mm maximum Z gap, and zero mismatches. Footprint overlap is 0.0 mm2; global bounds match; tile volume sum is 639,175.1224575599 mm3 versus source 639,175.1232061993 mm3, a 0.0007486393442377448 mm3 difference within a 6.391751232061993 mm3 tolerance. The 1200 x 1258 coverage image was visually checked; 24/24 primary/repeat files are byte-identical.
+
+Command: final `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, `git diff --check`, and `sha256sum -c artifacts/verification/topoforge-0.3.1-gongga-tile-meshes-100mm-v1-checksums.sha256`.
+
+Result: exit 0; Ruff `All checks passed!`; format `116 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `161 passed, 774 warnings in 22.57s`; diff whitespace and every retained source/tile/mesh/evidence checksum passed. Warnings remain visible under TF-006. Log: `artifacts/logs/phase5-tile-meshes-final-quality-gates.log`.

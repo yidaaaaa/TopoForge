@@ -31,6 +31,7 @@ class ThreeMFInspection:
     vertex_count: int
     triangle_count: int
     dimensions_mm: tuple[float, float, float]
+    bounds_mm: tuple[tuple[float, float, float], tuple[float, float, float]]
     peak_coordinate_mm: tuple[float, float, float]
     peak_coordinates_mm: tuple[tuple[float, float, float], ...]
     metadata: dict[str, str]
@@ -216,6 +217,8 @@ def inspect_3mf(path: str | Path) -> ThreeMFInspection:
     if strict_vertex_count != len(vertices) or strict_triangle_count != len(triangles):
         raise ValueError("lib3mf and independent XML topology counts disagree")
     dimensions = np.ptp(coordinates, axis=0)
+    minimum = np.min(coordinates, axis=0)
+    maximum = np.max(coordinates, axis=0)
     peak_index = int(np.argmax(coordinates[:, 2]))
     peak = coordinates[peak_index]
     maximum_z = float(peak[2])
@@ -231,6 +234,10 @@ def inspect_3mf(path: str | Path) -> ThreeMFInspection:
         vertex_count=len(vertices),
         triangle_count=len(triangles),
         dimensions_mm=(float(dimensions[0]), float(dimensions[1]), float(dimensions[2])),
+        bounds_mm=(
+            (float(minimum[0]), float(minimum[1]), float(minimum[2])),
+            (float(maximum[0]), float(maximum[1]), float(maximum[2])),
+        ),
         peak_coordinate_mm=(float(peak[0]), float(peak[1]), float(peak[2])),
         peak_coordinates_mm=tuple(
             (float(candidate[0]), float(candidate[1]), float(candidate[2]))

@@ -93,13 +93,13 @@ Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> wi
 3. [x] Define per-tile DEM/mask/provenance/validation contracts.
 4. [x] Publish an assembly manifest and tile coverage map.
 5. [x] Verify numerical seam consistency over shared core lines and complete overlap regions.
-6. [ ] Generate per-tile meshes in the shared global manufacturing frame.
-7. [ ] Verify multi-tile mesh assembly and publish a coverage image.
-8. [ ] Add connector geometry and printer-profile tolerance tests.
+6. [x] Generate per-tile meshes in the shared global manufacturing frame.
+7. [x] Verify multi-tile mesh assembly and publish a coverage image.
+8. [ ] Add connector geometry, print-local placement, and printer-profile tolerance tests.
 9. [ ] Stabilize tile/assembly contracts before worker API implementation.
 10. [ ] Stabilize worker API contracts before Web/MapLibre/Three.js implementation.
 
-Phase 5 raster/seam gate evidence: `topoforge tile-extract` verifies every source bundle manifest hash, extracts exact overlapped DEM/NoData windows, preserves CRS/transforms/raw+processed hashes, publishes canonical tile provenance/validation/manifests plus assembly/coverage/seam JSON, and strictly reopens all roles. The retained Gongga 100 mm 2x2 v2 extraction has four zero-difference seams, zero mask mismatches, zero transform error, matching CRS, and 24/24 primary/repeat files byte-identical. The full suite is 159 passed with 464 visible tracked warnings.
+Phase 5 raster/mesh gate evidence: `topoforge tile-extract` publishes exact checksummed raster windows and deterministic numerical seams. `topoforge tile-mesh` requires that pass, maps core samples through the saved scaling policy, publishes global-frame STL/3MF/GLB plus strict per-tile validation, remeasures mesh seams/global bounds/footprint/volume, and renders a checksummed coverage PNG. The retained Gongga 100 mm 2x2 mesh primary/repeat are 24/24 files byte-identical; four mesh seams have 0.0 mm planar/Z error, footprint overlap is 0.0 mm2, and volume difference is 0.000748639 mm3. The full suite is 161 passed with 774 visible tracked warnings.
 
 ## Milestone 02 acceptance — passed in 0.3.0
 

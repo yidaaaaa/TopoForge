@@ -2,7 +2,7 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Implemented milestone (TopoForge 0.3.1 plus Phase 5 increments):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, explicit adapt/strict cell-triangle-memory budgets, build-volume/vertical-scale preflight, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Phase 5 now includes deterministic tile layout, exact per-tile DEM/NoData extraction, checksummed tile provenance/validation, an assembly manifest, a coverage map, and an assembly-bound deterministic numerical seam report through `topoforge tile-plan`/`tile-extract`. Per-tile meshes, mesh assembly, coverage imagery, and connectors remain before Worker API and Web.
+**Implemented milestone (TopoForge 0.3.1 plus Phase 5 increments):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, explicit adapt/strict cell-triangle-memory budgets, build-volume/vertical-scale preflight, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Phase 5 now includes deterministic tile layout, exact per-tile DEM/NoData extraction, checksummed raster seams, global-frame per-tile STL/3MF/GLB, strict multi-tile mesh assembly validation, and a deterministic north/east coverage image through `topoforge tile-plan`/`tile-extract`/`tile-mesh`. Connector geometry, print-local placement, per-tile slicing, Worker API, and Web remain.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
 
@@ -132,7 +132,7 @@ uv run topoforge preflight \
 
 Preflight reuses the production raster and scaling path in a temporary directory and reports resolved dimensions, build-volume headroom/utilization, source/processed grids, exact triangle estimate, memory estimate, physical spacing, vertical exaggeration, hard-gate booleans, warnings, and suggested actions.
 
-## Plan and extract deterministic terrain tiles
+## Plan, extract, and mesh deterministic terrain tiles
 
 ```bash
 uv run topoforge tile-plan \
@@ -145,11 +145,18 @@ uv run topoforge tile-extract \
   outputs/completed-bundle \
   --layout outputs/completed-bundle-tile-layout.json \
   --output outputs/completed-bundle-tiles
+
+uv run topoforge tile-mesh \
+  outputs/completed-bundle-tiles \
+  --source-bundle outputs/completed-bundle \
+  --output outputs/completed-bundle-tile-meshes
 ```
 
 `tile-extract` verifies every checksum already bound by the source build manifest before reading the processed DEM. It crops each deterministic `sampling_window` from `processed_dem.tif` and `original_nodata_mask.tif`, preserves CRS/window transforms and raw/processed source hashes, then publishes canonical per-tile provenance, validation, and manifests plus root `coverage_map.json`, `seam_report.json`, and `assembly_manifest.json`. Publication uses a staging directory, refuses overwrite, strictly reopens every JSON/GeoTIFF, recomputes all SHA-256 values, compares extracted values to the exact source windows, and remeasures every east/south adjacency before publication.
 
 The retained Gongga `resource-v3` seam evidence uses a `2 x 2` grid at a `100 x 100 mm` maximum tile footprint with one overlap cell. Its four adjacencies contain 892 shared-core samples and 2,688 overlap samples. Core and overlap elevation differences, NoData-mask mismatches, and transform alignment error are all zero; every CRS matches. All 24 files in the primary and repeat extractions are byte-identical. See `artifacts/verification/topoforge-0.3.1-gongga-tile-seams-100mm-v2.json`.
+
+`tile-mesh` requires that passing seam evidence, uses only each tile's core samples, reuses the exact source scaling object, flips north-up raster rows once, and translates every closed solid into the shared `+X East/+Y North/+Z Up` model frame. Each tile publishes global-frame STL, strict 3MF, GLB, validation, and a manifest. The root mesh assembly report checks global bounds, footprint partition, reopened top-boundary seams, summed tile volume versus the source STL, all hashes, and the coverage PNG. The Gongga v1 mesh evidence has four zero-gap mesh seams, zero footprint overlap, a `0.000748639 mm3` source-volume difference, and 24/24 primary/repeat files byte-identical. See `artifacts/verification/topoforge-0.3.1-gongga-tile-meshes-100mm-v1.json`.
 
 ## Fetch or build from the no-key global provider
 
@@ -251,6 +258,7 @@ topoforge build-global no-key Copernicus AWS AOI to complete artifact bundle
 topoforge preflight   printer fit, sampling, triangles, memory, and vertical-scale report
 topoforge tile-plan   deterministic tile IDs, overlap windows, and physical bounds
 topoforge tile-extract per-tile DEM/mask/provenance plus assembly/seam evidence
+topoforge tile-mesh    global-frame STL/3MF/GLB plus assembly/coverage evidence
 topoforge fetch-dem   cache and normalize a Copernicus AWS AOI GeoTIFF
 topoforge synthetic   deterministic analytic GeoTIFF fixtures
 topoforge inspect     raster/STL/GLB/3MF measurements
@@ -279,7 +287,7 @@ topoforge doctor      Python/GDAL/PROJ/slicer versions
 - STL is reopened with coordinate welding; 3MF is strict-read with lib3mf and independently inspected as OPC/XML.
 - Exhaustive self-intersection remains `not_fully_checked` when no robust backend is available.
 - The default release boundary is official Bambu Studio plus resolved P2S machine/process/filament parameter checks; a slicer exit code alone is insufficient.
-- `topoforge tile-plan` and `tile-extract` operate only on a validated existing bundle; they do not redownload, resample, mirror, or alter elevations. Extraction preserves exact source windows and hashes. The seam report compares shared core lines and full overlap rectangles for elevation, original NoData mask, CRS, and transform alignment. It proves raster continuity only; per-tile mesh assembly and connectors remain separate quality-gated steps.
+- `topoforge tile-plan`, `tile-extract`, and `tile-mesh` operate only on validated existing evidence; they do not redownload, resample, mirror, sharpen, or alter elevations. Mesh generation uses core samples rather than overlap halos, preserves the source absolute Z mapping, strictly reopens STL/GLB/3MF, and proves global-frame boundary/volume/footprint assembly. Connector fit and print-local slicing remain separate quality-gated steps.
 
 ## Quality gates
 
@@ -290,7 +298,7 @@ uv run pyright
 uv run pytest
 ```
 
-The 159-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, adapt/strict manufacturing preflight and build-volume gates, deterministic tile IDs/overlap windows/canonical layout reopen, per-tile raster/mask extraction, full source-manifest verification, strict tile-set reopen, assembly-bound seam checks, elevation/mask/transform tamper detection, legacy seam-less manifest reopen, and byte determinism, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run. The current run reports 464 visible tracked warnings under TF-006.
+The 161-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, adapt/strict manufacturing preflight and build-volume gates, deterministic tile IDs/overlap windows/canonical layout reopen, per-tile raster/mask extraction, assembly-bound raster seams, global-frame tile STL/3MF/GLB bounds and peak consistency, mesh-boundary seams, volume/footprint assembly, coverage PNG, tamper detection, and repeat-byte determinism, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run. The current run reports 774 visible tracked warnings under TF-006.
 
 ## Documentation
 

@@ -25,6 +25,8 @@ def test_3mf_round_trip_preserves_units_dimensions_and_topology(tmp_path: Path) 
     assert inspected.vertex_count == len(mesh.vertices)
     assert inspected.triangle_count == len(mesh.faces)
     assert inspected.dimensions_mm == pytest.approx(tuple(mesh.extents), abs=1e-9)
+    assert inspected.bounds_mm[0] == pytest.approx(tuple(mesh.bounds[0]), abs=1e-9)
+    assert inspected.bounds_mm[1] == pytest.approx(tuple(mesh.bounds[1]), abs=1e-9)
 
 
 def test_repeated_3mf_exports_are_byte_identical(tmp_path: Path) -> None:

@@ -58,7 +58,9 @@ from topoforge.raster import SyntheticTerrain, create_synthetic_geotiff
 from topoforge.tiling import (
     TileLayoutConfig,
     extract_tile_set,
+    generate_tile_mesh_set,
     plan_tile_layout,
+    verify_tile_mesh_set,
     verify_tile_set,
     write_tile_layout,
 )
@@ -622,6 +624,41 @@ def tile_extract(
                 "coverage_map": str(result.coverage_map_path),
                 "seam_report": str(result.seam_report_path),
                 "tile_manifest_count": len(result.tile_manifest_paths),
+                "verification": verification,
+            }
+        )
+    except (TopoForgeError, ValueError, OSError, RasterioError) as exc:
+        _fail(exc)
+
+
+@app.command("tile-mesh")
+def tile_mesh(
+    tile_set_dir: Annotated[
+        Path, typer.Argument(help="Verified TopoForge raster tile-set directory.")
+    ],
+    source_bundle_dir: Annotated[
+        Path, typer.Option("--source-bundle", help="Completed source build bundle.")
+    ],
+    output: Annotated[Path, typer.Option("--output", "-o")],
+) -> None:
+    """Generate global-frame tile meshes and verify their complete assembly."""
+    try:
+        result = generate_tile_mesh_set(tile_set_dir, source_bundle_dir, output)
+        verification = verify_tile_mesh_set(
+            result.output_dir,
+            tile_set_dir,
+            source_bundle_dir,
+        )
+        _emit(
+            {
+                "status": "meshed",
+                "tile_set": str(tile_set_dir.expanduser().resolve()),
+                "source_bundle": str(source_bundle_dir.expanduser().resolve()),
+                "output": str(result.output_dir),
+                "assembly_manifest": str(result.assembly_manifest_path),
+                "assembly_validation": str(result.assembly_validation_path),
+                "coverage_image": str(result.coverage_image_path),
+                "tile_mesh_manifest_count": len(result.tile_mesh_manifest_paths),
                 "verification": verification,
             }
         )

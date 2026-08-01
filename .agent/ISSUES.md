@@ -170,7 +170,7 @@
 ## TF-019 — Phase 5 lacked a stable tile identity and overlap contract
 
 - **Severity:** High
-- **Status:** Resolved for layout planning and exact raster extraction; seam/mesh/connectors remain roadmap work
+- **Status:** Resolved for layout, raster extraction, seams, and connector-free meshes; connectors remain roadmap work
 - **Reproduction:** There was no canonical partition for processed sample grids, no fixed row/column origin, and no machine-readable overlap window for later tile workers.
 - **Expected behavior:** Identical grid/model/tile-size/overlap inputs produce byte-identical layout JSON, stable IDs, complete non-overlapping core cell coverage, shared seam samples, and clipped outer halos.
 - **Resolution:** Added `topoforge.tiling` layout models, deterministic layout digest and tile IDs, north/west mapping, physical bounds, neighbor metadata, overlap windows, strict canonical write/reopen, bundle-backed `topoforge tile-plan`, and unit/CLI regressions.
@@ -181,7 +181,7 @@
 - **Status:** Resolved for raster extraction
 - **Reproduction:** Before this increment, `tile-plan` produced windows but no per-tile files, root assembly identity, complete source-manifest validation, or published tamper detector.
 - **Expected behavior:** A new tile-set directory contains exact DEM/NoData windows, complete per-tile provenance/validation/manifests, a coverage map and assembly manifest, and strict source-window/hash verification with no partial publication.
-- **Resolution:** Added `extract_tile_set()`, `verify_tile_set()`, and `topoforge tile-extract`; full source role verification, safe relative paths, canonical JSON, strict GeoTIFF reopen, report remeasurement, exact source-window equality, source model-size binding, staging cleanup, overwrite rejection, tamper tests, and real Gongga repeat-byte evidence all pass. Mesh assembly and connectors remain separate Phase 5 work.
+- **Resolution:** Added `extract_tile_set()`, `verify_tile_set()`, and `topoforge tile-extract`; full source role verification, safe relative paths, canonical JSON, strict GeoTIFF reopen, report remeasurement, exact source-window equality, source model-size binding, staging cleanup, overwrite rejection, tamper tests, and real Gongga repeat-byte evidence all pass. Mesh assembly is now resolved by TF-022; connectors remain separate Phase 5 work.
 
 ## TF-021 — Extracted tile sets lacked published numerical seam evidence
 
@@ -189,4 +189,12 @@
 - **Status:** Resolved for raster continuity
 - **Reproduction:** Reopen a pre-seam Phase 5 tile set; exact source windows are present, but no report enumerates adjacencies or measures shared-core/overlap elevation, mask, CRS, and transform consistency.
 - **Expected behavior:** Every new tile set contains deterministic, checksummed, strictly remeasured evidence for all raster seams, with explicit thresholds and tamper regressions.
-- **Resolution:** Added `measure_tile_seams()` and canonical `seam_report.json`, assembly-manifest path/hash binding, strict remeasurement, stable east/south adjacency enumeration, exact core/overlap elevation and mask checks, metric transform alignment, legacy manifest compatibility, failure/tamper tests, and retained Gongga v2 repeat-byte evidence. Per-tile mesh and connector continuity remain open roadmap gates.
+- **Resolution:** Added `measure_tile_seams()` and canonical `seam_report.json`, assembly-manifest path/hash binding, strict remeasurement, stable east/south adjacency enumeration, exact core/overlap elevation and mask checks, metric transform alignment, legacy manifest compatibility, failure/tamper tests, and retained Gongga v2 repeat-byte evidence. Connector-free mesh continuity is now resolved by TF-022; connector continuity remains open.
+
+## TF-022 — Raster seam success did not prove printable tile-solid assembly
+
+- **Severity:** High
+- **Status:** Resolved for connector-free global-frame solids
+- **Reproduction:** Reopen a seam-passing raster tile set before this increment; no per-tile STL/3MF/GLB or evidence proves shared X/Y/Z coordinates, closed geometry, boundary-height equality, complete footprint, or volume preservation.
+- **Expected behavior:** A separate immutable mesh set binds exact source scaling and tile identities, strictly reopens every format, measures every mesh boundary and the whole assembly, publishes a coverage image, detects tampering, and repeats byte-for-byte.
+- **Resolution:** Added `generate_tile_mesh_set()`, `verify_tile_mesh_set()`, and `topoforge tile-mesh`; global-frame core-only solids; strict STL/3MF/GLB bounds/peak/topology checks; assembly seam, footprint, bounds, and volume validation; deterministic coverage PNG; atomic publication/overwrite rejection; CLI, tamper, asymmetric orientation, and determinism regressions; and retained Gongga primary/repeat evidence. Connector geometry and print-local slicing remain open.

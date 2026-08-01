@@ -32,9 +32,14 @@ uv run topoforge tile-extract \
   outputs/example-bundle \
   --layout outputs/example-tile-layout.json \
   --output outputs/example-tile-set
+
+uv run topoforge tile-mesh \
+  outputs/example-tile-set \
+  --source-bundle outputs/example-bundle \
+  --output outputs/example-tile-mesh-set
 ```
 
-Both commands refuse overwrite. `tile-plan` strictly verifies the source build, derives the processed grid shape and model footprint, writes canonical sorted JSON atomically, and recomputes the layout identity on reopen. `tile-extract` verifies every source build-manifest checksum, stages all files, strictly verifies the complete staged tile set, then atomically publishes the directory.
+All three commands refuse overwrite. `tile-plan` strictly verifies the source build, derives the processed grid shape and model footprint, writes canonical sorted JSON atomically, and recomputes the layout identity on reopen. `tile-extract` verifies every source build-manifest checksum, stages all files, strictly verifies the complete staged tile set, then atomically publishes the directory. `tile-mesh` requires a passing checksummed seam report, stages global-frame mesh roles, strictly reopens every format and report, remeasures the full assembly, then atomically publishes a separate derived directory.
 
 ## Published tile-set roles
 
@@ -75,6 +80,28 @@ The report records per-seam and aggregate sample counts, maximum/mean absolute e
 
 New tile sets always publish the canonical report and bind its SHA-256 from the assembly manifest. `verify_tile_set()` checks that hash, strictly reopens the report, remeasures all tile rasters using the recorded elevation tolerance, and rejects any difference or failed required check. Legacy v1 assembly manifests that omit both optional seam fields remain readable and are reported as `not-reported`; that compatibility does not add a seam claim to old evidence.
 
+## Published mesh-set roles
+
+```text
+example-tile-mesh-set/
+  tile-layout.json
+  tile-coverage.png
+  tile-mesh-assembly-validation.json
+  tile-mesh-assembly-manifest.json
+  tiles/
+    tile-r0000-c0000/
+      model.global.stl
+      model.global.3mf
+      preview.global.glb
+      tile_mesh_validation.json
+      tile_mesh_manifest.json
+    ...
+```
+
+Only each tile's `core_sample_window` becomes geometry; overlap halos remain source/seam evidence for later connector work. Source elevations are mapped through the exact `ScalingResult` stored in source provenance. The core heightfield is flipped once so source row 0 remains north, built as a closed flat-bottom solid, and translated by `physical_bounds_mm` into the common model origin. Per-tile validation strictly reopens STL, GLB, and 3MF; compares global bounds, peak coordinates, triangle counts, orientation metadata, watertightness, winding, manifoldness, volume, bottom, and dimensions; and binds all roles to the source tile manifest and DEM hashes.
+
+The root assembly validation compares reopened STL boundary samples for every east/south adjacency, checks the complete global bounds and non-overlapping footprint partition, and compares the summed tile volume with the original source STL. `tile-coverage.png` maps row 0 north and column 0 west, includes north/east markers, and is bound by the root mesh manifest. These global-frame meshes are assembly evidence; print-local placement and per-tile slicing are a subsequent gate.
+
 ## Strict verification
 
 `verify_tile_set()` reopens and cross-checks:
@@ -89,6 +116,8 @@ New tile sets always publish the canonical report and bind its SHA-256 from the 
 8. the optional assembly-bound seam-report checksum, canonical bytes, layout/source identity, and fresh numerical remeasurement.
 
 The extractor runs this verifier before publication. The CLI runs it again against the final published directory. Failures remove staging output; an existing requested destination is preserved.
+
+`verify_tile_mesh_set()` additionally rechecks the source tile-set seam gate, source build/STL/scaling identities, every mesh-set relative path and checksum, canonical per-tile/root reports, reopened STL/GLB/3MF measurements, 3MF metadata, mesh-boundary samples, global bounds, footprint area, volume sum, and coverage PNG. Generation invokes the same verifier before atomic publication.
 
 ## Determinism
 
@@ -114,6 +143,8 @@ The retained Gongga `resource-v3` seam evidence uses a `100 x 100 mm` maximum ti
 
 Evidence: `artifacts/verification/topoforge-0.3.1-gongga-tile-seams-100mm-v2.json` and its checksum/determinism companions.
 
+The derived Gongga mesh set contains four global-frame solids at 198,876 triangles each. Four reopened STL mesh seams have `0.0 mm` planar and Z error with zero mismatches; global bounds match, footprint overlap is `0.0 mm2`, and summed volume differs from the source STL by `0.0007486393442377448 mm3` within a `6.391751232061993 mm3` tolerance. The `1200 x 1258` coverage PNG was visually checked, and all 24 primary/repeat files are byte-identical. Evidence: `artifacts/verification/topoforge-0.3.1-gongga-tile-meshes-100mm-v1.json`.
+
 ## Next contracts
 
-Numerical raster seam consistency is complete. This pass does not prove that independently exported tile solids assemble without gaps, duplicate walls, orientation changes, or Z offsets. The next Phase 5 gate generates per-tile meshes in one shared global manufacturing frame, verifies multi-tile mesh assembly, and adds a coverage image. Connector geometry plus printer-profile tolerance tests follow. Worker API implementation follows stable extraction/assembly/seam/connector contracts; Web/MapLibre/Three.js follows the stable API contract.
+Numerical raster seams, global-frame per-tile meshes, multi-tile boundary/volume/footprint assembly, and coverage imagery are complete. The next Phase 5 gate defines connector geometry, printer-profile clearance/interference thresholds, print-local placement transforms, and actual per-tile slicing. Worker API implementation follows stable extraction/assembly/seam/connector contracts; Web/MapLibre/Three.js follows the stable API contract.
