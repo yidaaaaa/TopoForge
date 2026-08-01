@@ -212,3 +212,11 @@
 - **Status:** Resolved in 0.4.0
 - **Reproduction:** Global-frame mesh evidence cannot establish that four local tiles fit the P2S bed, slice without floating/empty layers or support, use the intended parameters, or reopen as self-contained Bambu projects.
 - **Resolution:** Added source-bound `tile-slice`, exact profile copies/hashes, G-code reparse and aggregate metrics, complete official P2S parameter gates, support/out-of-bed/empty/floating rejection, and a project export/archive/MD5/no-external-profile reopen script. Four real Gongga tiles pass all gates.
+
+## TF-025 — Connector fit lacks physical calibration evidence
+
+- **Severity:** High
+- **Status:** Open
+- **Reproduction:** Review the 0.4.0 connector record: geometry, clearance envelopes, P2S slicing, and project reopen pass, but no printed coupon or assembled tile has measured insertion force, play, shrinkage, or dimensional error.
+- **Expected behavior:** Material/nozzle/layer-specific connector presets are backed by printed tolerance coupons and recorded measurements.
+- **Next action:** Generate deterministic coupons across a bounded clearance matrix, slice them with the retained P2S profiles, publish a worksheet, obtain local print measurements, and only then promote physically calibrated presets.

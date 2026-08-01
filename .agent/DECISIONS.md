@@ -185,3 +185,11 @@
 - **Decision:** `tile-slice` accepts only print-local 3MF roles, copies/hashes exact profiles, invokes every tile, reparses G-code, rejects out-of-bed/empty/floating/support results, and applies the full official P2S parameter gate. Preserve the strict lib3mf print-local 3MF and export a second Bambu project 3MF; verify ZIP/embedded G-code MD5 and no-external-profile reopen/reslice separately.
 - **Alternatives:** Slice global-frame tiles; treat PrusaSlicer as the P2S release boundary; replace the interoperable 3MF; skip project reopen; trust only result.json or exit code.
 - **Impact:** Phase 5 provides portable geometry, assembly truth, G-code evidence, and self-contained P2S project roles without conflating them. These frozen artifact contracts are inputs to Phase 6 workers/API.
+
+## ADR-025 — Single-user local completion precedes API and Web
+
+- **Date:** 2026-08-01
+- **Context:** The project is currently operated by one person on one local workstation. FastAPI, workers, queues, persistence, authentication, and Web deployment add maintenance without improving the validated CLI manufacturing path.
+- **Decision:** Preserve the API/Web design as deferred Phase 9. Complete physical connector calibration, resumable one-command local orchestration, local configuration/report UX, overlays, recovery, packaging, CI, and offline documentation first. A future API must wrap the same core contracts and may start only after the local product is frozen.
+- **Alternatives:** Begin FastAPI immediately; cancel API permanently; build Web logic that duplicates the Python core.
+- **Impact:** Current work targets measurable local utility and physical evidence. No API plan is lost, but there is no near-term service/database/queue/auth burden.

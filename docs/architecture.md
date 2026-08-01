@@ -83,4 +83,4 @@ The interoperable 3MF path adds official lib3mf strict read with zero warnings, 
 
 ## Extension sequence
 
-The local/resolved-place AOI, provider/cache path, printer-aware manufacturing core, and Phase 5 manufacturing tiling contracts are complete. Phase 5 now includes deterministic tile IDs, exact raster extraction, numerical/mesh seams, global-frame solids, printer-derived dovetails, reversible print-local files, actual per-tile slicing, complete P2S parameter gates, and Bambu project reopen evidence. Phase 6 begins with worker-backed FastAPI job/artifact contracts over the existing Python core; Web/MapLibre/Three.js follows only after those API contracts stabilize.
+The local/resolved-place AOI, provider/cache path, printer-aware manufacturing core, and Phase 5 manufacturing tiling contracts are complete. Phase 6 completes the single-user local workflow, physical connector calibration, recovery, and local UX without a server. Local overlays and release hardening follow. Worker-backed FastAPI and Web/MapLibre/Three.js remain a deferred later phase and must still call the same Python core when eventually implemented.

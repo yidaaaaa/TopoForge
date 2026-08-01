@@ -382,3 +382,9 @@ Result: exit 0; Ruff `All checks passed!`; format `121 files already formatted`;
 Command: commit Phase 5 implementation as `d8342ddc069bf070981c8484e24ddf509d08eec0`; generate `artifacts/patches/topoforge-0.4.0-source.patch` from baseline `d82ce3af6c69fab109733be9532170bb3d925d6f`; verify forward/reverse patch application and `scripts/rollback-topoforge-0.4.0.sh --confirm-rollback` in independent no-hardlink clones.
 
 Result: patch SHA-256 `16513093a5cd635a3ae3c09f46b5e988b3f3f3ad85989fbe7b3ed7c81aa723bc`, 243,854 bytes. Forward check/apply/diff check, reverse check/apply-clean, and isolated rollback all pass; record: `artifacts/verification/topoforge-0.4.0-patch-rollback.txt`.
+
+### Local-first roadmap and deferred API
+
+Decision: retain API/Web as deferred Phase 9 because current operation is single-user/local. Phase 6 now covers physical connector calibration, resumable one-command orchestration, local configuration/report UX, self-intersection and dependency-warning hardening, recovery, cleanup, backup, and offline documentation. Overlay and local release phases precede API/Web.
+
+Result: `.agent/PLANS.md`, `STATE.md`, ADR-025, TF-025, AGENTS.md, README, and architecture/tiling documentation consistently preserve the API plan while making connector coupons and physical measurements the next exact work.
