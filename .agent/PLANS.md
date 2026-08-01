@@ -10,7 +10,7 @@ Updated: 2026-08-01
 - [x] Phase 2 closure — deterministic export/provenance revalidated after Phase 1 AOI closure. Completed 2026-07-31.
 - [x] Phase 3 — global/high-resolution providers, AOI/geocoding, cache, selection/fallback. Completed in 0.3.0.
 - [x] Phase 4 — build-volume/resource UX, adapt/strict budgets, vertical-scaling preflight, real rebuild, and slice evidence. Completed in 0.3.1.
-- [ ] Phase 5 — tiling, assembly manifest/map, labels, and verified connectors.
+- [x] Phase 5 — tiling, assembly manifest/map, labels, verified connectors, print-local files, and per-tile slicing. Completed in 0.4.0.
 - [ ] Phase 6 — worker-backed FastAPI and React/MapLibre/Three.js Web application.
 - [ ] Phase 7 — provenance-aware GPX/road/river/contour/label/coast overlays.
 - [ ] Phase 8 — Docker, CI, complete benchmarks, reference regions, and release preparation.
@@ -86,20 +86,30 @@ Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> wi
 - [x] Verify seven deterministic core roles byte-identical, strict 3MF warnings zero, STL/GLB geometry consistent, and PrusaSlicer exit 0 with no floating/empty/out-of-bed/support warning.
 - [x] Final gates: Ruff, format, Pyright, 141 tests, and diff whitespace all pass.
 
-## Current Phase 5 sequence
+## Completed Phase 5 — deterministic manufacturing tiling (0.4.0)
 
-1. [x] Define a deterministic map-tile schema, tile IDs, and stable row/column mapping.
-2. [x] Define deterministic overlap/edge sampling windows with clipped outer boundaries.
-3. [x] Define per-tile DEM/mask/provenance/validation contracts.
-4. [x] Publish an assembly manifest and tile coverage map.
-5. [x] Verify numerical seam consistency over shared core lines and complete overlap regions.
-6. [x] Generate per-tile meshes in the shared global manufacturing frame.
-7. [x] Verify multi-tile mesh assembly and publish a coverage image.
-8. [ ] Add connector geometry, print-local placement, and printer-profile tolerance tests.
-9. [ ] Stabilize tile/assembly contracts before worker API implementation.
-10. [ ] Stabilize worker API contracts before Web/MapLibre/Three.js implementation.
+1. [x] Define deterministic layout IDs, north/west row/column mapping, and overlap windows.
+2. [x] Extract exact per-tile DEM/NoData windows with source-bound manifests.
+3. [x] Publish and remeasure numerical raster seams.
+4. [x] Generate shared global-frame tile STL/3MF/GLB and verify mesh assembly.
+5. [x] Derive stable west/north-male and east/south-female connector identities/polarity.
+6. [x] Derive clearance, wall, roof, neck/head/depth/height, edge, and spacing thresholds from the printer profile.
+7. [x] Generate base-only dovetails without changing the terrain top; verify presence, cavities, collision, topology, bed contact, thin walls, and printer fit.
+8. [x] Publish reversible print-local STL/3MF/GLB and connector labels/map.
+9. [x] Actually slice every Gongga tile with PrusaSlicer diagnostics and official Bambu Studio P2S parameter gates.
+10. [x] Export separate Bambu project 3MF roles and perform no-external-profile reopen/reslice.
+11. [x] Prove connector/print-local determinism (37/37), strict checksums, tamper detection, and atomic cleanup.
+12. [x] Freeze the tile/assembly/connector/slice contracts before Phase 6.
 
-Phase 5 raster/mesh gate evidence: `topoforge tile-extract` publishes exact checksummed raster windows and deterministic numerical seams. `topoforge tile-mesh` requires that pass, maps core samples through the saved scaling policy, publishes global-frame STL/3MF/GLB plus strict per-tile validation, remeasures mesh seams/global bounds/footprint/volume, and renders a checksummed coverage PNG. The retained Gongga 100 mm 2x2 mesh primary/repeat are 24/24 files byte-identical; four mesh seams have 0.0 mm planar/Z error, footprint overlap is 0.0 mm2, and volume difference is 0.000748639 mm3. The full suite is 161 passed with 774 visible tracked warnings.
+Real evidence: eight connectors over four seams, `0.2 mm` total lateral / `0.2 mm` vertical clearance, `0.0 mm` terrain-top deviation, and `0.0 mm3` collision. Official Bambu Studio `02.07.01.62` sliced all four print-local tiles with exit 0, complete P2S parameter checks, maximum 224 layers, `224.53 g`, and no out-of-bed/empty/floating/support result. Four project 3MF files passed archive/MD5 and no-external-profile reopen/reslice. Verification: `artifacts/verification/topoforge-0.4.0-gongga-phase5-verification.json`.
+
+## Current Phase 6 sequence
+
+1. [ ] Define typed API job, progress, error, artifact, cache, and provenance schemas from the frozen core contracts.
+2. [ ] Implement worker-backed FastAPI submission/status/cancellation/artifact endpoints without duplicating core algorithms.
+3. [ ] Add bounded worker concurrency, workspace isolation, resumable artifact identity, and API integration tests.
+4. [ ] Stabilize API contracts before React/MapLibre/Three.js implementation.
+5. [ ] Build Web AOI selection, job progress, artifact download, provenance display, and 3D preview against the stable API.
 
 ## Milestone 02 acceptance — passed in 0.3.0
 

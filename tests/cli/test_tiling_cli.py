@@ -6,7 +6,12 @@ from topoforge.cli.app import app
 from topoforge.engine import build_local_terrain
 from topoforge.models import BuildConfig
 from topoforge.raster import SyntheticTerrain, create_synthetic_geotiff
-from topoforge.tiling import read_tile_layout, verify_tile_mesh_set, verify_tile_set
+from topoforge.tiling import (
+    read_tile_layout,
+    verify_print_tile_set,
+    verify_tile_mesh_set,
+    verify_tile_set,
+)
 
 runner = CliRunner()
 
@@ -98,3 +103,29 @@ def test_tile_plan_and_extract_cli_publish_verified_artifacts(tmp_path: Path) ->
     assert '"status": "meshed"' in meshed.output
     assert str((mesh_output / "tile-mesh-assembly-manifest.json").resolve()) in meshed.output
     assert str((mesh_output / "tile-coverage.png").resolve()) in meshed.output
+
+    print_output = tmp_path / "print-tile-set"
+    connected = runner.invoke(
+        app,
+        [
+            "tile-connect",
+            str(mesh_output),
+            "--tile-set",
+            str(tile_output),
+            "--source-bundle",
+            str(bundle),
+            "--output",
+            str(print_output),
+        ],
+    )
+
+    assert connected.exit_code == 0, connected.output
+    print_evidence = verify_print_tile_set(print_output, mesh_output, tile_output, bundle)
+    assert print_evidence["tile_count"] == 2
+    assert print_evidence["seam_count"] == 1
+    assert print_evidence["connector_fit_status"] == "passed"
+    assert print_evidence["collision_status"] == "passed"
+    assert print_evidence["required_checks_passed"] is True
+    assert '"status": "connected"' in connected.output
+    assert str((print_output / "connector-plan.json").resolve()) in connected.output
+    assert str((print_output / "connector-map.png").resolve()) in connected.output

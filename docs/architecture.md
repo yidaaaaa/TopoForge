@@ -44,7 +44,13 @@ processed_dem.tif + original_nodata_mask.tif + validation dimensions
   -> topoforge tile-mesh
   -> global-frame per-tile STL/3MF/GLB + strict reopen
   -> mesh-boundary/volume/footprint assembly + coverage PNG
-  -> connector export, print-local placement, and tolerance verification (next)
+  -> topoforge tile-connect
+  -> printer-derived dovetail plan + connector booleans below the terrain surface
+  -> global assembly and reversible print-local STL/3MF/GLB
+  -> fit/collision/wall/bed/build-volume/top-surface validation + connector map
+  -> topoforge tile-slice
+  -> actual per-tile G-code + official P2S parameter gate
+  -> separate Bambu project 3MF + no-external-profile reopen/reslice evidence
 ```
 
 Builds use a sibling staging directory. Every required file is written and reopened before the stage is atomically renamed to the requested new output directory. A non-empty destination is preserved and rejected.
@@ -63,7 +69,7 @@ Builds use a sibling staging directory. Every required file is written and reope
 - `cli`: Typer argument parsing and JSON presentation.
 - `providers`: normalized-AOI provider contracts, explainable deterministic selection/fetch fallback, Copernicus AWS catalog/tile/ancillary-mask planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
 - `geocoding`: cached Nominatim-compatible candidate search and explicit ambiguity resolution; selected candidates become ordinary recorded AOIs before provider selection.
-- `tiling`: versioned deterministic layout planning, tile-set extraction, numerical seam measurement, and global-frame tile mesh assembly; row/column identity, core/overlap windows, exact DEM/NoData slices, source-bound scaling, per-tile STL/3MF/GLB, strict geometry/format reopen, raster and mesh seam reports, volume/footprint assembly, deterministic coverage imagery, full SHA-256 binding, canonical JSON, and atomic publication. Connectors, print-local placement, and per-tile slicing build on this contract.
+- `tiling`: versioned deterministic layout/extraction, numerical and mesh seam measurement, global-frame assembly, printer-derived connectors, reversible print-local placement, actual per-tile slicer evidence, deterministic maps/previews, complete SHA-256 binding, canonical JSON, and atomic publication. Overlap halos remain evidence rather than duplicate solids; terrain tops remain unchanged by base-only connector booleans.
 
 ## Geometry topology
 
@@ -77,4 +83,4 @@ The interoperable 3MF path adds official lib3mf strict read with zero warnings, 
 
 ## Extension sequence
 
-The local/resolved-place AOI, printer-aware sampling, adapt/strict resource budgets, manufacturing preflight, content-addressed cache, configurable no-key Copernicus AWS GLO-30/GLO-90 provider, explainable provider-selection/fetch-fallback engine, Nominatim-compatible candidate handling, and quality-mask preservation are complete. Network acquisitions enter the existing local pipeline as a metric AOI raster plus `source_acquisition.json`; no download-first parallel geometry path exists. Phase 5 now has deterministic tile IDs, exact raster extraction, assembly-bound numerical seam reports, global-frame per-tile STL/3MF/GLB, strict mesh-boundary/volume/footprint assembly, coverage imagery, and real repeat-byte evidence. Connector geometry, printer-profile tolerance contracts, print-local placement, and per-tile slicing remain. Worker API work begins after those contracts stabilize; Web follows the API contract.
+The local/resolved-place AOI, provider/cache path, printer-aware manufacturing core, and Phase 5 manufacturing tiling contracts are complete. Phase 5 now includes deterministic tile IDs, exact raster extraction, numerical/mesh seams, global-frame solids, printer-derived dovetails, reversible print-local files, actual per-tile slicing, complete P2S parameter gates, and Bambu project reopen evidence. Phase 6 begins with worker-backed FastAPI job/artifact contracts over the existing Python core; Web/MapLibre/Three.js follows only after those API contracts stabilize.

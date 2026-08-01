@@ -1,0 +1,345 @@
+{
+  "bambu_projects": {
+    "all_projects_reopened": true,
+    "all_release_gates_passed": true,
+    "claim_boundary": "official Bambu Studio software export/reopen/reslice evidence; no physical print or vendor certification claim",
+    "output": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tile-bambu-projects-p2s-100mm-v1",
+    "required_checks_passed": true,
+    "tile_count": 4
+  },
+  "checksums": {
+    "bambu_project_set": {
+      "entry_count": 44,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.4.0-gongga-tile-bambu-projects-p2s-100mm-v1-checksums.sha256",
+      "sha256": "59e8f4cc1a7082273ee933d13adcd480fdef5cfcb8917f8a1d548adbbe58ec7b"
+    },
+    "official_slice_set": {
+      "entry_count": 12,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.4.0-gongga-tile-slices-bambu-p2s-100mm-v2-checksums.sha256",
+      "sha256": "2f75c6acf6efdeda740a6e4b339b8d7664de95d6b179564857f52f25c91a8e82"
+    },
+    "print_set": {
+      "entry_count": 37,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.4.0-gongga-tile-print-100mm-v1-checksums.sha256",
+      "sha256": "18eac074e4e6f12fc5cc6241e24179f213dec88f660a0c2d2691213b4f44664e"
+    }
+  },
+  "commands": {
+    "bambu_projects": "uv run python scripts/verify_phase5_bambu_tile_projects.py --print-set outputs/gongga-copernicus-glo30-resource-v3-tile-print-100mm-v1 --slice-set outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2 --bambu-studio downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage --output outputs/gongga-copernicus-glo30-resource-v3-tile-bambu-projects-p2s-100mm-v1 --timeout 1800",
+    "tile_connect": "uv run topoforge tile-connect outputs/gongga-copernicus-glo30-resource-v3-tile-meshes-100mm-v1 --tile-set outputs/gongga-copernicus-glo30-resource-v3-tiles-100mm-v2 --source-bundle outputs/gongga-copernicus-glo30-resource-v3 --output outputs/gongga-copernicus-glo30-resource-v3-tile-print-100mm-v1",
+    "tile_slice_bambu": "TOPOFORGE_BAMBU_STUDIO=downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage uv run topoforge tile-slice outputs/gongga-copernicus-glo30-resource-v3-tile-print-100mm-v1 --mesh-set outputs/gongga-copernicus-glo30-resource-v3-tile-meshes-100mm-v1 --tile-set outputs/gongga-copernicus-glo30-resource-v3-tiles-100mm-v2 --source-bundle outputs/gongga-copernicus-glo30-resource-v3 --slicer bambu-studio --machine-profile outputs/gongga-copernicus-glo30-bambu-p2s/bambu_p2s_machine_profile.json --process-profile outputs/gongga-copernicus-glo30-bambu-p2s/bambu_p2s_process_profile.json --filament-profile outputs/gongga-copernicus-glo30-bambu-p2s/bambu_p2s_filament_profile.json --output outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2"
+  },
+  "connectors": {
+    "all_bed_contacts_flat": true,
+    "all_build_volume_checks_passed": true,
+    "all_thin_wall_checks_passed": true,
+    "assembly_preview": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tile-print-100mm-v1/connector-assembly.global.glb",
+    "connector_count": 8,
+    "connector_map": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tile-print-100mm-v1/connector-map.png",
+    "connector_type": "bottom-open vertical-assembly dovetail",
+    "determinism": {
+      "byte_identical_count": 37,
+      "file_count": 37,
+      "mismatches": [],
+      "record": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.4.0-gongga-tile-print-100mm-v1-determinism.txt"
+    },
+    "global_bounds_match": true,
+    "layout_id": "layout-694b1e78d24ba9f5920e",
+    "maximum_collision_volume_mm3": 0.0,
+    "maximum_female_cavity_residual_volume_mm3": 4.073778351691241e-13,
+    "maximum_male_missing_volume_mm3": 2.7519219184313215e-05,
+    "maximum_top_surface_deviation_mm": 0.0,
+    "minimum_wall_thickness_mm": 0.8,
+    "output": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tile-print-100mm-v1",
+    "ownership_rule": "west tile owns male on east-west seams; north tile owns male on north-south seams",
+    "per_side_lateral_clearance_mm": 0.1,
+    "polarity_rule": "male on west/north; bottom-open female cavity on east/south",
+    "printer_profile": {
+      "build_volume_mm": [
+        256.0,
+        256.0,
+        256.0
+      ],
+      "connector_tolerance_mm": 0.2,
+      "layer_height_mm": 0.2,
+      "minimum_base_thickness_mm": 2.0,
+      "minimum_feature_mm": 0.5,
+      "nozzle_diameter_mm": 0.4,
+      "preferred_mesh_sampling_mm": 0.5,
+      "profile_id": "bambu-p2s-0.4"
+    },
+    "remaining_roof_thickness_mm": 1.2,
+    "repeat_output": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tile-print-100mm-v1-repeat",
+    "required_checks_passed": true,
+    "seam_count": 4,
+    "tile_grid_shape": [
+      2,
+      2
+    ],
+    "total_lateral_clearance_mm": 0.2,
+    "vertical_clearance_mm": 0.2
+  },
+  "official_tile_slicing": {
+    "all_exit_codes_zero": true,
+    "all_parameter_checks_passed": true,
+    "diagnostic_prusa_output": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tile-slices-prusa-100mm-v1",
+    "maximum_layer_count": 224,
+    "no_empty_layers": true,
+    "no_floating_regions": true,
+    "no_out_of_bed": true,
+    "no_support_material": true,
+    "official_p2s_release_gate_passed": true,
+    "output": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2",
+    "printer_profile_id": "bambu-p2s-0.4",
+    "profile_name": "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic",
+    "release_role": "official-p2s-release",
+    "required_checks_passed": true,
+    "slicer": {
+      "detail": null,
+      "executable": "/root/autodl-tmp/bambu/TopoForge/downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage",
+      "name": "BambuStudio",
+      "status": "available",
+      "version": "02.07.01.62"
+    },
+    "tile_count": 4,
+    "total_estimated_time_seconds": 26261,
+    "total_filament_used_cm3": 178.19868000000002,
+    "total_filament_used_g": 224.53,
+    "total_filament_used_mm": 74086.4,
+    "total_gcode_size_bytes": 62032141
+  },
+  "per_tile": [
+    {
+      "bambu_project_sha256": "1d5836a429e2e3be4c09139c367b7595bebf5be9d2d111b5a43f7c41927fd585",
+      "bed_contact_flat": true,
+      "build_volume_check_passed": true,
+      "column": 0,
+      "empty_layer_warning": false,
+      "estimated_time_seconds": 6252,
+      "female_connector_count": 0,
+      "filament_used_g": 54.58,
+      "floating_region_warning": false,
+      "global_bounds_mm": [
+        0.0,
+        84.47956085205078,
+        0.0,
+        93.19999694824219,
+        175.35911560058594,
+        34.51299285888672
+      ],
+      "global_to_print_local_translation_mm": [
+        -0.0,
+        -84.47956085205078,
+        -0.0
+      ],
+      "layer_count": 172,
+      "male_connector_count": 4,
+      "official_p2s_release_gate_passed": true,
+      "out_of_bed": false,
+      "print_local_bounds_mm": [
+        0.0,
+        0.0,
+        0.0,
+        93.19999694824219,
+        90.87955474853516,
+        34.51299285888672
+      ],
+      "project_build_return_code": 0,
+      "project_dimensions_match": true,
+      "project_embedded_gcode_matches_primary": true,
+      "project_embedded_gcode_md5_verified": true,
+      "project_primary_release_gate_passed": true,
+      "project_reopen_release_gate_passed": true,
+      "project_reopen_return_code": 0,
+      "project_triangle_counts_match": true,
+      "row": 0,
+      "slice_exit_code": 0,
+      "support_material": false,
+      "tile_id": "tile-r0000-c0000",
+      "top_surface_deviation_mm": 0.0,
+      "triangle_count": 198864,
+      "volume_mm3": 154348.02709888338
+    },
+    {
+      "bambu_project_sha256": "d7b98c3a240f12f84cc3ca5f59763ed9ef70887774417441f6ac8a97be125e1b",
+      "bed_contact_flat": true,
+      "build_volume_check_passed": true,
+      "column": 1,
+      "empty_layer_warning": false,
+      "estimated_time_seconds": 7461,
+      "female_connector_count": 2,
+      "filament_used_g": 62.71,
+      "floating_region_warning": false,
+      "global_bounds_mm": [
+        90.0,
+        84.47956085205078,
+        0.0,
+        180.0,
+        175.35911560058594,
+        45.0
+      ],
+      "global_to_print_local_translation_mm": [
+        -90.0,
+        -84.47956085205078,
+        -0.0
+      ],
+      "layer_count": 224,
+      "male_connector_count": 2,
+      "official_p2s_release_gate_passed": true,
+      "out_of_bed": false,
+      "print_local_bounds_mm": [
+        0.0,
+        0.0,
+        0.0,
+        90.0,
+        90.87955474853516,
+        45.0
+      ],
+      "project_build_return_code": 0,
+      "project_dimensions_match": true,
+      "project_embedded_gcode_matches_primary": true,
+      "project_embedded_gcode_md5_verified": true,
+      "project_primary_release_gate_passed": true,
+      "project_reopen_release_gate_passed": true,
+      "project_reopen_return_code": 0,
+      "project_triangle_counts_match": true,
+      "row": 0,
+      "slice_exit_code": 0,
+      "support_material": false,
+      "tile_id": "tile-r0000-c0001",
+      "top_surface_deviation_mm": 0.0,
+      "triangle_count": 198540,
+      "volume_mm3": 180856.0876931993
+    },
+    {
+      "bambu_project_sha256": "32216f2b62e65be9e4329bc7355ba0ff05aea8daeac4c6b5d40e20a169e329c1",
+      "bed_contact_flat": true,
+      "build_volume_check_passed": true,
+      "column": 0,
+      "empty_layer_warning": false,
+      "estimated_time_seconds": 5975,
+      "female_connector_count": 2,
+      "filament_used_g": 50.48,
+      "floating_region_warning": false,
+      "global_bounds_mm": [
+        0.0,
+        0.0,
+        0.0,
+        93.19999694824219,
+        87.67955780029297,
+        32.6500358581543
+      ],
+      "global_to_print_local_translation_mm": [
+        -0.0,
+        -0.0,
+        -0.0
+      ],
+      "layer_count": 162,
+      "male_connector_count": 2,
+      "official_p2s_release_gate_passed": true,
+      "out_of_bed": false,
+      "print_local_bounds_mm": [
+        0.0,
+        0.0,
+        0.0,
+        93.19999694824219,
+        87.67955780029297,
+        32.6500358581543
+      ],
+      "project_build_return_code": 0,
+      "project_dimensions_match": true,
+      "project_embedded_gcode_matches_primary": true,
+      "project_embedded_gcode_md5_verified": true,
+      "project_primary_release_gate_passed": true,
+      "project_reopen_release_gate_passed": true,
+      "project_reopen_return_code": 0,
+      "project_triangle_counts_match": true,
+      "row": 1,
+      "slice_exit_code": 0,
+      "support_material": false,
+      "tile_id": "tile-r0001-c0000",
+      "top_surface_deviation_mm": 0.0,
+      "triangle_count": 198504,
+      "volume_mm3": 138713.6667750452
+    },
+    {
+      "bambu_project_sha256": "c28335a8c1e162aee7f8f7c12d997f185ce5194badb3939f95e7c0f0f539e4cc",
+      "bed_contact_flat": true,
+      "build_volume_check_passed": true,
+      "column": 1,
+      "empty_layer_warning": false,
+      "estimated_time_seconds": 6573,
+      "female_connector_count": 4,
+      "filament_used_g": 56.76,
+      "floating_region_warning": false,
+      "global_bounds_mm": [
+        90.0,
+        0.0,
+        0.0,
+        180.0,
+        87.67955780029297,
+        42.15434265136719
+      ],
+      "global_to_print_local_translation_mm": [
+        -90.0,
+        -0.0,
+        -0.0
+      ],
+      "layer_count": 209,
+      "male_connector_count": 0,
+      "official_p2s_release_gate_passed": true,
+      "out_of_bed": false,
+      "print_local_bounds_mm": [
+        0.0,
+        0.0,
+        0.0,
+        90.0,
+        87.67955780029297,
+        42.15434265136719
+      ],
+      "project_build_return_code": 0,
+      "project_dimensions_match": true,
+      "project_embedded_gcode_matches_primary": true,
+      "project_embedded_gcode_md5_verified": true,
+      "project_primary_release_gate_passed": true,
+      "project_reopen_release_gate_passed": true,
+      "project_reopen_return_code": 0,
+      "project_triangle_counts_match": true,
+      "row": 1,
+      "slice_exit_code": 0,
+      "support_material": false,
+      "tile_id": "tile-r0001-c0001",
+      "top_surface_deviation_mm": 0.0,
+      "triangle_count": 198180,
+      "volume_mm3": 165214.748704504
+    }
+  ],
+  "required_checks_passed": true,
+  "schema_version": "topoforge-phase5-verification-v1",
+  "scope": "Phase 5 deterministic tiling, connectors, print-local placement, actual per-tile P2S slicing, and Bambu project reopen/reslice",
+  "source": {
+    "bundle": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3",
+    "dem_path": "/root/autodl-tmp/bambu/TopoForge/downloads/gongga-copernicus-glo30/gongga-copernicus-glo30-crop.tif",
+    "dem_sha256": "00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc",
+    "global_mesh_set": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tile-meshes-100mm-v1",
+    "peak_elevation_loss_m": 5.04150390625,
+    "peak_horizontal_shift_m": 24.51627596861209,
+    "processed_elevation_max_m": 7432.48291015625,
+    "processed_grid_shape": [
+      439,
+      451
+    ],
+    "processed_horizontal_resolution_m": 68.9588820624312,
+    "raw_elevation_max_m": 7437.5244140625,
+    "reused_without_download": true,
+    "source_grid_shape": [
+      1008,
+      1181
+    ],
+    "source_horizontal_resolution_m": 28.850813554696742,
+    "terrain_adjustment_applied": false,
+    "tile_set": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tiles-100mm-v2"
+  },
+  "status": "passed",
+  "version": "0.4.0"
+}

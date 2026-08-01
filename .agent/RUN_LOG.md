@@ -352,3 +352,29 @@ Result: both commands exit 0 without acquisition. Four tiles each contain 198,87
 Command: final `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, `git diff --check`, and `sha256sum -c artifacts/verification/topoforge-0.3.1-gongga-tile-meshes-100mm-v1-checksums.sha256`.
 
 Result: exit 0; Ruff `All checks passed!`; format `116 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `161 passed, 774 warnings in 22.57s`; diff whitespace and every retained source/tile/mesh/evidence checksum passed. Warnings remain visible under TF-006. Log: `artifacts/logs/phase5-tile-meshes-final-quality-gates.log`.
+
+### Phase 5 connectors, print-local placement, and per-tile release evidence
+
+Command: implement `topoforge-connector-plan-v1`, connector-bearing global/print-local tile artifacts, `generate_print_tile_set()`, `verify_print_tile_set()`, deterministic connector map/assembly preview, and `topoforge tile-connect`.
+
+Result: focused Phase 5 gate reports 25 passed with Ruff/format/Pyright clean. West/north male and east/south female bottom dovetails derive clearance/walls/roof/features from the saved printer profile. Tests cover polarity, terrain-top preservation, bed contact, topology, printer fit, real fit/collision booleans, reversible transforms, strict formats, tamper, failure cleanup, and byte determinism.
+
+Command: reuse the retained Gongga `resource-v3` mesh/tile evidence to generate `outputs/gongga-copernicus-glo30-resource-v3-tile-print-100mm-v1` and `-repeat`; strictly reopen both and visually inspect `connector-map.png`.
+
+Result: no acquisition occurred; source SHA-256 remains `00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc`. Eight connectors span four seams. Total lateral clearance is 0.2 mm (0.1 mm/side), vertical clearance 0.2 mm, minimum wall 0.8 mm, remaining roof 1.2 mm. Maximum terrain-top deviation and collision are 0.0; all bed/wall/build-volume/global-bound checks pass; 37/37 primary/repeat files are byte-identical.
+
+Command: implement source-bound `slice_print_tile_set()`, `verify_tile_slice_set()`, and `topoforge tile-slice`; run PrusaSlicer diagnostic and official Bambu Studio 02.07.01.62 on all four print-local 3MF files with retained complete P2S profiles.
+
+Result: Prusa diagnostic exits 0 for all four. Official v2 evidence has four exit codes 0, 62,032,141 total G-code bytes, 26,261 estimated seconds, 224.53 g, maximum 224 layers, no out-of-bed/empty/floating/support result, and every P2S machine/process/material parameter check passes.
+
+Command: run `scripts/verify_phase5_bambu_tile_projects.py` to export four separate Bambu project 3MF roles, verify ZIP and embedded G-code MD5, then reopen/reslice each without external profiles.
+
+Result: all four project exports and all four reopen runs return 0. Embedded G-code matches primary bytes, dimensions and triangle counts match strict source 3MF, and all eight official parameter gates pass.
+
+Command: generate `artifacts/verification/topoforge-0.4.0-gongga-phase5-verification.json`, three complete checksum lists, and connector determinism record; run all three `sha256sum -c` commands.
+
+Result: 37 connector/print-local, 12 official-slice, and 44 Bambu-project files all report `OK`. Phase 5 evidence is complete; outputs remain ignored and tracked summaries contain no large model/G-code bytes.
+
+Command: final 0.4.0 gate: `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, `git diff --check`, and all three Phase 5 `sha256sum -c` lists; output captured in `artifacts/logs/topoforge-0.4.0-phase5-final-quality-gates.log`.
+
+Result: exit 0; Ruff `All checks passed!`; format `121 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `166 passed, 1552 warnings in 36.35s`; Git whitespace passed; all 93 retained connector/slice/project entries report `OK`. Warnings remain visible under TF-006.

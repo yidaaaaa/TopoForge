@@ -2,7 +2,7 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Implemented milestone (TopoForge 0.3.1 plus Phase 5 increments):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, explicit adapt/strict cell-triangle-memory budgets, build-volume/vertical-scale preflight, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Phase 5 now includes deterministic tile layout, exact per-tile DEM/NoData extraction, checksummed raster seams, global-frame per-tile STL/3MF/GLB, strict multi-tile mesh assembly validation, and a deterministic north/east coverage image through `topoforge tile-plan`/`tile-extract`/`tile-mesh`. Connector geometry, print-local placement, per-tile slicing, Worker API, and Web remain.
+**Implemented milestone (TopoForge 0.4.0):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, explicit adapt/strict cell-triangle-memory budgets, build-volume/vertical-scale preflight, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Phase 5 is complete: deterministic tile layout/extraction, numerical and mesh seams, global-frame assembly, printer-derived dovetail connectors, reversible print-local files, actual per-tile slicing, and official Bambu project export/reopen evidence are implemented. Worker API and Web are Phase 6.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
 
@@ -132,7 +132,7 @@ uv run topoforge preflight \
 
 Preflight reuses the production raster and scaling path in a temporary directory and reports resolved dimensions, build-volume headroom/utilization, source/processed grids, exact triangle estimate, memory estimate, physical spacing, vertical exaggeration, hard-gate booleans, warnings, and suggested actions.
 
-## Plan, extract, and mesh deterministic terrain tiles
+## Plan, extract, mesh, connect, and slice deterministic terrain tiles
 
 ```bash
 uv run topoforge tile-plan \
@@ -150,6 +150,23 @@ uv run topoforge tile-mesh \
   outputs/completed-bundle-tiles \
   --source-bundle outputs/completed-bundle \
   --output outputs/completed-bundle-tile-meshes
+
+uv run topoforge tile-connect \
+  outputs/completed-bundle-tile-meshes \
+  --tile-set outputs/completed-bundle-tiles \
+  --source-bundle outputs/completed-bundle \
+  --output outputs/completed-bundle-print-tiles
+
+uv run topoforge tile-slice \
+  outputs/completed-bundle-print-tiles \
+  --mesh-set outputs/completed-bundle-tile-meshes \
+  --tile-set outputs/completed-bundle-tiles \
+  --source-bundle outputs/completed-bundle \
+  --slicer bambu-studio \
+  --machine-profile MACHINE.json \
+  --process-profile PROCESS.json \
+  --filament-profile FILAMENT.json \
+  --output outputs/completed-bundle-tile-slices
 ```
 
 `tile-extract` verifies every checksum already bound by the source build manifest before reading the processed DEM. It crops each deterministic `sampling_window` from `processed_dem.tif` and `original_nodata_mask.tif`, preserves CRS/window transforms and raw/processed source hashes, then publishes canonical per-tile provenance, validation, and manifests plus root `coverage_map.json`, `seam_report.json`, and `assembly_manifest.json`. Publication uses a staging directory, refuses overwrite, strictly reopens every JSON/GeoTIFF, recomputes all SHA-256 values, compares extracted values to the exact source windows, and remeasures every east/south adjacency before publication.
@@ -157,6 +174,10 @@ uv run topoforge tile-mesh \
 The retained Gongga `resource-v3` seam evidence uses a `2 x 2` grid at a `100 x 100 mm` maximum tile footprint with one overlap cell. Its four adjacencies contain 892 shared-core samples and 2,688 overlap samples. Core and overlap elevation differences, NoData-mask mismatches, and transform alignment error are all zero; every CRS matches. All 24 files in the primary and repeat extractions are byte-identical. See `artifacts/verification/topoforge-0.3.1-gongga-tile-seams-100mm-v2.json`.
 
 `tile-mesh` requires that passing seam evidence, uses only each tile's core samples, reuses the exact source scaling object, flips north-up raster rows once, and translates every closed solid into the shared `+X East/+Y North/+Z Up` model frame. Each tile publishes global-frame STL, strict 3MF, GLB, validation, and a manifest. The root mesh assembly report checks global bounds, footprint partition, reopened top-boundary seams, summed tile volume versus the source STL, all hashes, and the coverage PNG. The Gongga v1 mesh evidence has four zero-gap mesh seams, zero footprint overlap, a `0.000748639 mm3` source-volume difference, and 24/24 primary/repeat files byte-identical. See `artifacts/verification/topoforge-0.3.1-gongga-tile-meshes-100mm-v1.json`.
+
+`tile-connect` derives bottom-open dovetail dimensions from the saved printer profile, fixes west/north tiles as male owners and east/south tiles as female owners, and keeps all booleans below the terrain surface. It emits both common-frame assembly truth and reversible origin-zero print-local STL/3MF/GLB roles. `tile-slice` invokes every print-local 3MF through the selected real slicer, copies and hashes all profiles, reopens G-code metrics, and rejects nonzero exit, out-of-bed, empty-layer, floating-region, or support-material results. For Bambu P2S evidence it also applies the complete machine/process/filament parameter gate.
+
+The real Gongga Phase 5 set contains eight connectors over four seams. Total clearance is `0.2 mm` (`0.1 mm` per side) with `0.2 mm` vertical clearance; maximum terrain-top deviation and assembled collision volume are both `0.0`. All 37 connector/print-local files repeat byte-for-byte. Official Bambu Studio `02.07.01.62` sliced all four tiles at exit `0`, 224 maximum layers, `224.53 g`, with no floating/empty/out-of-bed/support result. Four separate Bambu project 3MF files also passed archive/MD5 verification and no-external-profile reopen/reslice. Evidence: `artifacts/verification/topoforge-0.4.0-gongga-phase5-verification.json`.
 
 ## Fetch or build from the no-key global provider
 

@@ -1,0 +1,12 @@
+0b7ed93d3d09b7298d03d0c721de176a02b7aea79020b8414be609e952865ca5  outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2/profiles/filament-00-bambu_p2s_filament_profile.json
+e92546df81147afc47197c2a95e5b8bfa7e3ddcedc5a429ed63a56518032b68c  outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2/profiles/settings-00-bambu_p2s_machine_profile.json
+d58d437b9294c3957dd041b4bd09078681fa46a058d6242a1e86f7d318abc3da  outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2/profiles/settings-01-bambu_p2s_process_profile.json
+14d0900c1dba41f626fd2fcace4642d5d0c70da537ff719f121262813d9e5fae  outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2/tile-slice-manifest.json
+2d719945e4e3771860a32f7b5acc3c7999e6c470362e68420587b2f8d38c5895  outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2/tiles/tile-r0000-c0000/model.gcode
+f6e9e0a0e1c53f7682deee454f55ab9850eb2b2b6bf15f794823d6faf4d99ea8  outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2/tiles/tile-r0000-c0000/slice_report.json
+7c2f82ee7e5cd15322b07e6e579d2d594fbc6ffe4331f5c710bd308d6db917ed  outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2/tiles/tile-r0000-c0001/model.gcode
+af5f32565cee6adaff2e483097e6af566c628e0a0cedabff86d2ef1d4924782d  outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2/tiles/tile-r0000-c0001/slice_report.json
+a37923ab4bbd807281cd897fcdf91e95416e128d70699e1b22e7372a4a29e1fd  outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2/tiles/tile-r0001-c0000/model.gcode
+99521c717019798fee50921f2e465cd97d6ca1df5b0bee093bf0f99e89ca0100  outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2/tiles/tile-r0001-c0000/slice_report.json
+93b88fe2049ccc01bc77a23fd9558811da212862168cdbdf0267e8731088ec7f  outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2/tiles/tile-r0001-c0001/model.gcode
+7fffbdc37ed73a4a5edf2c6ea15921f2dc8d7d237be26a3e20c0b036e7f0de12  outputs/gongga-copernicus-glo30-resource-v3-tile-slices-bambu-p2s-100mm-v2/tiles/tile-r0001-c0001/slice_report.json

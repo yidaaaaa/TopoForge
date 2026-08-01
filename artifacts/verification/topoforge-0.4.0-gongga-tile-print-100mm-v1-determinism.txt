@@ -1,0 +1,7 @@
+command: compare every relative file SHA-256 between primary and repeat connector/print-local sets
+primary: /root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tile-print-100mm-v1
+repeat: /root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tile-print-100mm-v1-repeat
+file_count: 37
+byte_identical_count: 37
+mismatches: []
+status: passed

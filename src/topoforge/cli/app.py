@@ -58,10 +58,14 @@ from topoforge.raster import SyntheticTerrain, create_synthetic_geotiff
 from topoforge.tiling import (
     TileLayoutConfig,
     extract_tile_set,
+    generate_print_tile_set,
     generate_tile_mesh_set,
     plan_tile_layout,
+    slice_print_tile_set,
+    verify_print_tile_set,
     verify_tile_mesh_set,
     verify_tile_set,
+    verify_tile_slice_set,
     write_tile_layout,
 )
 from topoforge.util import sha256_file
@@ -663,6 +667,155 @@ def tile_mesh(
             }
         )
     except (TopoForgeError, ValueError, OSError, RasterioError) as exc:
+        _fail(exc)
+
+
+@app.command("tile-connect")
+def tile_connect(
+    mesh_set_dir: Annotated[
+        Path, typer.Argument(help="Verified TopoForge global-frame tile mesh-set directory.")
+    ],
+    source_tile_set_dir: Annotated[
+        Path, typer.Option("--tile-set", help="Verified source raster tile-set directory.")
+    ],
+    source_bundle_dir: Annotated[
+        Path, typer.Option("--source-bundle", help="Completed source build bundle.")
+    ],
+    output: Annotated[Path, typer.Option("--output", "-o")],
+) -> None:
+    """Generate verified connectors and reversible print-local tile files."""
+    try:
+        result = generate_print_tile_set(
+            mesh_set_dir,
+            source_tile_set_dir,
+            source_bundle_dir,
+            output,
+        )
+        verification = verify_print_tile_set(
+            result.output_dir,
+            mesh_set_dir,
+            source_tile_set_dir,
+            source_bundle_dir,
+        )
+        _emit(
+            {
+                "status": "connected",
+                "mesh_set": str(mesh_set_dir.expanduser().resolve()),
+                "tile_set": str(source_tile_set_dir.expanduser().resolve()),
+                "source_bundle": str(source_bundle_dir.expanduser().resolve()),
+                "output": str(result.output_dir),
+                "connector_plan": str(result.connector_plan_path),
+                "assembly_manifest": str(result.assembly_manifest_path),
+                "assembly_validation": str(result.assembly_validation_path),
+                "connector_map": str(result.connector_map_path),
+                "assembly_preview": str(result.assembly_preview_path),
+                "tile_manifest_count": len(result.tile_manifest_paths),
+                "verification": verification,
+            }
+        )
+    except (TopoForgeError, ValueError, OSError, RasterioError) as exc:
+        _fail(exc)
+
+
+@app.command("tile-slice")
+def tile_slice(
+    print_set_dir: Annotated[
+        Path, typer.Argument(help="Verified connector-bearing print tile-set directory.")
+    ],
+    source_mesh_set_dir: Annotated[
+        Path, typer.Option("--mesh-set", help="Verified global-frame tile mesh set.")
+    ],
+    source_tile_set_dir: Annotated[
+        Path, typer.Option("--tile-set", help="Verified source raster tile set.")
+    ],
+    source_bundle_dir: Annotated[
+        Path, typer.Option("--source-bundle", help="Completed source build bundle.")
+    ],
+    output: Annotated[Path, typer.Option("--output", "-o")],
+    profile: Annotated[
+        Path | None, typer.Option("--profile", help="Legacy process/machine settings file.")
+    ] = None,
+    machine_profile: Annotated[
+        Path | None, typer.Option("--machine-profile", help="Resolved machine preset JSON.")
+    ] = None,
+    process_profile: Annotated[
+        Path | None, typer.Option("--process-profile", help="Resolved process preset JSON.")
+    ] = None,
+    filament_profile: Annotated[
+        Path | None, typer.Option("--filament-profile", help="Resolved filament preset JSON.")
+    ] = None,
+    slicer: Annotated[
+        str,
+        typer.Option(
+            "--slicer",
+            help="bambu-studio (release gate), orca, prusa, or auto (diagnostic fallback).",
+        ),
+    ] = "bambu-studio",
+    timeout_seconds: Annotated[float, typer.Option("--timeout-seconds", min=1.0)] = 1200.0,
+) -> None:
+    """Actually slice every print-local tile and publish strict G-code evidence."""
+    try:
+        from topoforge.validation.slicers import (
+            BambuStudioAdapter,
+            OrcaSlicerAdapter,
+            PrusaSlicerAdapter,
+            SlicerProfile,
+            select_slicer,
+        )
+
+        settings = tuple(
+            path for path in (machine_profile, process_profile, profile) if path is not None
+        )
+        filaments = () if filament_profile is None else (filament_profile,)
+        slicer_profile = SlicerProfile(
+            name=(
+                "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic"
+                if slicer == "bambu-studio"
+                else None
+            ),
+            settings=settings,
+            filaments=filaments,
+        )
+        adapters = {
+            "bambu-studio": BambuStudioAdapter,
+            "orca": OrcaSlicerAdapter,
+            "prusa": PrusaSlicerAdapter,
+        }
+        if slicer == "auto":
+            adapter = select_slicer()
+        elif slicer in adapters:
+            adapter = adapters[slicer]()
+        else:
+            raise ValueError("--slicer must be bambu-studio, orca, prusa, or auto")
+        result = slice_print_tile_set(
+            print_set_dir,
+            source_mesh_set_dir,
+            source_tile_set_dir,
+            source_bundle_dir,
+            output,
+            adapter=adapter,
+            profile=slicer_profile,
+            timeout_seconds=timeout_seconds,
+        )
+        verification = verify_tile_slice_set(
+            result.output_dir,
+            print_set_dir,
+            source_mesh_set_dir,
+            source_tile_set_dir,
+            source_bundle_dir,
+        )
+        _emit(
+            {
+                "status": "sliced",
+                "print_set": str(print_set_dir.expanduser().resolve()),
+                "output": str(result.output_dir),
+                "manifest": str(result.manifest_path),
+                "report_count": len(result.report_paths),
+                "gcode_count": len(result.gcode_paths),
+                "verification": verification,
+            }
+        )
+    except (ImportError, TopoForgeError, ValueError, OSError) as exc:
         _fail(exc)
 
 

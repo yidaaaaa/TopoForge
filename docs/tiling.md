@@ -1,4 +1,4 @@
-# Deterministic tiling, extraction, and numerical seam contract
+# Deterministic tiling, connectors, and print-local manufacturing contract
 
 Phase 5 starts from a completed, checksum-verified TopoForge build bundle. Tiling is a manufacturing-grid contract, not a slippy-map replacement: it partitions the already normalized and printer-sampled processed DEM without downloading, resampling, mirroring, sharpening, or changing elevations.
 
@@ -37,9 +37,26 @@ uv run topoforge tile-mesh \
   outputs/example-tile-set \
   --source-bundle outputs/example-bundle \
   --output outputs/example-tile-mesh-set
+
+uv run topoforge tile-connect \
+  outputs/example-tile-mesh-set \
+  --tile-set outputs/example-tile-set \
+  --source-bundle outputs/example-bundle \
+  --output outputs/example-print-tile-set
+
+uv run topoforge tile-slice \
+  outputs/example-print-tile-set \
+  --mesh-set outputs/example-tile-mesh-set \
+  --tile-set outputs/example-tile-set \
+  --source-bundle outputs/example-bundle \
+  --slicer bambu-studio \
+  --machine-profile MACHINE.json \
+  --process-profile PROCESS.json \
+  --filament-profile FILAMENT.json \
+  --output outputs/example-tile-slice-set
 ```
 
-All three commands refuse overwrite. `tile-plan` strictly verifies the source build, derives the processed grid shape and model footprint, writes canonical sorted JSON atomically, and recomputes the layout identity on reopen. `tile-extract` verifies every source build-manifest checksum, stages all files, strictly verifies the complete staged tile set, then atomically publishes the directory. `tile-mesh` requires a passing checksummed seam report, stages global-frame mesh roles, strictly reopens every format and report, remeasures the full assembly, then atomically publishes a separate derived directory.
+All five commands refuse overwrite. Each stage strictly verifies its complete source chain, writes into a sibling staging directory, reopens and remeasures every new role, and atomically publishes only after the stage passes. `tile-connect` consumes immutable global-frame mesh evidence; `tile-slice` consumes only the new print-local 3MF role.
 
 ## Published tile-set roles
 
@@ -102,6 +119,14 @@ Only each tile's `core_sample_window` becomes geometry; overlap halos remain sou
 
 The root assembly validation compares reopened STL boundary samples for every east/south adjacency, checks the complete global bounds and non-overlapping footprint partition, and compares the summed tile volume with the original source STL. `tile-coverage.png` maps row 0 north and column 0 west, includes north/east markers, and is bound by the root mesh manifest. These global-frame meshes are assembly evidence; print-local placement and per-tile slicing are a subsequent gate.
 
+## Connector and print-local roles
+
+`connector-plan.json` fixes connector IDs, seam ownership, polarity, insertion direction, XY polygons, Z ranges, and a printer-derived policy. West tiles own male dovetails on east-west seams; north tiles own male dovetails on north-south seams. Female cavities open through the bottom and assemble downward along `+Z`. `connector_tolerance_mm` is total lateral clearance, split equally per side. The verified range, minimum wall, connector height, remaining roof, neck/head/depth, edge margin, and maximum spacing are derived from nozzle diameter, layer height, minimum feature, base thickness, and the profile tolerance.
+
+Each print tile publishes connector-bearing global STL/3MF/GLB and print-local STL/3MF/GLB. The local transform translates the actual connector bounds to `(0,0,0)` without rotation; the inverse transform is recorded exactly. Validation reopens all six formats, verifies reversible transforms, bounds, peaks, topology, bed-contact planarity, thin walls, build-volume fit, unchanged terrain-top vertices, male presence, female cavity removal, and assembled collision volume. `connector-map.png` labels every tile and depicts male/female placement with north orientation.
+
+`tile-slice-manifest.json` binds the print assembly, connector plan, slicer executable, copied settings/filament hashes, and every G-code/report. Per-tile reports preserve the literal command, stdout/stderr, exit code, G-code hash/size, reopened layer/time/material metrics, and explicit out-of-bed, empty-layer, floating-region, and support checks. Bambu Studio results additionally carry the complete P2S parameter gate. The release script `scripts/verify_phase5_bambu_tile_projects.py` creates the separate Bambu project 3MF role, verifies its archive and embedded G-code MD5, and performs a second normative slice without external profiles.
+
 ## Strict verification
 
 `verify_tile_set()` reopens and cross-checks:
@@ -118,6 +143,8 @@ The root assembly validation compares reopened STL boundary samples for every ea
 The extractor runs this verifier before publication. The CLI runs it again against the final published directory. Failures remove staging output; an existing requested destination is preserved.
 
 `verify_tile_mesh_set()` additionally rechecks the source tile-set seam gate, source build/STL/scaling identities, every mesh-set relative path and checksum, canonical per-tile/root reports, reopened STL/GLB/3MF measurements, 3MF metadata, mesh-boundary samples, global bounds, footprint area, volume sum, and coverage PNG. Generation invokes the same verifier before atomic publication.
+
+`verify_print_tile_set()` regenerates the connector plan from the saved printer profile and base, reopens every global/local STL/3MF/GLB, compares source terrain-top vertices, remeasures male/cavity/collision volumes, checks bed contact, walls, printer fit, transforms, metadata, map/preview, and all hashes. `verify_tile_slice_set()` reparses every G-code and recomputes all aggregate metrics and P2S parameter gates.
 
 ## Determinism
 
@@ -145,6 +172,8 @@ Evidence: `artifacts/verification/topoforge-0.3.1-gongga-tile-seams-100mm-v2.jso
 
 The derived Gongga mesh set contains four global-frame solids at 198,876 triangles each. Four reopened STL mesh seams have `0.0 mm` planar and Z error with zero mismatches; global bounds match, footprint overlap is `0.0 mm2`, and summed volume differs from the source STL by `0.0007486393442377448 mm3` within a `6.391751232061993 mm3` tolerance. The `1200 x 1258` coverage PNG was visually checked, and all 24 primary/repeat files are byte-identical. Evidence: `artifacts/verification/topoforge-0.3.1-gongga-tile-meshes-100mm-v1.json`.
 
+The completed Gongga connector set has eight bottom dovetails over four seams, `0.2 mm` total lateral / `0.2 mm` vertical clearance, `0.0 mm` terrain-top deviation, and `0.0 mm3` assembled collision. Bed contact, remaining walls, printer volume, global bounds, and every fit probe pass. Primary/repeat comparison is 37/37 byte-identical. Official Bambu Studio `02.07.01.62` sliced all four local tiles with the complete P2S parameter gate, maximum 224 layers, total `224.53 g`, and no out-of-bed, empty-layer, floating-region, or support result. Four Bambu project 3MF files passed archive/MD5 and no-external-profile reopen/reslice. Evidence: `artifacts/verification/topoforge-0.4.0-gongga-phase5-verification.json`.
+
 ## Next contracts
 
-Numerical raster seams, global-frame per-tile meshes, multi-tile boundary/volume/footprint assembly, and coverage imagery are complete. The next Phase 5 gate defines connector geometry, printer-profile clearance/interference thresholds, print-local placement transforms, and actual per-tile slicing. Worker API implementation follows stable extraction/assembly/seam/connector contracts; Web/MapLibre/Three.js follows the stable API contract.
+Phase 5 layout, extraction, seams, connectors, print-local transforms, actual per-tile slicing, and Bambu project roles are complete and frozen at TopoForge 0.4.0. Phase 6 starts with worker-backed FastAPI job/artifact contracts over these core functions; Web/MapLibre/Three.js follows after the API contract stabilizes. Manufacturing tiles remain distinct from Web XYZ map tiles.
