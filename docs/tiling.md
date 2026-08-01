@@ -1,4 +1,4 @@
-# Deterministic tiling and extraction contract
+# Deterministic tiling, extraction, and numerical seam contract
 
 Phase 5 starts from a completed, checksum-verified TopoForge build bundle. Tiling is a manufacturing-grid contract, not a slippy-map replacement: it partitions the already normalized and printer-sampled processed DEM without downloading, resampling, mirroring, sharpening, or changing elevations.
 
@@ -42,6 +42,7 @@ Both commands refuse overwrite. `tile-plan` strictly verifies the source build, 
 example-tile-set/
   tile-layout.json
   coverage_map.json
+  seam_report.json
   assembly_manifest.json
   tiles/
     tile-r0000-c0000/
@@ -64,7 +65,15 @@ example-tile-set/
 
 `tile_validation.json` measures the sampling/core shapes, finite elevation status, binary original NoData mask, NoData count/fraction, sample/core extrema, CRS, transform, and one required-check result. `tile_manifest.json` binds the four tile artifacts and the exact validation object to SHA-256 values.
 
-`coverage_map.json` is a canonical north-to-south list of west-to-east tile IDs. `assembly_manifest.json` binds the layout and coverage-map hashes, source identities, tile grid, overlap, relative paths, per-tile manifest hashes, artifact hashes, windows, and physical bounds. Paths are relative and validated against traversal.
+`coverage_map.json` is a canonical north-to-south list of west-to-east tile IDs. `assembly_manifest.json` binds the layout, coverage-map, and seam-report hashes, source identities, tile grid, overlap, relative paths, per-tile manifest hashes, artifact hashes, windows, and physical bounds. Paths are relative and validated against traversal.
+
+## Numerical seam verification
+
+`seam_report.json` uses schema `topoforge-tile-seam-report-v1`. Adjacent pairs are enumerated exactly once in stable row-major order by checking each tile's east neighbor and then south neighbor. Each pair compares both the one-sample shared core boundary and the complete intersection of the two overlap sampling windows.
+
+The report records per-seam and aggregate sample counts, maximum/mean absolute elevation differences, mismatch counts, original NoData-mask mismatch counts, CRS equality, and transform-coordinate alignment measured at the overlap corners in the source metric CRS. Extracted windows are direct source slices, so the default elevation tolerance is exactly `0.0 m`; transform alignment must be at most `1e-9 m`. A seam passes only when every compared elevation is within tolerance, both masks match exactly, CRS values match, and the transform threshold passes.
+
+New tile sets always publish the canonical report and bind its SHA-256 from the assembly manifest. `verify_tile_set()` checks that hash, strictly reopens the report, remeasures all tile rasters using the recorded elevation tolerance, and rejects any difference or failed required check. Legacy v1 assembly manifests that omit both optional seam fields remain readable and are reported as `not-reported`; that compatibility does not add a seam claim to old evidence.
 
 ## Strict verification
 
@@ -76,7 +85,8 @@ example-tile-set/
 4. canonical tile provenance and validation JSON;
 5. every tile DEM/mask band, CRS, shape, transform, finite values, binary mask, extrema, and NoData measurements;
 6. raw source, processed DEM, and source build-manifest hashes;
-7. when the source bundle is supplied, exact array equality between every extracted raster and its declared source `sampling_window`.
+7. when the source bundle is supplied, exact array equality between every extracted raster and its declared source `sampling_window`;
+8. the optional assembly-bound seam-report checksum, canonical bytes, layout/source identity, and fresh numerical remeasurement.
 
 The extractor runs this verifier before publication. The CLI runs it again against the final published directory. Failures remove staging output; an existing requested destination is preserved.
 
@@ -84,19 +94,26 @@ The extractor runs this verifier before publication. The CLI runs it again again
 
 Layout and JSON bytes use sorted keys, compact separators, explicit UTF-8, and one terminal newline. GeoTIFF windows use identical source values, CRS, transforms, dtype, and deterministic writer settings. Identical source bundles, layouts, and code produce byte-identical tile-set roles.
 
-The retained Gongga `resource-v3` evidence uses a `100 x 100 mm` maximum tile footprint and one overlap cell:
+The retained Gongga `resource-v3` seam evidence uses a `100 x 100 mm` maximum tile footprint and one overlap cell:
 
 - layout: `layout-694b1e78d24ba9f5920e`;
 - tile grid: `2 x 2` / four tiles;
 - model footprint: `180 x 175.35911560058594 mm`;
 - each overlapped sampling grid: `221 x 227` samples;
 - each core sample grid: `220 x 226` samples;
-- primary/repeat file count: `23` each;
-- primary/repeat byte comparison: `23/23` identical;
+- seam count: `4`;
+- shared core / overlap sample counts: `892 / 2688`;
+- maximum core / overlap elevation difference: `0.0 / 0.0 m`;
+- core / overlap elevation mismatches: `0 / 0`;
+- core / overlap mask mismatches: `0 / 0`;
+- maximum transform alignment error: `0.0 m`;
+- all CRS match and seam status: `true / passed`;
+- primary/repeat file count: `24` each;
+- primary/repeat byte comparison: `24/24` identical;
 - retained source SHA-256: `00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc`.
 
-Evidence: `artifacts/verification/topoforge-0.3.1-gongga-tiles-100mm-v1.json` and its checksum/determinism companions.
+Evidence: `artifacts/verification/topoforge-0.3.1-gongga-tile-seams-100mm-v2.json` and its checksum/determinism companions.
 
 ## Next contracts
 
-The next Phase 5 gate is numerical seam consistency: adjacent core seam samples and overlap regions must be compared with explicit tolerances and a checksummed seam report. After that pass, TopoForge can generate per-tile meshes in the shared global manufacturing frame, verify multi-tile assembly, add a coverage image, and then introduce connector geometry plus printer-profile tolerance tests. Worker API implementation follows stable extraction/assembly/seam/connector contracts; Web/MapLibre/Three.js follows the stable API contract.
+Numerical raster seam consistency is complete. This pass does not prove that independently exported tile solids assemble without gaps, duplicate walls, orientation changes, or Z offsets. The next Phase 5 gate generates per-tile meshes in one shared global manufacturing frame, verifies multi-tile mesh assembly, and adds a coverage image. Connector geometry plus printer-profile tolerance tests follow. Worker API implementation follows stable extraction/assembly/seam/connector contracts; Web/MapLibre/Three.js follows the stable API contract.

@@ -22,6 +22,11 @@ from topoforge.tiling.layout import (
     read_tile_layout,
     write_tile_layout,
 )
+from topoforge.tiling.seams import (
+    TileSeamComparison,
+    TileSeamReport,
+    measure_tile_seams,
+)
 
 __all__ = [
     "AssemblyManifest",
@@ -35,9 +40,12 @@ __all__ = [
     "TileLayout",
     "TileLayoutConfig",
     "TileProvenance",
+    "TileSeamComparison",
+    "TileSeamReport",
     "TileValidation",
     "canonical_tile_layout_bytes",
     "extract_tile_set",
+    "measure_tile_seams",
     "plan_tile_layout",
     "read_tile_layout",
     "verify_tile_set",

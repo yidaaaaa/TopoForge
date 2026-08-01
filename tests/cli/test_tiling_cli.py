@@ -70,5 +70,8 @@ def test_tile_plan_and_extract_cli_publish_verified_artifacts(tmp_path: Path) ->
     evidence = verify_tile_set(tile_output, bundle)
     assert evidence["tile_count"] == 2
     assert evidence["required_checks_passed"] is True
+    assert evidence["seam_count"] == 1
+    assert evidence["terrain_seam_status"] == "passed"
     assert '"status": "extracted"' in extraction.output
     assert str((tile_output / "assembly_manifest.json").resolve()) in extraction.output
+    assert str((tile_output / "seam_report.json").resolve()) in extraction.output

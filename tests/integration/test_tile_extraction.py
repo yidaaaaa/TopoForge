@@ -18,7 +18,9 @@ from topoforge.tiling import (
     TileArtifactManifest,
     TileCoverageMap,
     TileLayoutConfig,
+    TileSeamReport,
     extract_tile_set,
+    measure_tile_seams,
     plan_tile_layout,
     read_tile_layout,
     verify_tile_set,
@@ -90,6 +92,18 @@ def test_extract_tile_set_preserves_windows_masks_hashes_and_assembly(tmp_path: 
     assert assembly.processed_dem_sha256 == source_manifest["sha256"]["processed_dem"]
     assert assembly.layout_sha256 == _sha256(result.layout_path)
     assert assembly.coverage_map_sha256 == _sha256(result.coverage_map_path)
+    assert assembly.seam_report_path == "seam_report.json"
+    assert assembly.seam_report_sha256 == _sha256(result.seam_report_path)
+    seam_report = TileSeamReport.model_validate_json(
+        result.seam_report_path.read_text(encoding="utf-8")
+    )
+    assert seam_report.seam_count == 4
+    assert seam_report.maximum_core_elevation_difference_m == 0.0
+    assert seam_report.maximum_overlap_elevation_difference_m == 0.0
+    assert seam_report.maximum_transform_alignment_error_m == 0.0
+    assert seam_report.total_core_mask_mismatch_count == 0
+    assert seam_report.total_overlap_mask_mismatch_count == 0
+    assert seam_report.required_checks_passed is True
 
     saw_original_nodata = False
     with (
@@ -217,3 +231,92 @@ def test_tile_extraction_rejects_layout_model_size_mismatch_without_output(
     with pytest.raises(ConfigurationError, match="model_size_mm"):
         extract_tile_set(bundle, mismatch_path, output)
     assert not output.exists()
+
+
+def _seam_paths(root: Path, assembly: AssemblyManifest) -> tuple[dict[str, Path], dict[str, Path]]:
+    return (
+        {tile.tile_id: root / tile.files["processed_dem"] for tile in assembly.tiles},
+        {tile.tile_id: root / tile.files["original_nodata_mask"] for tile in assembly.tiles},
+    )
+
+
+def test_seam_measurement_detects_core_elevation_and_mask_mismatch(tmp_path: Path) -> None:
+    bundle, layout_path = _bundle_and_layout(tmp_path)
+    result = extract_tile_set(bundle, layout_path, tmp_path / "tiles")
+    layout = read_tile_layout(result.layout_path)
+    assembly = AssemblyManifest.model_validate_json(
+        result.assembly_manifest_path.read_text(encoding="utf-8")
+    )
+    first = layout.tiles[0]
+    seam_column = first.core_cell_window.column_stop
+    local_column = seam_column - first.sampling_window.column_start
+    local_row = first.core_sample_window.row_start - first.sampling_window.row_start
+    dem_paths, mask_paths = _seam_paths(result.output_dir, assembly)
+    with rasterio.open(dem_paths[first.tile_id], "r+") as dataset:
+        values = dataset.read(1)
+        values[local_row, local_column] += 1.0
+        dataset.write(values, 1)
+    with rasterio.open(mask_paths[first.tile_id], "r+") as dataset:
+        values = dataset.read(1)
+        values[local_row, local_column] = 1 - values[local_row, local_column]
+        dataset.write(values, 1)
+
+    report = measure_tile_seams(
+        layout,
+        dem_paths=dem_paths,
+        mask_paths=mask_paths,
+        source_bundle_manifest_sha256=assembly.source_bundle_manifest_sha256,
+    )
+
+    east = next(seam for seam in report.seams if seam.direction == "east-west")
+    assert report.required_checks_passed is False
+    assert report.terrain_seam_status == "failed"
+    assert east.core_elevation_max_abs_difference_m == 1.0
+    assert east.core_elevation_mismatch_count == 1
+    assert east.overlap_elevation_mismatch_count == 1
+    assert east.core_mask_mismatch_count == 1
+    assert east.overlap_mask_mismatch_count == 1
+
+
+def test_seam_measurement_detects_transform_misalignment(tmp_path: Path) -> None:
+    bundle, layout_path = _bundle_and_layout(tmp_path)
+    result = extract_tile_set(bundle, layout_path, tmp_path / "tiles")
+    layout = read_tile_layout(result.layout_path)
+    assembly = AssemblyManifest.model_validate_json(
+        result.assembly_manifest_path.read_text(encoding="utf-8")
+    )
+    dem_paths, mask_paths = _seam_paths(result.output_dir, assembly)
+    east_tile = layout.tiles[1]
+    for path in (dem_paths[east_tile.tile_id], mask_paths[east_tile.tile_id]):
+        with rasterio.open(path, "r+") as dataset:
+            dataset.transform = rasterio.Affine.translation(0.25, 0.0) * dataset.transform
+
+    report = measure_tile_seams(
+        layout,
+        dem_paths=dem_paths,
+        mask_paths=mask_paths,
+        source_bundle_manifest_sha256=assembly.source_bundle_manifest_sha256,
+    )
+
+    assert report.required_checks_passed is False
+    assert report.maximum_transform_alignment_error_m == pytest.approx(0.25)
+    assert any(not seam.required_checks_passed for seam in report.seams)
+
+
+def test_verify_tile_set_reopens_legacy_assembly_without_seam_report(tmp_path: Path) -> None:
+    bundle, layout_path = _bundle_and_layout(tmp_path)
+    result = extract_tile_set(bundle, layout_path, tmp_path / "tiles")
+    payload = json.loads(result.assembly_manifest_path.read_text(encoding="utf-8"))
+    payload.pop("seam_report_path")
+    payload.pop("seam_report_sha256")
+    result.assembly_manifest_path.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    result.seam_report_path.unlink()
+
+    evidence = verify_tile_set(result.output_dir, bundle)
+
+    assert evidence["seam_report_present"] is False
+    assert evidence["terrain_seam_status"] == "not-reported"
+    assert evidence["required_checks_passed"] is True

@@ -324,3 +324,17 @@ Result: all commands exit 0. Layout `layout-694b1e78d24ba9f5920e` contains a 2 x
 Command: generate and run `sha256sum -c artifacts/verification/topoforge-0.3.1-gongga-tiles-100mm-v1-checksums.sha256`.
 
 Result: exit 0; retained source, external layout, verification/determinism records, root manifests/maps, and all 20 per-tile roles report `OK`. Verification: `artifacts/verification/topoforge-0.3.1-gongga-tiles-100mm-v1.json`.
+
+### Phase 5 deterministic numerical tile seams
+
+Command: implement `topoforge-tile-seam-report-v1`, integrate it into `extract_tile_set()` and `verify_tile_set()`, bind its path/SHA-256 from `assembly_manifest.json`, expose the path and status through `topoforge tile-extract`, and add elevation/mask/transform/legacy/determinism regressions.
+
+Result: focused CLI/extraction coverage reports 10 passed. Every east and south adjacency is measured once over the shared core line and complete overlap rectangle. Default elevation tolerance is 0.0 m; CRS, original NoData mask, and metric transform alignment are required. New tile sets strictly remeasure the canonical report, while legacy assembly manifests without both seam fields reopen as `not-reported`.
+
+Command: final post-documentation quality gate `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, `git diff --check`, and Gongga v2 `sha256sum -c`.
+
+Result: exit 0; Ruff `All checks passed!`; format `114 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `159 passed, 464 warnings in 19.52s`; diff whitespace and every Gongga v2 checksum passed. Warnings remain visible under TF-006. Log: `artifacts/logs/phase5-tile-seams-final-quality-gates.log`.
+
+Command: reuse the retained Gongga `resource-v3` bundle and existing layout to extract `outputs/gongga-copernicus-glo30-resource-v3-tiles-100mm-v2` and `-repeat`, strictly reopen both, compare every relative file, and run `sha256sum -c artifacts/verification/topoforge-0.3.1-gongga-tile-seams-100mm-v2-checksums.sha256`.
+
+Result: no source download occurred. Layout `layout-694b1e78d24ba9f5920e` has four seams, 892 shared-core samples, and 2,688 overlap samples. Core/overlap maximum elevation differences, elevation mismatches, mask mismatches, and maximum transform alignment error are all zero; all CRS match and status is `passed`. Primary/repeat roles are 24/24 byte-identical, and every checksum reports `OK`. Verification: `artifacts/verification/topoforge-0.3.1-gongga-tile-seams-100mm-v2.json`.

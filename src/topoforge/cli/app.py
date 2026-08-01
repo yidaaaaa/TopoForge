@@ -620,6 +620,7 @@ def tile_extract(
                 "output": str(result.output_dir),
                 "assembly_manifest": str(result.assembly_manifest_path),
                 "coverage_map": str(result.coverage_map_path),
+                "seam_report": str(result.seam_report_path),
                 "tile_manifest_count": len(result.tile_manifest_paths),
                 "verification": verification,
             }

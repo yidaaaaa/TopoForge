@@ -22,6 +22,7 @@ from topoforge.tiling.layout import (
     canonical_tile_layout_bytes,
     read_tile_layout,
 )
+from topoforge.tiling.seams import TileSeamReport, measure_tile_seams
 
 _TILE_ARTIFACT_SCHEMA_VERSION = "topoforge-tile-artifact-v1"
 _ASSEMBLY_SCHEMA_VERSION = "topoforge-assembly-manifest-v1"
@@ -146,6 +147,8 @@ class AssemblyManifest(BaseModel):
     tiles: list[AssemblyTileRecord]
     coverage_map_path: str = "coverage_map.json"
     coverage_map_sha256: Sha256Hex
+    seam_report_path: str | None = None
+    seam_report_sha256: Sha256Hex | None = None
 
     @model_validator(mode="after")
     def validate_tile_grid(self) -> Self:
@@ -159,6 +162,10 @@ class AssemblyManifest(BaseModel):
             raise ValueError(
                 "assembly tiles must be unique and ordered north-to-south/west-to-east"
             )
+        if (self.seam_report_path is None) != (self.seam_report_sha256 is None):
+            raise ValueError("assembly seam report path and SHA-256 must be present together")
+        if self.seam_report_path is not None and self.seam_report_path != "seam_report.json":
+            raise ValueError("assembly seam report path must be seam_report.json")
         return self
 
 
@@ -195,6 +202,7 @@ class TileExtractionResult(BaseModel):
     layout_path: Path
     assembly_manifest_path: Path
     coverage_map_path: Path
+    seam_report_path: Path
     tile_manifest_paths: list[Path]
 
 
@@ -207,7 +215,11 @@ def _sha256(path: Path) -> str:
 
 
 def _canonical_json_bytes(value: BaseModel | dict[str, Any]) -> bytes:
-    payload = value.model_dump(mode="json") if isinstance(value, BaseModel) else value
+    payload = (
+        value.model_dump(mode="json", exclude_none=isinstance(value, AssemblyManifest))
+        if isinstance(value, BaseModel)
+        else value
+    )
     return (
         json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
     ).encode("utf-8")
@@ -556,6 +568,8 @@ def verify_tile_set(tile_set_dir: Path, source_bundle_dir: Path | None = None) -
 
     source_dem_values: np.ndarray[Any, Any] | None = None
     source_mask_values: np.ndarray[Any, Any] | None = None
+    dem_paths: dict[str, Path] = {}
+    mask_paths: dict[str, Path] = {}
     if source_bundle_dir is not None:
         bundle = source_bundle_dir.expanduser().resolve()
         (
@@ -662,6 +676,8 @@ def verify_tile_set(tile_set_dir: Path, source_bundle_dir: Path | None = None) -
 
         dem_path = tile_dir / artifact.files["processed_dem"]
         mask_path = tile_dir / artifact.files["original_nodata_mask"]
+        dem_paths[tile.tile_id] = dem_path
+        mask_paths[tile.tile_id] = mask_path
         with rasterio.open(dem_path) as dem, rasterio.open(mask_path) as mask:
             if (
                 dem.count != 1
@@ -706,6 +722,22 @@ def verify_tile_set(tile_set_dir: Path, source_bundle_dir: Path | None = None) -
                     f"tile raster values do not match the source sampling window: {tile.tile_id}"
                 )
 
+    seam_report: TileSeamReport | None = None
+    if assembly.seam_report_path is not None and assembly.seam_report_sha256 is not None:
+        seam_path = _resolve_relative(root, assembly.seam_report_path)
+        if _sha256(seam_path) != assembly.seam_report_sha256:
+            raise ConfigurationError("seam report checksum mismatch")
+        seam_report = _read_canonical_json(seam_path, TileSeamReport)
+        measured_seams = measure_tile_seams(
+            layout,
+            dem_paths=dem_paths,
+            mask_paths=mask_paths,
+            source_bundle_manifest_sha256=assembly.source_bundle_manifest_sha256,
+            elevation_tolerance_m=seam_report.elevation_tolerance_m,
+        )
+        if seam_report != measured_seams or not seam_report.required_checks_passed:
+            raise RasterProcessingError("seam report does not match tile raster measurements")
+
     return {
         "status": "verified",
         "output_dir": str(root),
@@ -716,6 +748,11 @@ def verify_tile_set(tile_set_dir: Path, source_bundle_dir: Path | None = None) -
         "row_origin": layout.row_origin,
         "column_origin": layout.column_origin,
         "source_bundle_verified": source_bundle_dir is not None,
+        "seam_report_present": seam_report is not None,
+        "seam_count": seam_report.seam_count if seam_report is not None else None,
+        "terrain_seam_status": (
+            seam_report.terrain_seam_status if seam_report is not None else "not-reported"
+        ),
         "required_checks_passed": True,
     }
 
@@ -807,6 +844,20 @@ def extract_tile_set(bundle_dir: Path, layout_path: Path, output_dir: Path) -> T
         )
         _write_canonical_json(staging / "coverage_map.json", coverage)
         coverage_map_sha256 = _sha256(staging / "coverage_map.json")
+        seam_report = measure_tile_seams(
+            layout,
+            dem_paths={
+                record.tile_id: staging / record.files["processed_dem"] for record in records
+            },
+            mask_paths={
+                record.tile_id: staging / record.files["original_nodata_mask"] for record in records
+            },
+            source_bundle_manifest_sha256=source_bundle_manifest_sha256,
+        )
+        if not seam_report.required_checks_passed:
+            raise RasterProcessingError("tile seam validation failed")
+        _write_canonical_json(staging / "seam_report.json", seam_report)
+        seam_report_sha256 = _sha256(staging / "seam_report.json")
         assembly = AssemblyManifest(
             layout_id=layout.layout_id,
             layout_sha256=_sha256(layout_path_out),
@@ -818,6 +869,8 @@ def extract_tile_set(bundle_dir: Path, layout_path: Path, output_dir: Path) -> T
             overlap_cells=layout.overlap_cells,
             tiles=records,
             coverage_map_sha256=coverage_map_sha256,
+            seam_report_path="seam_report.json",
+            seam_report_sha256=seam_report_sha256,
         )
         _write_canonical_json(staging / "assembly_manifest.json", assembly)
         verify_tile_set(staging, bundle)
@@ -827,6 +880,7 @@ def extract_tile_set(bundle_dir: Path, layout_path: Path, output_dir: Path) -> T
             layout_path=output / "tile-layout.json",
             assembly_manifest_path=output / "assembly_manifest.json",
             coverage_map_path=output / "coverage_map.json",
+            seam_report_path=output / "seam_report.json",
             tile_manifest_paths=[output / record.tile_manifest for record in records],
         )
     except BaseException:

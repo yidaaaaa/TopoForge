@@ -181,4 +181,12 @@
 - **Status:** Resolved for raster extraction
 - **Reproduction:** Before this increment, `tile-plan` produced windows but no per-tile files, root assembly identity, complete source-manifest validation, or published tamper detector.
 - **Expected behavior:** A new tile-set directory contains exact DEM/NoData windows, complete per-tile provenance/validation/manifests, a coverage map and assembly manifest, and strict source-window/hash verification with no partial publication.
-- **Resolution:** Added `extract_tile_set()`, `verify_tile_set()`, and `topoforge tile-extract`; full source role verification, safe relative paths, canonical JSON, strict GeoTIFF reopen, report remeasurement, exact source-window equality, source model-size binding, staging cleanup, overwrite rejection, tamper tests, and real Gongga repeat-byte evidence all pass. Numerical seam reports and mesh/connectors are tracked as the next Phase 5 work, not claimed by this resolution.
+- **Resolution:** Added `extract_tile_set()`, `verify_tile_set()`, and `topoforge tile-extract`; full source role verification, safe relative paths, canonical JSON, strict GeoTIFF reopen, report remeasurement, exact source-window equality, source model-size binding, staging cleanup, overwrite rejection, tamper tests, and real Gongga repeat-byte evidence all pass. Mesh assembly and connectors remain separate Phase 5 work.
+
+## TF-021 — Extracted tile sets lacked published numerical seam evidence
+
+- **Severity:** High
+- **Status:** Resolved for raster continuity
+- **Reproduction:** Reopen a pre-seam Phase 5 tile set; exact source windows are present, but no report enumerates adjacencies or measures shared-core/overlap elevation, mask, CRS, and transform consistency.
+- **Expected behavior:** Every new tile set contains deterministic, checksummed, strictly remeasured evidence for all raster seams, with explicit thresholds and tamper regressions.
+- **Resolution:** Added `measure_tile_seams()` and canonical `seam_report.json`, assembly-manifest path/hash binding, strict remeasurement, stable east/south adjacency enumeration, exact core/overlap elevation and mask checks, metric transform alignment, legacy manifest compatibility, failure/tamper tests, and retained Gongga v2 repeat-byte evidence. Per-tile mesh and connector continuity remain open roadmap gates.

@@ -92,12 +92,14 @@ Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> wi
 2. [x] Define deterministic overlap/edge sampling windows with clipped outer boundaries.
 3. [x] Define per-tile DEM/mask/provenance/validation contracts.
 4. [x] Publish an assembly manifest and tile coverage map.
-5. [ ] Verify seam consistency and multi-tile mesh assembly.
-6. [ ] Add connector geometry and printer-profile tolerance tests.
-7. [ ] Stabilize tile/assembly contracts before worker API implementation.
-8. [ ] Stabilize worker API contracts before Web/MapLibre/Three.js implementation.
+5. [x] Verify numerical seam consistency over shared core lines and complete overlap regions.
+6. [ ] Generate per-tile meshes in the shared global manufacturing frame.
+7. [ ] Verify multi-tile mesh assembly and publish a coverage image.
+8. [ ] Add connector geometry and printer-profile tolerance tests.
+9. [ ] Stabilize tile/assembly contracts before worker API implementation.
+10. [ ] Stabilize worker API contracts before Web/MapLibre/Three.js implementation.
 
-Phase 5 extraction gate evidence: `topoforge tile-extract` verifies every source bundle manifest hash, extracts exact overlapped DEM/NoData windows, preserves CRS/transforms/raw+processed hashes, publishes canonical tile provenance/validation/manifests plus assembly/coverage JSON, and strictly reopens all roles. The retained Gongga 100 mm 2x2 extraction and repeat are 23/23 files byte-identical; the full suite is 156 passed.
+Phase 5 raster/seam gate evidence: `topoforge tile-extract` verifies every source bundle manifest hash, extracts exact overlapped DEM/NoData windows, preserves CRS/transforms/raw+processed hashes, publishes canonical tile provenance/validation/manifests plus assembly/coverage/seam JSON, and strictly reopens all roles. The retained Gongga 100 mm 2x2 v2 extraction has four zero-difference seams, zero mask mismatches, zero transform error, matching CRS, and 24/24 primary/repeat files byte-identical. The full suite is 159 passed with 464 visible tracked warnings.
 
 ## Milestone 02 acceptance — passed in 0.3.0
 
