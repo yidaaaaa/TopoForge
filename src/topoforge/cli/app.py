@@ -44,6 +44,7 @@ from topoforge.models import (
     TerrainMode,
     VerticalScaleMode,
 )
+from topoforge.provenance import write_json
 from topoforge.providers import (
     CachingHttpClient,
     ContentAddressedCache,
@@ -75,11 +76,17 @@ from topoforge.workflow import (
     GlobalAcquisitionConfig,
     WorkflowExecutionResult,
     WorkflowLaunchConfig,
+    apply_workflow_cleanup,
+    create_workflow_backup,
+    estimate_workflow_storage,
     execute_workflow_launch,
     inspect_workflow_workspace,
+    plan_workflow_cleanup,
     read_workflow_launch_config,
+    restore_workflow_backup,
     write_workflow_launch_config,
     write_workflow_report,
+    write_workflow_storage_estimate,
 )
 
 app = typer.Typer(
@@ -812,6 +819,112 @@ def browse_workflow(
                 "required_checks_passed": summary.required_checks_passed,
             }
         )
+    except (TopoForgeError, ValueError, OSError) as exc:
+        _fail(exc)
+
+
+@app.command("storage")
+def workflow_storage(
+    launch: Annotated[
+        Path,
+        typer.Argument(help="workflow-launch.yaml or its workflow workspace."),
+    ],
+) -> None:
+    """Estimate disk headroom using configured ceilings or completed measurements."""
+    try:
+        path = launch.expanduser().resolve()
+        if path.is_dir():
+            path = path / "workflow-launch.yaml"
+        config = read_workflow_launch_config(path)
+        root = config.workspace_dir.expanduser().resolve()
+        summary = None
+        if (root / "workflow-manifest.json").is_file() or (root / "workflow-status.json").is_file():
+            summary = inspect_workflow_workspace(root)
+        estimate = estimate_workflow_storage(config, summary=summary)
+        report_path = write_workflow_storage_estimate(estimate)
+        _emit(
+            {
+                "status": "estimated",
+                "report": str(report_path),
+                **estimate.model_dump(mode="json"),
+            }
+        )
+    except (TopoForgeError, ValueError, OSError) as exc:
+        _fail(exc)
+
+
+@app.command("cleanup")
+def cleanup_workflow(
+    workspace: Annotated[Path, typer.Argument(help="Completed workflow workspace.")],
+    apply: Annotated[
+        bool,
+        typer.Option("--apply", help="Delete the reviewed unreferenced stage paths."),
+    ] = False,
+    confirm_workflow_id: Annotated[
+        str | None,
+        typer.Option(
+            "--confirm-workflow-id",
+            help="Exact workflow id required with --apply.",
+        ),
+    ] = None,
+) -> None:
+    """Review or explicitly apply cleanup of unreferenced content-addressed stages."""
+    try:
+        root = workspace.expanduser().resolve()
+        plan = plan_workflow_cleanup(root)
+        plan_path = root / "workflow-cleanup-plan.json"
+        write_json(plan_path, plan.model_dump(mode="json"))
+        if not apply:
+            _emit({"status": "review", "plan": str(plan_path), **plan.model_dump(mode="json")})
+            return
+        if confirm_workflow_id is None:
+            raise ValueError("--apply requires --confirm-workflow-id from the reviewed plan")
+        result = apply_workflow_cleanup(
+            root,
+            confirm_workflow_id=confirm_workflow_id,
+        )
+        result_path = root / "workflow-cleanup-result.json"
+        write_json(result_path, result.model_dump(mode="json"))
+        _emit({"status": "applied", "result": str(result_path), **result.model_dump(mode="json")})
+    except (TopoForgeError, ValueError, OSError) as exc:
+        _fail(exc)
+
+
+@app.command("backup")
+def backup_workflow(
+    workspace: Annotated[Path, typer.Argument(help="Completed workflow workspace.")],
+    output: Annotated[Path, typer.Option("--output", "-o", help="New deterministic ZIP.")],
+) -> None:
+    """Create and strictly verify a portable workflow backup archive."""
+    try:
+        result = create_workflow_backup(workspace, output)
+        manifest = result.manifest
+        _emit(
+            {
+                "status": "verified",
+                "archive_path": str(result.archive_path),
+                "archive_sha256": result.archive_sha256,
+                "archive_size_bytes": result.archive_size_bytes,
+                "backup_id": manifest.backup_id,
+                "workflow_id": manifest.workflow_id,
+                "file_count": len(manifest.files),
+                "external_file_count": sum(item.kind == "external" for item in manifest.files),
+                "required_checks_passed": manifest.required_checks_passed,
+            }
+        )
+    except (TopoForgeError, ValueError, OSError) as exc:
+        _fail(exc)
+
+
+@app.command("restore")
+def restore_workflow(
+    archive: Annotated[Path, typer.Argument(help="Verified TopoForge workflow backup ZIP.")],
+    output: Annotated[Path, typer.Option("--output", "-o", help="New workspace path.")],
+) -> None:
+    """Atomically restore, remap, and strictly reopen a workflow backup."""
+    try:
+        result = restore_workflow_backup(archive, output)
+        _emit({"status": "restored", **result.model_dump(mode="json")})
     except (TopoForgeError, ValueError, OSError) as exc:
         _fail(exc)
 

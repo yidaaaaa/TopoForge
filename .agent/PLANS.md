@@ -11,7 +11,7 @@ Updated: 2026-08-02
 - [x] Phase 3 — global/high-resolution providers, AOI/geocoding, cache, selection/fallback. Completed in 0.3.0.
 - [x] Phase 4 — build-volume/resource UX, adapt/strict budgets, vertical-scaling preflight, real rebuild, and slice evidence. Completed in 0.3.1.
 - [x] Phase 5 — tiling, assembly manifest/map, labels, verified connectors, print-local files, and per-tile slicing. Completed in 0.4.0.
-- [ ] Phase 6 — local software completion: resumable one-command workflow, local UX, recovery, and core hardening.
+- [x] Phase 6 — local software completion: resumable one-command workflow, local UX, recovery, and core hardening. Completed in 0.5.0 on 2026-08-02.
 - [ ] Phase 7 — local provenance-aware GPX/road/river/contour/label/coast overlays.
 - [ ] Phase 8 — local release hardening: packaging, CI, benchmarks, reference regions, and offline documentation.
 - [ ] Phase 9 (deferred) — worker-backed FastAPI and React/MapLibre/Three.js Web application, only after local-use completion.
@@ -104,18 +104,20 @@ Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> wi
 
 Real evidence: eight connectors over four seams, `0.2 mm` total lateral / `0.2 mm` vertical clearance, `0.0 mm` terrain-top deviation, and `0.0 mm3` collision. Official Bambu Studio `02.07.01.62` sliced all four print-local tiles with exit 0, complete P2S parameter checks, maximum 224 layers, `224.53 g`, and no out-of-bed/empty/floating/support result. Four project 3MF files passed archive/MD5 and no-external-profile reopen/reslice. Verification: `artifacts/verification/topoforge-0.4.0-gongga-phase5-verification.json`.
 
-## Current Phase 6 — local software completion
+## Completed Phase 6 — local software completion (0.5.0)
 
 1. [x] Add `topoforge run` for local source identity, build, tiling, connectors, optional slicing, and optional Bambu project evidence. Stages are content-addressed by complete settings/upstream SHA-256 values, strictly reopened before reuse, atomically status-tracked, and resumable after retained failure records.
 2. [x] Connect the existing no-key global provider/cache acquisition path to the same source-stage contract. `topoforge run` accepts bbox or center-radius, publishes canonical `acquire.json`, strictly binds provider/manifest/raster/mask evidence, records acquisition failure/recovery, and reuses verified stages without a second fetch.
 3. [x] Add `topoforge wizard`, saved `workflow-launch.yaml`, and `topoforge resume` so local DEM/bbox/center-radius, manufacturing, slicing, and project choices are reviewed once and resumed without reconstructing a long command. Every run publishes a concise measured `workflow-summary.json`.
 4. [x] Add `topoforge browse` and dependency-free `workflow-report.html` with strictly workspace-bound links to validation, provenance, previews, connector maps, models, slice/project roles, and stage directories. Browser opening is optional and no server is required.
-5. [ ] Evaluate and validate an exhaustive self-intersection backend for TF-005.
-6. [ ] Resolve or constrain the Rasterio/NumPy compatibility warning tracked by TF-006 using benchmark and regression evidence.
-7. [ ] Add disk-space estimates, reviewed cleanup commands, backup/export, and offline end-to-end documentation; the workflow's stage failure/retry record is complete.
-8. [ ] Freeze the local software workflow before beginning overlay work.
+5. [x] Evaluate exhaustive self-intersection backends for TF-005. No candidate passed behavior, licensing, and resource acceptance together; production remains honestly `not_fully_checked` with retained evidence.
+6. [x] Resolve TF-006 by constraining NumPy to `<2.5`; NumPy 2.4.6 removes the Rasterio warnings while six core artifact roles remain byte-identical.
+7. [x] Add measured disk-space estimates, workflow-id-confirmed cleanup, deterministic checksum-bound backup/restore, and offline end-to-end documentation.
+8. [x] Freeze the local software workflow at TopoForge 0.5.0 before beginning overlay work.
 
 Real global-workflow evidence: `artifacts/verification/topoforge-0.4.0-amazon-global-workflow-phase6-cache-replay.json`. The production Copernicus AWS provider replayed the retained Amazon bbox with 7/7 cache hits and a fail-on-network opener that recorded zero network attempts. The retained and replayed 74 x 74 elevation arrays match exactly; all seven stages strictly reopen and the repeat/CLI runs reuse all seven stages with a byte-identical workflow manifest.
+
+Phase 6 closure evidence: `artifacts/verification/topoforge-0.5.0-phase6-local-software-verification.json`. The retained Amazon workflow reused all seven stages without acquisition or terrain rebuild, reported sufficient disk headroom and zero cleanup candidates, produced two byte-identical 3,320,977-byte backups, restored 57/57 stage files byte-identically, and passed strict static browsing. TF-005 and TF-006 evidence are retained beside it. Final suite: 179 passed with no warnings.
 
 ## Deferred non-blocking physical validation
 

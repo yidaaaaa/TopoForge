@@ -1,0 +1,89 @@
+{
+  "schema_version": "topoforge-phase6-local-software-verification-v1",
+  "topoforge_version": "0.5.0",
+  "workflow": {
+    "workspace": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-cache-replay-v1",
+    "workflow_id": "global-61db7c8eadcef2ef5b8bb3c7",
+    "source_mode": "global",
+    "completed_stages": [],
+    "reused_stages": [
+      "acquire",
+      "source",
+      "build",
+      "layout",
+      "extract",
+      "mesh",
+      "connect"
+    ],
+    "terrain_rebuilt": false,
+    "source_redownloaded": false,
+    "required_checks_passed": true
+  },
+  "measured_terrain": {
+    "dimensions_mm": [80.0, 80.65869140625, 9.714625358581543],
+    "source_grid_shape": [74, 74],
+    "processed_grid_shape": [74, 74],
+    "source_horizontal_resolution_m": 29.763799211548566,
+    "processed_horizontal_resolution_m": 29.763799211548566,
+    "physical_sample_spacing_mm": 1.100401976692707,
+    "estimated_triangle_count": 21900,
+    "peak_elevation_loss_m": 0.0,
+    "peak_horizontal_shift_m": 0.0,
+    "terrain_fidelity_status": "source-resolution-preserved"
+  },
+  "storage": {
+    "report": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-cache-replay-v1/workflow-storage.json",
+    "estimate_basis": "completed_workflow_measurements",
+    "grid_cell_count": 5476,
+    "estimated_triangle_count": 21900,
+    "estimated_tile_count": 1,
+    "current_workspace_bytes": 8240190,
+    "estimated_peak_workspace_bytes": 40181391,
+    "estimated_additional_bytes": 31941201,
+    "available_bytes": 373272633344,
+    "sufficient_for_estimate": true,
+    "backup_input_bytes": 8275564
+  },
+  "cleanup": {
+    "plan": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-cache-replay-v1/workflow-cleanup-plan.json",
+    "candidate_count": 0,
+    "reclaimable_bytes": 0,
+    "current_manifest_stages_preserved": true,
+    "apply_requires_exact_workflow_id": true
+  },
+  "backup": {
+    "primary": "/root/autodl-tmp/bambu/TopoForge/outputs/phase6-backups/topoforge-0.5.0-amazon-workflow-1.zip",
+    "repeat": "/root/autodl-tmp/bambu/TopoForge/outputs/phase6-backups/topoforge-0.5.0-amazon-workflow-2.zip",
+    "sha256": "06f81057d1b7db41a96f12b5111a0c57eb5fa3d0c0e87029dff8387f7cf56f0b",
+    "archive_size_bytes": 3320977,
+    "backup_id": "572a81cdc8b77619ab25f16ab1ef3ad73213348c65b06a4cda0e5f9a16fc0e58",
+    "manifest_file_count": 68,
+    "workspace_file_count": 66,
+    "external_file_count": 2,
+    "uncompressed_input_bytes": 8276212,
+    "primary_repeat_byte_identical": true,
+    "safe_paths_and_per_file_sha256_verified": true
+  },
+  "restore": {
+    "workspace": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-restored-v1",
+    "external_directory": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-restored-v1/backup-external",
+    "workflow_manifest_sha256": "491793b5288957dd133a82d12706f7153de4a8a5b5f5417da504146ce2675cff",
+    "workflow_report_sha256": "87a774910c5a0aad3100b912714b2f3dde4d23eac72f4a9882223095efd130c7",
+    "original_restored_stage_file_count": 57,
+    "all_stage_files_byte_identical": true,
+    "strict_workspace_reopen_passed": true,
+    "static_browse_passed": true
+  },
+  "hardening": {
+    "self_intersection_evidence": "artifacts/verification/topoforge-0.5.0-phase6-self-intersection-backend-evaluation.json",
+    "self_intersection_status": "not_fully_checked",
+    "numpy_rasterio_evidence": "artifacts/verification/topoforge-0.5.0-phase6-numpy-rasterio-compatibility.json",
+    "resolved_numpy_version": "2.4.6",
+    "focused_rasterio_deprecation_warnings": 0
+  },
+  "deferred": {
+    "physical_connector_calibration": true,
+    "api_web_phase": 9
+  },
+  "required_checks_passed": true
+}

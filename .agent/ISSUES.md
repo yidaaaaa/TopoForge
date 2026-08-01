@@ -40,25 +40,25 @@
 - **Owner:** Primary agent
 - **Resolution:** Completed provider selection/fallback and candidate geocoding in TopoForge 0.3.0 with offline regressions and a real all-cache-hit Amazon auto-selection replay.
 
-## TF-005 — Exhaustive self-intersection backend pending
+## TF-005 — Exhaustive self-intersection backend evaluation
 
 - **Severity:** Medium
-- **Status:** Open
+- **Status:** Resolved by evaluated non-adoption in 0.5.0
 - **Reproduction:** Read any current `validation.json`.
 - **Expected behavior:** Robust exhaustive result where a verified backend exists.
 - **Actual behavior:** Report is honestly `not_fully_checked`; all other topology and slicer gates pass.
 - **Owner:** Primary agent
-- **Resolution:** Evaluate a robust backend against representative meshes; retain literal classification until validated.
+- **Resolution:** Evaluated Manifold3D, libigl 2.6.2, MeshLib 3.1.3.297, PyMeshLab/VCGLib 2025.7.post1, and Open3D CPU 0.19.0 against clean, separate, adjacent, overlapping, connected-cross, duplicate, degenerate, Amazon, and Gongga meshes. MeshLib and PyMeshLab passed behavior but imposed non-commercial/GPL distribution constraints and roughly 260-294 MB installs; Open3D produced adjacent-contact false positives and missed the connected-cross fixture; the other candidates lacked the required predicate. Production remains literally `not_fully_checked`; no backend failure is promoted to passed. Evidence: `artifacts/verification/topoforge-0.5.0-phase6-self-intersection-backend-evaluation.json`.
 
 ## TF-006 — Rasterio/NumPy masked-array deprecation warnings
 
 - **Severity:** Low
-- **Status:** Open
+- **Status:** Resolved in 0.5.0
 - **Reproduction:** Run the full suite with Rasterio 1.5.0 and NumPy 2.5.1.
 - **Expected behavior:** No upstream deprecation warnings.
-- **Actual behavior:** 50 warnings about masked-array shape assignment and related reads; 141 tests pass.
+- **Actual behavior:** NumPy 2.5.1 produced 10 warnings in the focused five-test reproduction and thousands across the full suite.
 - **Owner:** Primary agent
-- **Resolution:** Track upstream compatibility or constrain NumPy after benchmark/compatibility evidence; warnings are not hidden.
+- **Resolution:** Constrained NumPy to `>=2.1,<2.5` and locked 2.4.6 with Rasterio 1.5.0. The focused tests now pass with zero warnings; STL, 3MF, GLB, PNG, processed DEM, and NoData-mask SHA-256 values are byte-identical before/after, and build time changed from 2.694 s to 2.645 s. Evidence: `artifacts/verification/topoforge-0.5.0-phase6-numpy-rasterio-compatibility.json`.
 
 
 ## TF-007 — Baseline offset and hard height contract
@@ -243,3 +243,11 @@
 - **Reproduction:** Before this increment, complete `topoforge run` arguments had to be reconstructed and users manually searched content-addressed stage directories for reports, previews, maps, and manufacturing roles.
 - **Expected behavior:** One reviewed local/global launch can be saved, resumed with a short command, summarized with measured results, and browsed without deploying a service.
 - **Resolution:** Added strict `WorkflowLaunchConfig` YAML round-trip, `topoforge wizard`, `resume`, and `browse`; automatic `workflow-summary.json` and dependency-free `workflow-report.html`; workspace containment and stage-manifest hash checks; preview/connector-map links; local/global wizard tests; resume/reuse/tamper tests; and a retained Amazon all-stage-reuse UX verification record with seven checksum-verified roles.
+
+## TF-029 — Local workflow lacked bounded maintenance and portable recovery
+
+- **Severity:** Medium
+- **Status:** Resolved in 0.5.0
+- **Reproduction:** Before Phase 6 closure, users could not estimate workflow disk use, identify only unreferenced stage identities, back up external local source/config files, or strictly restore a completed workspace.
+- **Expected behavior:** Maintenance is measurable, review-first, workspace-contained, checksum-bound, and usable without an API or server.
+- **Resolution:** Added `topoforge storage`, `cleanup`, `backup`, and `restore`; configured-ceiling/completed-measurement estimates; exact workflow-id deletion confirmation; deterministic safe-path ZIPs with per-file SHA-256; external source/config inclusion; atomic restore and launch remapping; tamper/determinism/offline-resume tests; and `docs/offline-workflow.md`. The real Amazon backup repeats byte-for-byte and restores 57/57 stage files exactly.

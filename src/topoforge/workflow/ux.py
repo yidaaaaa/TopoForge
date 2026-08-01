@@ -295,6 +295,8 @@ def inspect_workflow_workspace(
         "workflow_launch": root / "workflow-launch.yaml",
         "workflow_summary": root / "workflow-summary.json",
         "workflow_report": root / "workflow-report.html",
+        "workflow_storage": root / "workflow-storage.json",
+        "workflow_restore": root / "workflow-restore.json",
         "workflow_request": root / "workflow-request.json",
         "workflow_manifest": manifest_path,
         "workflow_status": status_path,
@@ -455,21 +457,44 @@ img {{
 
 def publish_workflow_summary(result: LocalWorkflowResult) -> tuple[WorkflowRunSummary, Path, Path]:
     """Strictly inspect a completed result and publish concise JSON/HTML views."""
+    from topoforge.workflow.maintenance import (
+        estimate_workflow_storage,
+        write_workflow_storage_estimate,
+    )
+
     root = result.workspace_dir.resolve()
     summary_path = root / "workflow-summary.json"
     report_path = root / "workflow-report.html"
+    storage_path = root / "workflow-storage.json"
     summary = inspect_workflow_workspace(
         root,
         completed_stages=result.completed_stages,
         reused_stages=result.reused_stages,
     )
+    launch = read_workflow_launch_config(root / "workflow-launch.yaml")
+    storage = estimate_workflow_storage(launch, summary=summary)
+    write_workflow_storage_estimate(storage, storage_path)
     summary = summary.model_copy(
         update={
+            "metrics": {
+                **summary.metrics,
+                "storage": {
+                    "estimate_basis": storage.estimate_basis,
+                    "current_workspace_bytes": storage.current_workspace_bytes,
+                    "estimated_peak_workspace_bytes": storage.estimated_peak_workspace_bytes,
+                    "estimated_additional_bytes": storage.estimated_additional_bytes,
+                    "available_bytes": storage.available_bytes,
+                    "sufficient_for_estimate": storage.sufficient_for_estimate,
+                    "cleanup_reclaimable_bytes": storage.cleanup_reclaimable_bytes,
+                    "backup_input_bytes": storage.backup_input_bytes,
+                },
+            },
             "artifacts": {
                 **summary.artifacts,
                 "workflow_summary": str(summary_path),
                 "workflow_report": str(report_path),
-            }
+                "workflow_storage": str(storage_path),
+            },
         }
     )
     write_json(summary_path, summary.model_dump(mode="json"))

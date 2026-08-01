@@ -2,7 +2,7 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Implemented milestone (TopoForge 0.4.0):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, explicit adapt/strict cell-triangle-memory budgets, build-volume/vertical-scale preflight, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Phase 5 is complete: deterministic tile layout/extraction, numerical and mesh seams, global-frame assembly, printer-derived dovetail connectors, reversible print-local files, actual per-tile slicing, and official Bambu project export/reopen evidence are implemented. Single-user local completion is Phase 6. API/Web remains planned but is deferred until the local workflow, overlays, and release hardening are complete.
+**Implemented milestone (TopoForge 0.5.0):** validated local and no-key Copernicus AWS GeoTIFF manufacturing core with content-addressed cache, bounded HTTP transport, printer-aware sampling, explicit adapt/strict cell-triangle-memory budgets, build-volume/vertical-scale preflight, bbox/center-radius/resolved-place AOIs, +X East/+Y North orientation, deterministic 3MF/provenance, official Copernicus EDM/FLM/HEM/WBM preservation, explainable provider ranking/fetch fallback, Nominatim-compatible candidate geocoding, and real slicing. Phase 5 manufacturing tiling remains frozen at 0.4.0. Phase 6 single-user local software is complete: one reviewed launch, resumable local/global stages, measured summaries, static artifact browsing, disk estimates, confirmed cleanup, checksum-bound backup/restore, offline recovery documentation, and dependency hardening. API/Web remains planned but is deferred until overlays and release hardening are complete.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
 
@@ -181,6 +181,27 @@ uv run topoforge browse outputs/my-terrain --open
 ```
 
 The wizard accepts a local GeoTIFF, WGS84 bbox, or center-radius source; model/tile/sampling settings; optional slicing profiles; and optional Bambu project evidence. It writes `workflow-launch.yaml` and can execute immediately or stop after review with `--no-run`. `topoforge run` also writes the same launch file. Successful execution publishes concise measured `workflow-summary.json` and dependency-free `workflow-report.html`. The report uses relative local links and embeds the terrain preview and connector map when present; no API, Web server, database, or network listener is involved. `topoforge browse` verifies every stage-manifest SHA-256 and rejects paths outside the workspace before regenerating the artifact index. Real retained evidence: `artifacts/verification/topoforge-0.4.0-phase6-local-ux.json`.
+
+Phase 6 local maintenance commands operate on the same strictly reopened workspace:
+
+```bash
+# Conservative pre-run estimate; completed runs use measured grid/triangle counts.
+uv run topoforge storage outputs/my-terrain
+
+# Review first. The emitted apply command contains the exact workflow id.
+uv run topoforge cleanup outputs/my-terrain
+uv run topoforge cleanup outputs/my-terrain \
+  --apply --confirm-workflow-id WORKFLOW_ID
+
+# The ZIP is deterministic, includes external local source/config files, and is reread.
+uv run topoforge backup outputs/my-terrain \
+  --output outputs/backups/my-terrain.zip
+uv run topoforge restore outputs/backups/my-terrain.zip \
+  --output outputs/my-terrain-restored
+uv run topoforge browse outputs/my-terrain-restored --no-open
+```
+
+`cleanup` never deletes a stage referenced by the current canonical manifest and does nothing without `--apply` plus an exact workflow-id confirmation. Backup archives use fixed ZIP metadata, safe relative paths, an embedded per-file SHA-256 manifest, strict reread, and atomic restore. Local DEMs and referenced slicer configuration files outside the workspace are copied under the restored workspace's `backup-external/` directory and the saved launch is remapped there. See [`docs/offline-workflow.md`](docs/offline-workflow.md) for the complete disconnected workflow and the limits of uncached global acquisition.
 
 ## Plan, extract, mesh, connect, and slice deterministic terrain tiles
 

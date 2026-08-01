@@ -1,0 +1,118 @@
+{
+  "schema_version": "topoforge-self-intersection-backend-evaluation-v1",
+  "topoforge_version": "0.5.0",
+  "issue": "TF-005",
+  "acceptance": {
+    "clean_closed_mesh_has_no_false_positive": true,
+    "separate_shells_have_no_false_positive": true,
+    "face_adjacent_shells_have_no_false_positive": true,
+    "overlapping_shells_are_detected": true,
+    "connected_mesh_intersection_is_detected": true,
+    "deterministic_result": true,
+    "acceptable_real_mesh_time_and_memory": true,
+    "apache_2_compatible_distribution": true,
+    "production_install_size_is_acceptable": true
+  },
+  "fixtures": {
+    "clean_box": "12 triangles",
+    "separate_boxes": "24 triangles",
+    "face_adjacent_boxes": "24 triangles with one coincident boundary face",
+    "axis_overlap_boxes": "24 triangles with coplanar surface overlap",
+    "diagonal_overlap_boxes": "24 triangles with transverse surface crossings",
+    "connected_cross": "two triangles sharing one vertex and crossing beyond that vertex",
+    "duplicate_face": "closed box plus one duplicate triangle",
+    "degenerate_face": "closed box plus one repeated-index zero-area triangle"
+  },
+  "real_meshes": {
+    "amazon": {
+      "path": "outputs/amazon-global-workflow-phase6-cache-replay-v1/stages/10-build/78776e0b243876b14d0934c0af45d6941b35f6c4809a6a6b07c55fd5d46e759d/model.stl",
+      "triangle_count": 21900
+    },
+    "gongga": {
+      "path": "outputs/gongga-copernicus-glo30-resource-v3/model.stl",
+      "triangle_count": 791952
+    }
+  },
+  "backends": [
+    {
+      "name": "Manifold3D",
+      "version": "3.5.2",
+      "result": "rejected_behavior",
+      "evidence": "Two overlapping closed boxes returned NoError and summed volume 16.0 instead of reporting overlap; successful manifold construction is not exhaustive self-intersection evidence."
+    },
+    {
+      "name": "libigl Python wheel",
+      "version": "2.6.2",
+      "result": "rejected_missing_api",
+      "evidence": "The wheel exposes no copyleft.cgal module or exhaustive self-intersection predicate."
+    },
+    {
+      "name": "MeshLib",
+      "version": "3.1.3.297",
+      "result": "rejected_distribution",
+      "fixture_collision_pairs": {
+        "clean_box": 0,
+        "separate_boxes": 0,
+        "face_adjacent_boxes": 0,
+        "axis_overlap_boxes": 0,
+        "diagonal_overlap_boxes": 15,
+        "connected_cross": 1,
+        "duplicate_face": 0,
+        "degenerate_face": 0
+      },
+      "determinism_repetitions": 5,
+      "amazon_collision_pairs": 0,
+      "amazon_detection_seconds": [0.0203363784, 0.0128182285, 0.0130169727],
+      "gongga_collision_pairs": 0,
+      "gongga_detection_seconds": [0.1775545515, 0.0967599973, 0.0985707343],
+      "installed_bytes": 260359204,
+      "peak_rss_kib_during_exported_stl_evaluation": 1422152,
+      "license_result": "The wheel metadata grants only non-commercial, evaluation, or educational use and is not a production Apache-2.0 dependency."
+    },
+    {
+      "name": "PyMeshLab / VCGLib",
+      "version": "2025.7.post1",
+      "result": "rejected_distribution",
+      "fixture_selected_faces": {
+        "clean_box": 0,
+        "separate_boxes": 0,
+        "face_adjacent_boxes": 0,
+        "axis_overlap_boxes": 0,
+        "diagonal_overlap_boxes": 12,
+        "connected_cross": 2,
+        "duplicate_face": 0,
+        "degenerate_face": 0
+      },
+      "determinism_repetitions": 5,
+      "amazon_selected_faces": 0,
+      "amazon_detection_seconds": [0.0426699333, 0.0408329368, 0.0411625914],
+      "gongga_selected_faces": 0,
+      "gongga_detection_seconds": [2.0600668117, 2.0647880845, 2.0526959747],
+      "installed_bytes": 293680820,
+      "peak_rss_kib": 604808,
+      "license_result": "GPL3 is not selected as a runtime dependency for the Apache-2.0 distribution."
+    },
+    {
+      "name": "Open3D CPU",
+      "version": "0.19.0",
+      "result": "rejected_behavior",
+      "fixture_collision_pairs": {
+        "clean_box": 0,
+        "separate_boxes": 0,
+        "face_adjacent_boxes": 64,
+        "axis_overlap_boxes": 52,
+        "diagonal_overlap_boxes": 15,
+        "connected_cross": 0,
+        "duplicate_face": 0,
+        "degenerate_face": 0
+      },
+      "license_result": "MIT-compatible, but the predicate failed the required adjacent-contact and connected-intersection behavior."
+    }
+  ],
+  "decision": {
+    "production_backend": null,
+    "self_intersection_status": "not_fully_checked",
+    "required_checks_behavior": "No unavailable or failed backend is converted to passed.",
+    "issue_status": "evaluated_closed_without_false_pass"
+  }
+}

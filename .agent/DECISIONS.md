@@ -217,3 +217,19 @@
 - **Decision:** Define strict `WorkflowLaunchConfig` YAML as the complete local execution input, including local/global source selection, manufacturing settings, tile bounds, slicer/profile choices, and project evidence. `topoforge run` and `wizard` save it; `resume` executes it through the existing workflow core. After strict completion, publish a measured JSON summary and a dependency-free static HTML browser. Artifact inspection must validate workflow/status ids, completed state, every stage-manifest SHA-256, required-check booleans, and workspace path containment before linking files. Browser opening remains optional.
 - **Alternatives:** Store only shell history; build a FastAPI service now; duplicate provider/build logic in a desktop application; trust directory listings without hashes; embed large artifacts into HTML.
 - **Impact:** Solo use needs one reviewed setup and a short resume command. Reports, previews, maps, models, and output directories are locally browsable without a server, while canonical stage identities remain independent of invocation history. The retained Amazon workflow reused all seven stages and produced checksum-verified launch, summary, and report roles.
+
+## ADR-029 — Workflow maintenance is measured, review-first, and checksum-bound
+
+- **Date:** 2026-08-02
+- **Context:** Content-addressed stages intentionally retain old identities, but unrestricted deletion would discard evidence; local recovery also needs more than copying an unverified directory tree.
+- **Decision:** Estimate disk use from configured cell/triangle ceilings before execution and measured counts after completion. Cleanup may target only immediate stage identities absent from the current canonical manifest, defaults to review, and requires the exact workflow id to apply. Backups reject symlinks, use sorted safe ZIP paths and fixed metadata, include referenced external local source/config files, bind every file by size and SHA-256, strictly reopen before success, and restore through a staging directory before atomic publication.
+- **Alternatives:** Delete the whole workspace/cache; trust modification times; archive only final models; use unverified platform ZIP defaults; require an API service for job maintenance.
+- **Impact:** Solo local operation has bounded storage decisions and portable evidence without weakening stage reuse. The retained Amazon archive is byte-deterministic, includes two external source-evidence files, and restores all 57 stage files byte-for-byte.
+
+## ADR-030 — Dependency and self-intersection hardening must preserve distribution and evidence compatibility
+
+- **Date:** 2026-08-02
+- **Context:** NumPy 2.5 exposed an upstream Rasterio masked-array deprecation, while exhaustive self-intersection candidates differed materially in accuracy, licensing, install size, and real-mesh memory. Changing report text alone also caused strict old-stage reread to reject otherwise identical evidence.
+- **Decision:** Constrain NumPy below 2.5 only after before/after artifact and performance proof. Do not add a self-intersection backend unless it passes clean/adjacent/overlap/connected fixtures, deterministic real-mesh benchmarks, Apache-compatible distribution, and acceptable resource cost. Preserve existing validation field bytes when no behavior is added; record evaluated non-adoption in separate evidence and keep `not_fully_checked` literal.
+- **Alternatives:** Suppress warnings; accept any backend that imports; add non-commercial/GPL runtime dependencies without distribution review; label unchecked geometry passed; rewrite historical validation fields during reuse.
+- **Impact:** TopoForge 0.5.0 has a warning-free 179-test environment with byte-identical core build roles, retains Apache-2.0 distribution boundaries, and continues to reopen 0.4.0 stage evidence exactly.

@@ -71,6 +71,9 @@ topoforge wizard/run/resume + saved WorkflowLaunchConfig
   -> project/<stage SHA-256> -> optional Bambu export + isolated reopen/reslice
   -> canonical workflow manifest + atomic status + retained failure record
   -> measured workflow-summary.json + dependency-free workflow-report.html
+  -> workflow-storage.json from configured ceilings or completed measurements
+  -> reviewed cleanup of manifest-unreferenced stage identities only
+  -> deterministic SHA-256 backup ZIP + atomic verified restore
 ```
 
 Each stage identity binds its upstream manifest SHA-256 values and effective content settings. For global acquisition, AOI and provider-selection policy determine the stage identity while cache location, timeout, attempts, and rate-limit timing remain operational controls. Reuse strictly reopens the metric single-band raster, normalized AOI, provider/dataset trace, NoData count, source-acquisition manifest hash, and every aligned quality mask through canonical `acquire.json`; file existence alone is never sufficient. Changed settings choose another content-addressed path, failures receive retained status records, and reviewed evidence is never silently overwritten. The execution-specific CLI summary reports newly completed versus reused stages without making canonical artifacts depend on invocation history.
@@ -86,7 +89,7 @@ Each stage identity binds its upstream manifest SHA-256 values and effective con
 - `rendering`: hillshade/color derived only from measured elevation samples.
 - `provenance`: stable JSON and dependency-free HTML reports.
 - `engine`: atomic build orchestration, reusable local preflight, and bundle verification. `preflight_local_terrain()` runs the production raster/scaling path in a temporary directory without publishing a build.
-- `workflow`: normalized global acquisition plus local source identity, content-addressed stage manifests, strict reuse, saved launch/resume settings, measured summaries, a workspace-contained static artifact browser, status/failure records, and direct composition of existing core functions.
+- `workflow`: normalized global acquisition plus local source identity, content-addressed stage manifests, strict reuse, saved launch/resume settings, measured summaries, a workspace-contained static artifact browser, disk estimation, reviewed cleanup, verified backup/restore, status/failure records, and direct composition of existing core functions.
 - `cli`: Typer argument parsing, reviewed wizard prompts, JSON presentation, optional desktop-browser opening, and no business-logic duplication.
 - `providers`: normalized-AOI provider contracts, explainable deterministic selection/fetch fallback, Copernicus AWS catalog/tile/ancillary-mask planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
 - `geocoding`: cached Nominatim-compatible candidate search and explicit ambiguity resolution; selected candidates become ordinary recorded AOIs before provider selection.
@@ -98,10 +101,10 @@ For an `R x C` grid, TopoForge creates matching top and bottom vertex grids. Eac
 
 ## Validation truth
 
-Manufacturing claims come from the reopened STL, not only the source NumPy arrays. Checks include finite vertices/normals, watertightness, winding, edge manifoldness, positive volume, one component, degenerates, duplicates, dimensions, flat bottom, base thickness, and triangle count. Exhaustive self-intersection is explicitly `not_fully_checked` in the current backend.
+Manufacturing claims come from the reopened STL, not only the source NumPy arrays. Checks include finite vertices/normals, watertightness, winding, edge manifoldness, positive volume, one component, degenerates, duplicates, dimensions, flat bottom, base thickness, and triangle count. Exhaustive self-intersection is explicitly `not_fully_checked` in the production backend. Phase 6 evaluated Manifold3D, libigl wheels, MeshLib, PyMeshLab/VCGLib, and Open3D: the behaviorally reliable candidates either imposed non-commercial/GPL distribution constraints and roughly 260-294 MB installs, while the MIT Open3D predicate failed the adjacent-contact and connected-intersection fixtures. No backend failure or unavailable check is reported as a pass.
 
 The interoperable 3MF path adds official lib3mf strict read with zero warnings, unit/object/build/topology checks, independent XML dimensions, safe ZIP paths, supported compression, no encryption, and no external relationships. For the default P2S target, official Bambu Studio normative slicing and resolved-parameter assertions form a separate mandatory release gate. The Bambu project 3MF remains a second artifact because its vendor project parts are outside the Core-only lib3mf contract.
 
 ## Extension sequence
 
-The local/resolved-place AOI, provider/cache path, printer-aware manufacturing core, and Phase 5 manufacturing tiling contracts are complete. Phase 6 now has one resumable local/global workflow from a local DEM, bbox, or center-radius AOI; the next work is the local configuration wizard and concise run summary, followed by artifact browsing and core hardening without a server. Physical connector calibration is retained as deferred, non-blocking evidence. Local overlays and release hardening follow. Worker-backed FastAPI and Web/MapLibre/Three.js remain a deferred later phase and must still call the same Python core when eventually implemented.
+The local/resolved-place AOI, provider/cache path, printer-aware manufacturing core, Phase 5 manufacturing tiling, and Phase 6 single-workstation workflow contracts are complete. Physical connector calibration is retained as deferred, non-blocking evidence. Phase 7 adds local provenance-aware overlays, followed by Phase 8 packaging/release hardening. Worker-backed FastAPI and Web/MapLibre/Three.js remain deferred Phase 9 and must still call the same Python core when implemented.

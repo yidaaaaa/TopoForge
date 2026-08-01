@@ -1,0 +1,46 @@
+{
+  "schema_version": "topoforge-numpy-rasterio-compatibility-v1",
+  "topoforge_version": "0.5.0",
+  "issue": "TF-006",
+  "rasterio_version": "1.5.0",
+  "before": {
+    "numpy_version": "2.5.1",
+    "constraint": "numpy>=2.1,<3",
+    "focused_command": "uv run --no-sync pytest tests/integration/test_local_build.py tests/integration/test_aoi_clipping.py -q",
+    "focused_result": "5 passed, 10 warnings in 2.12s",
+    "warning": "DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.",
+    "build_command": "uv run --no-sync topoforge build --config examples/synthetic/config.yaml --output outputs/phase6-numpy251-baseline",
+    "build_elapsed_seconds": 2.694,
+    "core_sha256": {
+      "model.stl": "086b3358a9a1dc741c056dbcfb17945f7e6f5a4d23143e5b2d87cbd5da6aa4f2",
+      "model.3mf": "507e64e649b81e8819ab489a0424dd89df5e15f06038f8891cbf8f6e8f6e5232",
+      "preview.glb": "df018159f10d999ef6d71f2c83405f620f6dd89323216bb2c4b1c5a22c8c8355",
+      "preview.png": "b6f8a6ef6287c7f062301d6c551ff558144ae6400d85df7cbec882d39dd1747e",
+      "processed_dem.tif": "f5684a1192cc924c401c10e921e26e223543ec3e75ddd10dae1b530e944e9c60",
+      "original_nodata_mask.tif": "05af3e2480043fd11afebb5d3970171e8b0645070a5bf4457fb38047b04e2e2b"
+    }
+  },
+  "after": {
+    "numpy_version": "2.4.6",
+    "constraint": "numpy>=2.1,<2.5",
+    "focused_command": "uv run pytest tests/integration/test_local_build.py tests/integration/test_aoi_clipping.py -q",
+    "focused_result": "5 passed in 2.53s; zero warnings",
+    "build_command": "uv run topoforge build --config examples/synthetic/config.yaml --output outputs/phase6-numpy246-after",
+    "build_elapsed_seconds": 2.645,
+    "core_sha256": {
+      "model.stl": "086b3358a9a1dc741c056dbcfb17945f7e6f5a4d23143e5b2d87cbd5da6aa4f2",
+      "model.3mf": "507e64e649b81e8819ab489a0424dd89df5e15f06038f8891cbf8f6e8f6e5232",
+      "preview.glb": "df018159f10d999ef6d71f2c83405f620f6dd89323216bb2c4b1c5a22c8c8355",
+      "preview.png": "b6f8a6ef6287c7f062301d6c551ff558144ae6400d85df7cbec882d39dd1747e",
+      "processed_dem.tif": "f5684a1192cc924c401c10e921e26e223543ec3e75ddd10dae1b530e944e9c60",
+      "original_nodata_mask.tif": "05af3e2480043fd11afebb5d3970171e8b0645070a5bf4457fb38047b04e2e2b"
+    }
+  },
+  "comparison": {
+    "all_six_core_roles_byte_identical": true,
+    "warning_count_reduced_to_zero": true,
+    "build_elapsed_seconds_change": -0.049,
+    "geometry_or_raster_behavior_changed": false
+  },
+  "decision": "Pin NumPy below 2.5 until Rasterio no longer uses the deprecated masked-array shape assignment path."
+}

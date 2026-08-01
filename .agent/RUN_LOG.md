@@ -444,3 +444,25 @@ Result: all seven stages were reused; source and processed grids remained 74 x 7
 Command: full `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, and `git diff --check`.
 
 Result: Ruff `All checks passed!`; format `129 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `178 passed, 2800 warnings in 55.39s`; whitespace check passed. TF-006 warnings remain visible for the next Phase 6 hardening item.
+
+### Phase 6 core hardening and local maintenance closure
+
+Command: evaluate Manifold3D, libigl, MeshLib, PyMeshLab/VCGLib, and Open3D against clean/separate/face-adjacent/overlapping/connected-cross/duplicate/degenerate fixtures plus retained Amazon and Gongga STL files.
+
+Result: MeshLib and PyMeshLab detected the required transverse/connected intersections without adjacent false positives and returned zero on both retained real meshes, but their wheel metadata/distribution costs were unacceptable for the production Apache-2.0 dependency set. Open3D returned 64 adjacent false-positive pairs and missed the connected-cross fixture. Manifold3D and the libigl wheel did not provide the required detector contract. Production remains honestly `not_fully_checked`; evidence: `artifacts/verification/topoforge-0.5.0-phase6-self-intersection-backend-evaluation.json`.
+
+Command: build the same synthetic fixture and run focused Rasterio tests with NumPy 2.5.1, constrain NumPy to `<2.5`, lock 2.4.6, repeat the tests/build, and compare six core hashes.
+
+Result: focused tests changed from `5 passed, 10 warnings` to `5 passed` with zero warnings. Build time changed from 2.694 s to 2.645 s. STL, 3MF, GLB, PNG, processed DEM, and NoData mask are byte-identical. Evidence: `artifacts/verification/topoforge-0.5.0-phase6-numpy-rasterio-compatibility.json`.
+
+Command: implement workflow storage estimates, workflow-id-confirmed cleanup, deterministic checksum-bound backup/restore, CLI commands, and disconnected recovery documentation; run the workflow-focused suite.
+
+Result: `13 passed in 26.86s`; storage uses ceilings before execution and measured values after completion; cleanup rejects a wrong id; backup repeat bytes match; archive tampering is rejected; an external DEM is restored below `backup-external/` and resumes after the original source is removed.
+
+Command: strictly resume the retained Amazon workflow, then run `storage`, cleanup review, two backups, restore, browse, and original/restored stage hash comparison.
+
+Result: an attempted validation-method text update was first rejected by strict old-stage reread and was withdrawn to preserve evidence compatibility. The corrected run reused all seven stages with no terrain rebuild or redownload. Cleanup candidates are zero. Two 3,320,977-byte archives share SHA-256 `06f81057d1b7db41a96f12b5111a0c57eb5fa3d0c0e87029dff8387f7cf56f0b`; the embedded manifest has 68 files including two external source-evidence files; all 57 restored stage files match byte-for-byte and static browsing passes. Evidence: `artifacts/verification/topoforge-0.5.0-phase6-local-software-verification.json`.
+
+Command: final full `uv run pytest` in a persistent PTY after shorter tool calls hit the executor's 30-second boundary.
+
+Result: `179 passed in 63.32s`, exit 0, with no warning summary. Log: `artifacts/logs/topoforge-0.5.0-phase6-pytest.log`.
