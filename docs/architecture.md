@@ -83,4 +83,4 @@ The interoperable 3MF path adds official lib3mf strict read with zero warnings, 
 
 ## Extension sequence
 
-The local/resolved-place AOI, provider/cache path, printer-aware manufacturing core, and Phase 5 manufacturing tiling contracts are complete. Phase 6 completes the single-user local workflow, physical connector calibration, recovery, and local UX without a server. Local overlays and release hardening follow. Worker-backed FastAPI and Web/MapLibre/Three.js remain a deferred later phase and must still call the same Python core when eventually implemented.
+The local/resolved-place AOI, provider/cache path, printer-aware manufacturing core, and Phase 5 manufacturing tiling contracts are complete. Phase 6 completes the single-user local software workflow, recovery, and local UX without a server. Physical connector calibration is retained as deferred, non-blocking evidence. Local overlays and release hardening follow. Worker-backed FastAPI and Web/MapLibre/Three.js remain a deferred later phase and must still call the same Python core when eventually implemented.

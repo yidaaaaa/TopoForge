@@ -388,3 +388,9 @@ Result: patch SHA-256 `16513093a5cd635a3ae3c09f46b5e988b3f3f3ad85989fbe7b3ed7c81
 Decision: retain API/Web as deferred Phase 9 because current operation is single-user/local. Phase 6 now covers physical connector calibration, resumable one-command orchestration, local configuration/report UX, self-intersection and dependency-warning hardening, recovery, cleanup, backup, and offline documentation. Overlay and local release phases precede API/Web.
 
 Result: `.agent/PLANS.md`, `STATE.md`, ADR-025, TF-025, AGENTS.md, README, and architecture/tiling documentation consistently preserve the API plan while making connector coupons and physical measurements the next exact work.
+
+### Physical validation deferred
+
+Decision: skip all tasks that require a physical printer or manual measurements for now. Keep TF-025 and coupon/preset work as saved non-blocking tasks; retain the 0.2 mm connector wording as software-validated only.
+
+Result: Phase 6 now starts with resumable one-command local orchestration, followed by local configuration/artifact UX, core hardening, recovery, cleanup, backup, and offline documentation. API/Web remains deferred separately.

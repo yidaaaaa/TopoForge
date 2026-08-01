@@ -215,8 +215,8 @@
 
 ## TF-025 — Connector fit lacks physical calibration evidence
 
-- **Severity:** High
-- **Status:** Open
+- **Severity:** Medium
+- **Status:** Deferred by operator; non-blocking
 - **Reproduction:** Review the 0.4.0 connector record: geometry, clearance envelopes, P2S slicing, and project reopen pass, but no printed coupon or assembled tile has measured insertion force, play, shrinkage, or dimensional error.
 - **Expected behavior:** Material/nozzle/layer-specific connector presets are backed by printed tolerance coupons and recorded measurements.
-- **Next action:** Generate deterministic coupons across a bounded clearance matrix, slice them with the retained P2S profiles, publish a worksheet, obtain local print measurements, and only then promote physically calibrated presets.
+- **Next action:** When hardware validation resumes, generate deterministic coupons across a bounded clearance matrix, publish a worksheet, obtain measurements, and only then promote physically calibrated presets.

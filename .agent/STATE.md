@@ -1,6 +1,6 @@
 # Current State
 
-- **Current milestone:** Phase 5 is complete in TopoForge 0.4.0. Phase 6 now prioritizes single-user local completion and physical connector calibration. API/Web is preserved as deferred Phase 9 after local workflow, overlays, and release hardening.
+- **Current milestone:** Phase 5 is complete in TopoForge 0.4.0. Phase 6 now prioritizes single-user local software completion; physical connector printing/calibration is deferred and non-blocking. API/Web is preserved as deferred Phase 9 after local workflow, overlays, and release hardening.
 - **Version/branch:** TopoForge `0.4.0`, branch `main`, repository `/root/autodl-tmp/bambu/TopoForge`; release tag `v0.4.0` identifies the Phase 5 completion commit.
 - **Retained source:** `downloads/gongga-copernicus-glo30/gongga-copernicus-glo30-crop.tif`, SHA-256 `00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc`; reused without download. Source 1008 x 1181 at 28.850814 m; processed 439 x 451 at 68.958882 m; peak loss 5.041504 m and shift 24.516276 m; no terrain adjustment.
 - **Layout/seams/global meshes:** layout `layout-694b1e78d24ba9f5920e`, `2 x 2`, maximum `100 x 100 mm`, one overlap cell. Four raster and four mesh seams have zero elevation/mask/transform/planar/Z error. Four global solids each contain 198,876 triangles; footprint overlap is zero and source-volume difference is 0.000748639 mm3 within tolerance.
@@ -11,4 +11,4 @@
 - **Verification:** `artifacts/verification/topoforge-0.4.0-gongga-phase5-verification.json` plus three checksum lists and the 37/37 determinism record. Generated output directories remain ignored; evidence summaries/checksums are tracked.
 - **Known limitations:** TF-005 exhaustive self-intersection remains `not_fully_checked`; TF-006 upstream Rasterio/NumPy masked-array deprecations remain visible. TF-025 records that the 0.2 mm connector has software geometry/slicer evidence but no measured physical fit yet. Software validation does not claim a completed physical print or vendor certification.
 - **Rollback:** `scripts/rollback-topoforge-0.4.0.sh --confirm-rollback` resets a clean worktree to the pre-connector baseline `d82ce3a`; the source patch is `artifacts/patches/topoforge-0.4.0-source.patch`.
-- **Next exact action:** define typed Phase 6 job/status/progress/error/artifact schemas over `build`, `tile-*`, and verification functions, then implement isolated bounded workers and FastAPI endpoints. Do not start Web UI before the API contract and integration tests pass.
+- **Next exact action:** implement one resumable local orchestration command that reuses completed build/tile/connector/slice stages by manifest SHA-256 and produces a concise local run summary. Physical printing and API/Web are both deferred.

@@ -11,7 +11,7 @@ Updated: 2026-08-01
 - [x] Phase 3 — global/high-resolution providers, AOI/geocoding, cache, selection/fallback. Completed in 0.3.0.
 - [x] Phase 4 — build-volume/resource UX, adapt/strict budgets, vertical-scaling preflight, real rebuild, and slice evidence. Completed in 0.3.1.
 - [x] Phase 5 — tiling, assembly manifest/map, labels, verified connectors, print-local files, and per-tile slicing. Completed in 0.4.0.
-- [ ] Phase 6 — local-use completion: calibration coupons, physical-fit evidence, one-command workflow, local UX, and core hardening.
+- [ ] Phase 6 — local software completion: resumable one-command workflow, local UX, recovery, and core hardening.
 - [ ] Phase 7 — local provenance-aware GPX/road/river/contour/label/coast overlays.
 - [ ] Phase 8 — local release hardening: packaging, CI, benchmarks, reference regions, and offline documentation.
 - [ ] Phase 9 (deferred) — worker-backed FastAPI and React/MapLibre/Three.js Web application, only after local-use completion.
@@ -104,18 +104,23 @@ Dependencies: AOI normalization/local crop -> Copernicus AWS catalog/cache -> wi
 
 Real evidence: eight connectors over four seams, `0.2 mm` total lateral / `0.2 mm` vertical clearance, `0.0 mm` terrain-top deviation, and `0.0 mm3` collision. Official Bambu Studio `02.07.01.62` sliced all four print-local tiles with exit 0, complete P2S parameter checks, maximum 224 layers, `224.53 g`, and no out-of-bed/empty/floating/support result. Four project 3MF files passed archive/MD5 and no-external-profile reopen/reslice. Verification: `artifacts/verification/topoforge-0.4.0-gongga-phase5-verification.json`.
 
-## Current Phase 6 — local-use completion
+## Current Phase 6 — local software completion
 
-1. [ ] Generate small connector calibration coupons and a deterministic tolerance matrix instead of requiring full terrain reprints.
-2. [ ] Perform real P2S coupon/tile printing and record measured insertion force, play, dimensional error, material, humidity, orientation, and failure mode. This evidence requires the local operator to print and measure specimens.
-3. [ ] Convert confirmed physical results into explicit material/nozzle/layer connector presets; retain the current 0.2 mm value as software-validated but not physically calibrated.
-4. [ ] Add one resumable local command for acquisition/build/tiling/connectors/slicing/project evidence, reusing completed stages by manifest SHA-256.
-5. [ ] Add a local configuration wizard and concise run summary so ordinary solo use does not require assembling long CLI commands.
-6. [ ] Improve local artifact browsing: open reports, previews, connector maps, and output directories without a server. A lightweight desktop/TUI shell may call the Python core directly.
-7. [ ] Evaluate and validate an exhaustive self-intersection backend for TF-005.
-8. [ ] Resolve or constrain the Rasterio/NumPy compatibility warning tracked by TF-006 using benchmark and regression evidence.
-9. [ ] Add local failure recovery, disk-space estimates, cleanup commands, backup/export, and offline end-to-end documentation.
-10. [ ] Freeze the local workflow before beginning overlay work.
+1. [ ] Add one resumable local command for acquisition/build/tiling/connectors/slicing/project evidence, reusing completed stages by manifest SHA-256.
+2. [ ] Add a local configuration wizard and concise run summary so ordinary solo use does not require assembling long CLI commands.
+3. [ ] Improve local artifact browsing: open reports, previews, connector maps, and output directories without a server. A lightweight desktop/TUI shell may call the Python core directly.
+4. [ ] Evaluate and validate an exhaustive self-intersection backend for TF-005.
+5. [ ] Resolve or constrain the Rasterio/NumPy compatibility warning tracked by TF-006 using benchmark and regression evidence.
+6. [ ] Add local failure recovery, disk-space estimates, cleanup commands, backup/export, and offline end-to-end documentation.
+7. [ ] Freeze the local software workflow before beginning overlay work.
+
+## Deferred non-blocking physical validation
+
+- [ ] Generate connector calibration coupons and a bounded tolerance matrix when physical testing is desired.
+- [ ] Print coupons/tiles and record insertion force, play, dimensional error, material, humidity, orientation, and failure mode.
+- [ ] Promote material/nozzle/layer connector presets only after measured evidence.
+
+These items are intentionally skipped for now and do not block Phases 6-8 or the later saved API/Web phase. The current `0.2 mm` connector remains software-validated, not physically calibrated.
 
 ## Saved deferred Phase 9 — API and Web
 

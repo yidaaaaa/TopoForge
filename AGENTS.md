@@ -4,7 +4,7 @@
 
 TopoForge turns real elevation rasters into dimensionally controlled, printable terrain artifacts. The core engine is CLI-first and is the sole source of business logic for future API and Web surfaces. Geospatial calculations use metres in an explicit projected CRS; manufacturing meshes use millimetres.
 
-The validated core includes local and no-key global AOI acquisition, printer-aware sampling, orientation, resource preflight, deterministic manufacturing exports, provenance, and slicer evidence. Phase 5 deterministic tiling, seams, connectors, print-local placement, per-tile slicing, and Bambu project roles are complete in 0.4.0. The current milestone is Phase 6 single-user local completion and physical calibration. API/Web is retained as deferred Phase 9 after local workflow, overlays, and release hardening.
+The validated core includes local and no-key global AOI acquisition, printer-aware sampling, orientation, resource preflight, deterministic manufacturing exports, provenance, and slicer evidence. Phase 5 deterministic tiling, seams, connectors, print-local placement, per-tile slicing, and Bambu project roles are complete in 0.4.0. The current milestone is Phase 6 single-user local software completion; physical calibration is deferred and non-blocking. API/Web is retained as deferred Phase 9 after local workflow, overlays, and release hardening.
 
 ## Architecture
 

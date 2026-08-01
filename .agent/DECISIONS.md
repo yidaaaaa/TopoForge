@@ -190,6 +190,6 @@
 
 - **Date:** 2026-08-01
 - **Context:** The project is currently operated by one person on one local workstation. FastAPI, workers, queues, persistence, authentication, and Web deployment add maintenance without improving the validated CLI manufacturing path.
-- **Decision:** Preserve the API/Web design as deferred Phase 9. Complete physical connector calibration, resumable one-command local orchestration, local configuration/report UX, overlays, recovery, packaging, CI, and offline documentation first. A future API must wrap the same core contracts and may start only after the local product is frozen.
+- **Decision:** Preserve the API/Web design as deferred Phase 9. Complete resumable one-command local orchestration, local configuration/report UX, overlays, recovery, packaging, CI, and offline documentation first. Physical connector calibration remains a saved, non-blocking evidence task. A future API must wrap the same core contracts and may start only after the local software product is frozen.
 - **Alternatives:** Begin FastAPI immediately; cancel API permanently; build Web logic that duplicates the Python core.
-- **Impact:** Current work targets measurable local utility and physical evidence. No API plan is lost, but there is no near-term service/database/queue/auth burden.
+- **Impact:** Current work targets local software utility without waiting for hardware measurements. No API or physical-validation plan is lost, but neither blocks near-term progress.
