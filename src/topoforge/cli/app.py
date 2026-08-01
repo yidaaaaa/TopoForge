@@ -55,7 +55,13 @@ from topoforge.providers import (
     list_provider_descriptors,
 )
 from topoforge.raster import SyntheticTerrain, create_synthetic_geotiff
-from topoforge.tiling import TileLayoutConfig, plan_tile_layout, write_tile_layout
+from topoforge.tiling import (
+    TileLayoutConfig,
+    extract_tile_set,
+    plan_tile_layout,
+    verify_tile_set,
+    write_tile_layout,
+)
 from topoforge.util import sha256_file
 from topoforge.validation import validate_mesh
 
@@ -588,6 +594,36 @@ def tile_plan(
         else:
             result["layout"] = layout.model_dump(mode="json")
         _emit(result)
+    except (TopoForgeError, ValueError, OSError, RasterioError) as exc:
+        _fail(exc)
+
+
+@app.command("tile-extract")
+def tile_extract(
+    build_dir: Annotated[Path, typer.Argument(help="Completed TopoForge artifact directory.")],
+    layout: Annotated[
+        Path,
+        typer.Option("--layout", file_okay=True, dir_okay=False, readable=True),
+    ],
+    output: Annotated[Path, typer.Option("--output", "-o")],
+) -> None:
+    """Extract deterministic overlapped tile rasters and publish assembly evidence."""
+    try:
+        bundle = build_dir.expanduser().resolve()
+        result = extract_tile_set(bundle, layout, output)
+        verification = verify_tile_set(result.output_dir, bundle)
+        _emit(
+            {
+                "status": "extracted",
+                "bundle": str(bundle),
+                "layout": str(result.layout_path),
+                "output": str(result.output_dir),
+                "assembly_manifest": str(result.assembly_manifest_path),
+                "coverage_map": str(result.coverage_map_path),
+                "tile_manifest_count": len(result.tile_manifest_paths),
+                "verification": verification,
+            }
+        )
     except (TopoForgeError, ValueError, OSError, RasterioError) as exc:
         _fail(exc)
 

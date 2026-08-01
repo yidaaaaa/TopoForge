@@ -32,12 +32,16 @@ BuildConfig (Pydantic)
 Phase 5 tiling starts from a completed bundle and the processed sample grid:
 
 ```text
-processed_dem.tif + validation dimensions
+processed_dem.tif + original_nodata_mask.tif + validation dimensions
   -> topoforge tile-plan
   -> deterministic tile-layout-v1 JSON
-  -> per-tile DEM/mask/provenance/validation (next)
-  -> assembly manifest/coverage map and seam checks (next)
-  -> multi-tile mesh/connector export (next)
+  -> topoforge tile-extract
+  -> exact sampling-window DEM/mask GeoTIFFs
+  -> canonical per-tile provenance/validation/manifests
+  -> checksummed assembly manifest + north/west coverage map
+  -> strict source-window equality and repeat-byte verification
+  -> numerical seam report (next)
+  -> multi-tile mesh/coverage image/connector export (next)
 ```
 
 Builds use a sibling staging directory. Every required file is written and reopened before the stage is atomically renamed to the requested new output directory. A non-empty destination is preserved and rejected.
@@ -56,7 +60,7 @@ Builds use a sibling staging directory. Every required file is written and reope
 - `cli`: Typer argument parsing and JSON presentation.
 - `providers`: normalized-AOI provider contracts, explainable deterministic selection/fetch fallback, Copernicus AWS catalog/tile/ancillary-mask planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
 - `geocoding`: cached Nominatim-compatible candidate search and explicit ambiguity resolution; selected candidates become ordinary recorded AOIs before provider selection.
-- `tiling`: versioned deterministic layout planning; row/column identity, cell/sample windows, physical bounds, overlap halos, canonical JSON, and strict reopen. Tile extraction, assembly, and connectors build on this contract.
+- `tiling`: versioned deterministic layout planning and tile-set extraction; row/column identity, cell/sample windows, physical bounds, overlap halos, exact DEM/NoData windows, per-tile provenance/validation/manifests, assembly/coverage maps, full SHA-256 binding, canonical JSON, strict GeoTIFF/JSON reopen, and source-window equality. Seam reports, tile meshes, assembly, and connectors build on this contract.
 
 ## Geometry topology
 
@@ -70,4 +74,4 @@ The interoperable 3MF path adds official lib3mf strict read with zero warnings, 
 
 ## Extension sequence
 
-The local/resolved-place AOI, printer-aware sampling, adapt/strict resource budgets, manufacturing preflight, content-addressed cache, configurable no-key Copernicus AWS GLO-30/GLO-90 provider, explainable provider-selection/fetch-fallback engine, Nominatim-compatible candidate handling, and quality-mask preservation are complete. Network acquisitions enter the existing local pipeline as a metric AOI raster plus `source_acquisition.json`; no download-first parallel geometry path exists. Phase 5 now defines deterministic tile IDs, overlap/seam contracts, assembly manifests/maps, multi-tile mesh assembly, and connector tolerances. Worker API work begins after those contracts stabilize; Web follows the API contract.
+The local/resolved-place AOI, printer-aware sampling, adapt/strict resource budgets, manufacturing preflight, content-addressed cache, configurable no-key Copernicus AWS GLO-30/GLO-90 provider, explainable provider-selection/fetch-fallback engine, Nominatim-compatible candidate handling, and quality-mask preservation are complete. Network acquisitions enter the existing local pipeline as a metric AOI raster plus `source_acquisition.json`; no download-first parallel geometry path exists. Phase 5 now has deterministic tile IDs, overlap windows, exact per-tile DEM/NoData extraction, checksummed provenance/validation, assembly manifests, coverage maps, strict source-window equality, and real repeat-byte evidence. Numerical seam reports, multi-tile mesh assembly, coverage imagery, and connector tolerances remain. Worker API work begins after those contracts stabilize; Web follows the API contract.

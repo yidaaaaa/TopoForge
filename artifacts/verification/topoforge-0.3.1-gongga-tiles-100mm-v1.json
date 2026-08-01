@@ -1,0 +1,492 @@
+{
+  "commands": [
+    {
+      "command": "uv run topoforge tile-plan outputs/gongga-copernicus-glo30-resource-v3 --max-tile-size-mm 100 100 --overlap-cells 1 --output outputs/gongga-copernicus-glo30-resource-v3-tile-layout-100mm-v1.json",
+      "exit_code": 0
+    },
+    {
+      "command": "uv run topoforge tile-extract outputs/gongga-copernicus-glo30-resource-v3 --layout outputs/gongga-copernicus-glo30-resource-v3-tile-layout-100mm-v1.json --output outputs/gongga-copernicus-glo30-resource-v3-tiles-100mm-v1",
+      "exit_code": 0
+    },
+    {
+      "command": "uv run topoforge tile-extract outputs/gongga-copernicus-glo30-resource-v3 --layout outputs/gongga-copernicus-glo30-resource-v3-tile-layout-100mm-v1.json --output outputs/gongga-copernicus-glo30-resource-v3-tiles-100mm-v1-repeat",
+      "exit_code": 0
+    }
+  ],
+  "determinism": {
+    "all_files_byte_identical": true,
+    "comparison_count": 23,
+    "comparisons": [
+      {
+        "byte_identical": true,
+        "path": "assembly_manifest.json",
+        "primary_sha256": "124973286969c9e0d2d24ea766b2358a2d45994c2bdb60975d3c09f0ffba8a0d",
+        "repeat_sha256": "124973286969c9e0d2d24ea766b2358a2d45994c2bdb60975d3c09f0ffba8a0d"
+      },
+      {
+        "byte_identical": true,
+        "path": "coverage_map.json",
+        "primary_sha256": "f898c0944527e80c9b2f68274c4ef18cc4d3e8ea3c9033af6742f81d22093c51",
+        "repeat_sha256": "f898c0944527e80c9b2f68274c4ef18cc4d3e8ea3c9033af6742f81d22093c51"
+      },
+      {
+        "byte_identical": true,
+        "path": "tile-layout.json",
+        "primary_sha256": "12283a6ed3834aedae5f7c715c37ee564b1390599e977a55a502f358f7db4cf1",
+        "repeat_sha256": "12283a6ed3834aedae5f7c715c37ee564b1390599e977a55a502f358f7db4cf1"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0000-c0000/original_nodata_mask.tif",
+        "primary_sha256": "ee74606940b9b73f8982aae762ef131294da875fc6780fa965337dcedb706601",
+        "repeat_sha256": "ee74606940b9b73f8982aae762ef131294da875fc6780fa965337dcedb706601"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0000-c0000/processed_dem.tif",
+        "primary_sha256": "99a9635c2396c3c1ede93486e687972ff870785dffeb3be7db33338204c38157",
+        "repeat_sha256": "99a9635c2396c3c1ede93486e687972ff870785dffeb3be7db33338204c38157"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0000-c0000/tile_manifest.json",
+        "primary_sha256": "c8184987271e360c5b8fc40289307883106ee9b054e189b1b0570e067d318165",
+        "repeat_sha256": "c8184987271e360c5b8fc40289307883106ee9b054e189b1b0570e067d318165"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0000-c0000/tile_provenance.json",
+        "primary_sha256": "36c17c13e31859f22967ea5c73cb4d81df72c414b7b9a7d352ecd5f3da82b28f",
+        "repeat_sha256": "36c17c13e31859f22967ea5c73cb4d81df72c414b7b9a7d352ecd5f3da82b28f"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0000-c0000/tile_validation.json",
+        "primary_sha256": "ac6e3435a8d4b075ac5ec4018fd32e5c84965114bafa562382a5d1911d2e271c",
+        "repeat_sha256": "ac6e3435a8d4b075ac5ec4018fd32e5c84965114bafa562382a5d1911d2e271c"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0000-c0001/original_nodata_mask.tif",
+        "primary_sha256": "f9f3c272a29d540117cd791b3b0f9924350a2776a53e2939edbf0b4b7edd81c6",
+        "repeat_sha256": "f9f3c272a29d540117cd791b3b0f9924350a2776a53e2939edbf0b4b7edd81c6"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0000-c0001/processed_dem.tif",
+        "primary_sha256": "ccefa5a2f9f96ad1905b4ef7e04bb953c99ed8838fda19f1d07b9d343dd6adee",
+        "repeat_sha256": "ccefa5a2f9f96ad1905b4ef7e04bb953c99ed8838fda19f1d07b9d343dd6adee"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0000-c0001/tile_manifest.json",
+        "primary_sha256": "26a63c4c36ae033c1c28444c4f1b8c411e5174ccbe96987b172819ebb279e6eb",
+        "repeat_sha256": "26a63c4c36ae033c1c28444c4f1b8c411e5174ccbe96987b172819ebb279e6eb"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0000-c0001/tile_provenance.json",
+        "primary_sha256": "000d42df97c99b87939c8d4137e829748bd77f54f278ed9f321ee0bd6e3eae57",
+        "repeat_sha256": "000d42df97c99b87939c8d4137e829748bd77f54f278ed9f321ee0bd6e3eae57"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0000-c0001/tile_validation.json",
+        "primary_sha256": "13b0b55f3a65a5f238e404db21c4e58ebe78bb7539a139c1c3ad33d398f21b16",
+        "repeat_sha256": "13b0b55f3a65a5f238e404db21c4e58ebe78bb7539a139c1c3ad33d398f21b16"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0001-c0000/original_nodata_mask.tif",
+        "primary_sha256": "09bc4fde7e393663df0c7bbd82b424c5d8fc54ebff507cc496ed391b1d5c7f81",
+        "repeat_sha256": "09bc4fde7e393663df0c7bbd82b424c5d8fc54ebff507cc496ed391b1d5c7f81"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0001-c0000/processed_dem.tif",
+        "primary_sha256": "2319bdfeb0696a880b25d28a43b459af51ace8392724dc6f126a976708e1d829",
+        "repeat_sha256": "2319bdfeb0696a880b25d28a43b459af51ace8392724dc6f126a976708e1d829"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0001-c0000/tile_manifest.json",
+        "primary_sha256": "0d73560fda4a5c46e8ecad1c4ffdbc5dde70ab3a4d98bafb011d0df442b22969",
+        "repeat_sha256": "0d73560fda4a5c46e8ecad1c4ffdbc5dde70ab3a4d98bafb011d0df442b22969"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0001-c0000/tile_provenance.json",
+        "primary_sha256": "a9df634f0188f4e8aa7d1bf5cb96ff61b5c8ed7b7ef5020699e013ccb1e69766",
+        "repeat_sha256": "a9df634f0188f4e8aa7d1bf5cb96ff61b5c8ed7b7ef5020699e013ccb1e69766"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0001-c0000/tile_validation.json",
+        "primary_sha256": "a795297fdf05031650b5b61652793b45eef4ffff609ba03713c6514ea4d9858c",
+        "repeat_sha256": "a795297fdf05031650b5b61652793b45eef4ffff609ba03713c6514ea4d9858c"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0001-c0001/original_nodata_mask.tif",
+        "primary_sha256": "b2b555ddef39d97fed9ce485b884a3a8d11ff3e39a494195bc49b7d78b70a00b",
+        "repeat_sha256": "b2b555ddef39d97fed9ce485b884a3a8d11ff3e39a494195bc49b7d78b70a00b"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0001-c0001/processed_dem.tif",
+        "primary_sha256": "c9c38b75a8b627d08e8357b0856dae7f2984267d956131717f5a1ee666bb5c43",
+        "repeat_sha256": "c9c38b75a8b627d08e8357b0856dae7f2984267d956131717f5a1ee666bb5c43"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0001-c0001/tile_manifest.json",
+        "primary_sha256": "31c764d8008a557ce09825afb18fa5183541bbddd092ac55a15683dc2d701482",
+        "repeat_sha256": "31c764d8008a557ce09825afb18fa5183541bbddd092ac55a15683dc2d701482"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0001-c0001/tile_provenance.json",
+        "primary_sha256": "a274fb7c9396bd61178358fcac2aa308a3ec63aa2281399f1028981ae13d6739",
+        "repeat_sha256": "a274fb7c9396bd61178358fcac2aa308a3ec63aa2281399f1028981ae13d6739"
+      },
+      {
+        "byte_identical": true,
+        "path": "tiles/tile-r0001-c0001/tile_validation.json",
+        "primary_sha256": "9875cd4e05cfd508bad22c431351ffdea91e6e4c5e83c989181f3b683a48f02c",
+        "repeat_sha256": "9875cd4e05cfd508bad22c431351ffdea91e6e4c5e83c989181f3b683a48f02c"
+      }
+    ]
+  },
+  "file_count_per_extraction": 23,
+  "layout": {
+    "column_origin": "west",
+    "east_axis": "+X = East",
+    "external_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tile-layout-100mm-v1.json",
+    "layout_id": "layout-694b1e78d24ba9f5920e",
+    "layout_sha256": "12283a6ed3834aedae5f7c715c37ee564b1390599e977a55a502f358f7db4cf1",
+    "maximum_tile_size_mm": [
+      100.0,
+      100.0
+    ],
+    "north_axis": "+Y = North",
+    "overlap_cells": 1,
+    "published_path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tiles-100mm-v1/tile-layout.json",
+    "row_origin": "north",
+    "tile_count": 4,
+    "tile_grid_shape": [
+      2,
+      2
+    ]
+  },
+  "primary": {
+    "column_origin": "west",
+    "layout_id": "layout-694b1e78d24ba9f5920e",
+    "output_dir": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tiles-100mm-v1",
+    "overlap_cells": 1,
+    "required_checks_passed": true,
+    "row_origin": "north",
+    "source_bundle_verified": true,
+    "status": "verified",
+    "tile_count": 4,
+    "tile_grid_shape": [
+      2,
+      2
+    ]
+  },
+  "repeat": {
+    "column_origin": "west",
+    "layout_id": "layout-694b1e78d24ba9f5920e",
+    "output_dir": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3-tiles-100mm-v1-repeat",
+    "overlap_cells": 1,
+    "required_checks_passed": true,
+    "row_origin": "north",
+    "source_bundle_verified": true,
+    "status": "verified",
+    "tile_count": 4,
+    "tile_grid_shape": [
+      2,
+      2
+    ]
+  },
+  "required_checks_passed": true,
+  "retained_source_dem": {
+    "path": "/root/autodl-tmp/bambu/TopoForge/downloads/gongga-copernicus-glo30/gongga-copernicus-glo30-crop.tif",
+    "redownloaded": false,
+    "sha256": "00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc"
+  },
+  "schema_version": "topoforge-real-tile-extraction-verification-v1",
+  "scope": {
+    "completed": [
+      "per-tile processed DEM extraction",
+      "per-tile original NoData mask extraction",
+      "per-tile provenance/validation/manifest",
+      "assembly manifest",
+      "coverage map",
+      "strict reopen and source-window equality"
+    ],
+    "not_yet_completed": [
+      "numerical seam report",
+      "per-tile mesh generation",
+      "multi-tile mesh assembly",
+      "connector geometry and tolerance validation"
+    ]
+  },
+  "source_bundle": {
+    "build_manifest_sha256": "bf980358d13121863dc87550ff53303a628491208b0937716ecbb917aa681ff3",
+    "orientation": {
+      "coordinate_correction_only": true,
+      "east_axis": "+X = East",
+      "north_axis": "+Y = North",
+      "north_edge": "y=model_depth_mm",
+      "orientation_transform": "mesh_heightfield=flipud(processed_dem); source row 0 north maps to y=model_depth_mm",
+      "source_bounds": {
+        "full_grid_shape": [
+          1008,
+          1181
+        ],
+        "native": [
+          101.66986111111112,
+          29.450138888888887,
+          101.99791666666667,
+          29.730138888888888
+        ],
+        "native_crs": "EPSG:4326",
+        "wgs84": [
+          101.66986111111112,
+          29.450138888888887,
+          101.99791666666667,
+          29.730138888888888
+        ]
+      },
+      "up_axis": "+Z = Up"
+    },
+    "original_nodata_mask_sha256": "b1c9b5617058c88ce7f2772de1c195bc101f735f80842de32c964eb648583be8",
+    "path": "/root/autodl-tmp/bambu/TopoForge/outputs/gongga-copernicus-glo30-resource-v3",
+    "processed_dem_sha256": "ea43b92e7d0de2db6cdf8b0c6aba14344b9cfae3c42830d6b2ff3252ac52023d",
+    "processed_grid_shape": [
+      439,
+      451
+    ],
+    "processed_horizontal_resolution_m": 68.9588820624312,
+    "source_grid_shape": [
+      1008,
+      1181
+    ],
+    "source_horizontal_resolution_m": 28.850813554696742
+  },
+  "tiles": [
+    {
+      "artifact_sha256": {
+        "original_nodata_mask": "ee74606940b9b73f8982aae762ef131294da875fc6780fa965337dcedb706601",
+        "processed_dem": "99a9635c2396c3c1ede93486e687972ff870785dffeb3be7db33338204c38157",
+        "provenance": "36c17c13e31859f22967ea5c73cb4d81df72c414b7b9a7d352ecd5f3da82b28f",
+        "validation": "ac6e3435a8d4b075ac5ec4018fd32e5c84965114bafa562382a5d1911d2e271c"
+      },
+      "column": 0,
+      "core_cell_window": {
+        "column_start": 0,
+        "column_stop": 225,
+        "row_start": 0,
+        "row_stop": 219
+      },
+      "core_sample_shape": [
+        220,
+        226
+      ],
+      "crs": "EPSG:32647",
+      "original_nodata_pixels": 0,
+      "physical_bounds_mm": {
+        "x_max": 90.0,
+        "x_min": 0.0,
+        "y_max": 175.35911560058594,
+        "y_min": 87.67955780029297
+      },
+      "required_checks_passed": true,
+      "row": 0,
+      "sample_elevation_max_m": 6214.85302734375,
+      "sample_elevation_min_m": 3555.312744140625,
+      "sample_grid_shape": [
+        221,
+        227
+      ],
+      "sampling_window": {
+        "column_start": 0,
+        "column_stop": 227,
+        "row_start": 0,
+        "row_stop": 221
+      },
+      "source_bundle_manifest_sha256": "bf980358d13121863dc87550ff53303a628491208b0937716ecbb917aa681ff3",
+      "tile_id": "tile-r0000-c0000",
+      "tile_key": "layout-694b1e78d24ba9f5920e/tile-r0000-c0000",
+      "tile_manifest_sha256": "c8184987271e360c5b8fc40289307883106ee9b054e189b1b0570e067d318165",
+      "transform": [
+        68.92967665527287,
+        0.0,
+        758930.6153090111,
+        0.0,
+        -68.98808746958954,
+        3291874.779605538
+      ]
+    },
+    {
+      "artifact_sha256": {
+        "original_nodata_mask": "f9f3c272a29d540117cd791b3b0f9924350a2776a53e2939edbf0b4b7edd81c6",
+        "processed_dem": "ccefa5a2f9f96ad1905b4ef7e04bb953c99ed8838fda19f1d07b9d343dd6adee",
+        "provenance": "000d42df97c99b87939c8d4137e829748bd77f54f278ed9f321ee0bd6e3eae57",
+        "validation": "13b0b55f3a65a5f238e404db21c4e58ebe78bb7539a139c1c3ad33d398f21b16"
+      },
+      "column": 1,
+      "core_cell_window": {
+        "column_start": 225,
+        "column_stop": 450,
+        "row_start": 0,
+        "row_stop": 219
+      },
+      "core_sample_shape": [
+        220,
+        226
+      ],
+      "crs": "EPSG:32647",
+      "original_nodata_pixels": 0,
+      "physical_bounds_mm": {
+        "x_max": 180.0,
+        "x_min": 90.0,
+        "y_max": 175.35911560058594,
+        "y_min": 87.67955780029297
+      },
+      "required_checks_passed": true,
+      "row": 0,
+      "sample_elevation_max_m": 7432.48291015625,
+      "sample_elevation_min_m": 2555.9296875,
+      "sample_grid_shape": [
+        221,
+        227
+      ],
+      "sampling_window": {
+        "column_start": 224,
+        "column_stop": 451,
+        "row_start": 0,
+        "row_stop": 221
+      },
+      "source_bundle_manifest_sha256": "bf980358d13121863dc87550ff53303a628491208b0937716ecbb917aa681ff3",
+      "tile_id": "tile-r0000-c0001",
+      "tile_key": "layout-694b1e78d24ba9f5920e/tile-r0000-c0001",
+      "tile_manifest_sha256": "26a63c4c36ae033c1c28444c4f1b8c411e5174ccbe96987b172819ebb279e6eb",
+      "transform": [
+        68.92967665527287,
+        0.0,
+        774370.8628797922,
+        0.0,
+        -68.98808746958954,
+        3291874.779605538
+      ]
+    },
+    {
+      "artifact_sha256": {
+        "original_nodata_mask": "09bc4fde7e393663df0c7bbd82b424c5d8fc54ebff507cc496ed391b1d5c7f81",
+        "processed_dem": "2319bdfeb0696a880b25d28a43b459af51ace8392724dc6f126a976708e1d829",
+        "provenance": "a9df634f0188f4e8aa7d1bf5cb96ff61b5c8ed7b7ef5020699e013ccb1e69766",
+        "validation": "a795297fdf05031650b5b61652793b45eef4ffff609ba03713c6514ea4d9858c"
+      },
+      "column": 0,
+      "core_cell_window": {
+        "column_start": 0,
+        "column_stop": 225,
+        "row_start": 219,
+        "row_stop": 438
+      },
+      "core_sample_shape": [
+        220,
+        226
+      ],
+      "crs": "EPSG:32647",
+      "original_nodata_pixels": 0,
+      "physical_bounds_mm": {
+        "x_max": 90.0,
+        "x_min": 0.0,
+        "y_max": 87.67955780029297,
+        "y_min": 0.0
+      },
+      "required_checks_passed": true,
+      "row": 1,
+      "sample_elevation_max_m": 5998.54833984375,
+      "sample_elevation_min_m": 3123.2900390625,
+      "sample_grid_shape": [
+        221,
+        227
+      ],
+      "sampling_window": {
+        "column_start": 0,
+        "column_stop": 227,
+        "row_start": 218,
+        "row_stop": 439
+      },
+      "source_bundle_manifest_sha256": "bf980358d13121863dc87550ff53303a628491208b0937716ecbb917aa681ff3",
+      "tile_id": "tile-r0001-c0000",
+      "tile_key": "layout-694b1e78d24ba9f5920e/tile-r0001-c0000",
+      "tile_manifest_sha256": "0d73560fda4a5c46e8ecad1c4ffdbc5dde70ab3a4d98bafb011d0df442b22969",
+      "transform": [
+        68.92967665527287,
+        0.0,
+        758930.6153090111,
+        0.0,
+        -68.98808746958954,
+        3276835.3765371675
+      ]
+    },
+    {
+      "artifact_sha256": {
+        "original_nodata_mask": "b2b555ddef39d97fed9ce485b884a3a8d11ff3e39a494195bc49b7d78b70a00b",
+        "processed_dem": "c9c38b75a8b627d08e8357b0856dae7f2984267d956131717f5a1ee666bb5c43",
+        "provenance": "a274fb7c9396bd61178358fcac2aa308a3ec63aa2281399f1028981ae13d6739",
+        "validation": "9875cd4e05cfd508bad22c431351ffdea91e6e4c5e83c989181f3b683a48f02c"
+      },
+      "column": 1,
+      "core_cell_window": {
+        "column_start": 225,
+        "column_stop": 450,
+        "row_start": 219,
+        "row_stop": 438
+      },
+      "core_sample_shape": [
+        220,
+        226
+      ],
+      "crs": "EPSG:32647",
+      "original_nodata_pixels": 0,
+      "physical_bounds_mm": {
+        "x_max": 180.0,
+        "x_min": 90.0,
+        "y_max": 87.67955780029297,
+        "y_min": 0.0
+      },
+      "required_checks_passed": true,
+      "row": 1,
+      "sample_elevation_max_m": 7142.8095703125,
+      "sample_elevation_min_m": 2941.785888671875,
+      "sample_grid_shape": [
+        221,
+        227
+      ],
+      "sampling_window": {
+        "column_start": 224,
+        "column_stop": 451,
+        "row_start": 218,
+        "row_stop": 439
+      },
+      "source_bundle_manifest_sha256": "bf980358d13121863dc87550ff53303a628491208b0937716ecbb917aa681ff3",
+      "tile_id": "tile-r0001-c0001",
+      "tile_key": "layout-694b1e78d24ba9f5920e/tile-r0001-c0001",
+      "tile_manifest_sha256": "31c764d8008a557ce09825afb18fa5183541bbddd092ac55a15683dc2d701482",
+      "transform": [
+        68.92967665527287,
+        0.0,
+        774370.8628797922,
+        0.0,
+        -68.98808746958954,
+        3276835.3765371675
+      ]
+    }
+  ],
+  "topoforge_version": "0.3.1"
+}

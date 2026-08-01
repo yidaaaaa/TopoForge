@@ -302,3 +302,25 @@ Result: focused layout and CLI tests report 9 passed. A 24 x 30 synthetic bundle
 Command: full gate after Phase 5 layout work: `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, and `git diff --check`.
 
 Result: Ruff passed; format `111 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `150 passed, 55 warnings in 10.43s`; diff whitespace passed. Warnings remain the tracked Rasterio/NumPy masked-array deprecations and non-exhaustive self-intersection classification.
+
+### Phase 5 per-tile extraction, assembly manifest, and real Gongga evidence
+
+Command: implement `topoforge-tile-artifact-v1`, `topoforge-assembly-manifest-v1`, `topoforge-tile-coverage-v1`, `extract_tile_set()`, reusable `verify_tile_set()`, and `topoforge tile-extract`.
+
+Result: extraction verifies every source build-manifest checksum, writes exact `sampling_window` DEM/NoData GeoTIFFs with preserved CRS/window transforms, retains raw-source/processed/source-manifest hashes and dataset/orientation evidence, publishes canonical per-tile provenance/validation/manifests plus coverage/assembly JSON, rejects overwrite/path traversal, and removes staging output on failure. Verification recomputes measurements and compares tile arrays to exact source windows.
+
+Command: focused `./.venv/bin/pytest -q tests/cli/test_tiling_cli.py tests/integration/test_tile_extraction.py` plus tamper regressions.
+
+Result: 7 focused tests pass (1 CLI and 6 extraction). They cover exact windows/masks/CRS, source and processed hashes, assembly/coverage roles, byte-identical repeats, overwrite rejection, layout mismatch cleanup, any source-role checksum corruption, published tile tampering, and layout/model-size mismatch rejection.
+
+Command: full `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, and `git diff --check` with output captured in `artifacts/logs/phase5-tile-extraction-final-quality-gates.log`.
+
+Result: exit 0; Ruff `All checks passed!`; format `113 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `156 passed, 221 warnings in 16.44s`; diff whitespace passed. Warnings remain the visible TF-006 Rasterio/NumPy deprecations.
+
+Command: reuse `outputs/gongga-copernicus-glo30-resource-v3` without acquisition, run `tile-plan --max-tile-size-mm 100 100 --overlap-cells 1`, then run `tile-extract` into `outputs/gongga-copernicus-glo30-resource-v3-tiles-100mm-v1` and a separate `-repeat` directory.
+
+Result: all commands exit 0. Layout `layout-694b1e78d24ba9f5920e` contains a 2 x 2 north/west grid. Each tile sampling grid is 221 x 227 and each core sample grid is 220 x 226. Both final directories strictly reopen against the source bundle; all 23 relative files are byte-identical. The retained source DEM was rehashed in place as `00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc`; no download occurred.
+
+Command: generate and run `sha256sum -c artifacts/verification/topoforge-0.3.1-gongga-tiles-100mm-v1-checksums.sha256`.
+
+Result: exit 0; retained source, external layout, verification/determinism records, root manifests/maps, and all 20 per-tile roles report `OK`. Verification: `artifacts/verification/topoforge-0.3.1-gongga-tiles-100mm-v1.json`.

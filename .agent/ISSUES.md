@@ -170,7 +170,15 @@
 ## TF-019 — Phase 5 lacked a stable tile identity and overlap contract
 
 - **Severity:** High
-- **Status:** Resolved for layout planning; extraction/assembly remain open roadmap work
+- **Status:** Resolved for layout planning and exact raster extraction; seam/mesh/connectors remain roadmap work
 - **Reproduction:** There was no canonical partition for processed sample grids, no fixed row/column origin, and no machine-readable overlap window for later tile workers.
 - **Expected behavior:** Identical grid/model/tile-size/overlap inputs produce byte-identical layout JSON, stable IDs, complete non-overlapping core cell coverage, shared seam samples, and clipped outer halos.
 - **Resolution:** Added `topoforge.tiling` layout models, deterministic layout digest and tile IDs, north/west mapping, physical bounds, neighbor metadata, overlap windows, strict canonical write/reopen, bundle-backed `topoforge tile-plan`, and unit/CLI regressions.
+
+## TF-020 — Per-tile outputs lacked strict source and assembly binding
+
+- **Severity:** High
+- **Status:** Resolved for raster extraction
+- **Reproduction:** Before this increment, `tile-plan` produced windows but no per-tile files, root assembly identity, complete source-manifest validation, or published tamper detector.
+- **Expected behavior:** A new tile-set directory contains exact DEM/NoData windows, complete per-tile provenance/validation/manifests, a coverage map and assembly manifest, and strict source-window/hash verification with no partial publication.
+- **Resolution:** Added `extract_tile_set()`, `verify_tile_set()`, and `topoforge tile-extract`; full source role verification, safe relative paths, canonical JSON, strict GeoTIFF reopen, report remeasurement, exact source-window equality, source model-size binding, staging cleanup, overwrite rejection, tamper tests, and real Gongga repeat-byte evidence all pass. Numerical seam reports and mesh/connectors are tracked as the next Phase 5 work, not claimed by this resolution.
