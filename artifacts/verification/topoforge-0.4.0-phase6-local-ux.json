@@ -1,0 +1,99 @@
+{
+  "artifacts": {
+    "connector_map": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-cache-replay-v1/stages/50-connect/9220b8342f5dfa4f8b0dfbcbaefb8750043ea9fa78edf3c299a402d2788ba10f/connector-map.png",
+      "sha256": "454075ec80dbc20af1beb5dcde2c593d645826e11df2c16af41b27812b35269d",
+      "size_bytes": 13509
+    },
+    "preview_png": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-cache-replay-v1/stages/10-build/78776e0b243876b14d0934c0af45d6941b35f6c4809a6a6b07c55fd5d46e759d/preview.png",
+      "sha256": "2ce33d9a4d759f40ee078ac6976f347d8431cc583596197c80ed8d8159335f91",
+      "size_bytes": 504035
+    },
+    "workflow_launch": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-cache-replay-v1/workflow-launch.yaml",
+      "sha256": "75f09456f22eb44864d9632134020cf442268ce2929e7853be002f7f691c92b2",
+      "size_bytes": 3356
+    },
+    "workflow_manifest": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-cache-replay-v1/workflow-manifest.json",
+      "sha256": "491793b5288957dd133a82d12706f7153de4a8a5b5f5417da504146ce2675cff",
+      "size_bytes": 4904
+    },
+    "workflow_report": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-cache-replay-v1/workflow-report.html",
+      "sha256": "6636014d24ec36cfffdc88e16dbbc8884c42f007acd80eb615656b60bae9aa35",
+      "size_bytes": 6926
+    },
+    "workflow_summary": {
+      "path": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-cache-replay-v1/workflow-summary.json",
+      "sha256": "e04cf24c915c6a5e8c89492eba9ce5bd40dbe0866f8c735f7194dbcaa2484710",
+      "size_bytes": 5069
+    }
+  },
+  "base_commit": "b6dd15f80b402082f384a9c13506155138709edd",
+  "browse_command": "uv run topoforge browse outputs/amazon-global-workflow-phase6-cache-replay-v1 --no-open",
+  "completed_stages": [],
+  "focused_tests": "12 passed, 1248 warnings in 19.65s",
+  "full_quality_gate": {
+    "git_diff_check": "passed",
+    "pyright": "0 errors, 0 warnings, 0 informations",
+    "pytest": "178 passed, 2800 warnings in 55.39s",
+    "ruff_check": "All checks passed!",
+    "ruff_format": "129 files already formatted"
+  },
+  "local_ux": {
+    "artifact_paths_verified_within_workspace": true,
+    "connector_map_linked": true,
+    "launch_config_strict_reopen": true,
+    "preview_linked": true,
+    "resume_without_reconstructed_command": true,
+    "server_required": false,
+    "stage_manifest_hashes_verified": true,
+    "static_html_report": true
+  },
+  "metrics": {
+    "connector_count": 0,
+    "connector_fit_status": "passed",
+    "dimensions_mm": [
+      80.0,
+      80.65869140625,
+      9.714625358581543
+    ],
+    "estimated_triangle_count": 21900,
+    "peak_elevation_loss_m": 0.0,
+    "peak_horizontal_shift_m": 0.0,
+    "physical_sample_spacing_mm": 1.100401976692707,
+    "processed_grid_shape": [
+      74,
+      74
+    ],
+    "processed_horizontal_resolution_m": 29.763799211548566,
+    "source_grid_shape": [
+      74,
+      74
+    ],
+    "source_horizontal_resolution_m": 29.763799211548566,
+    "terrain_fidelity_status": "source-resolution-preserved",
+    "tile_count": 1,
+    "tile_grid_shape": [
+      1,
+      1
+    ]
+  },
+  "required_checks_passed": true,
+  "reused_stages": [
+    "acquire",
+    "source",
+    "build",
+    "layout",
+    "extract",
+    "mesh",
+    "connect"
+  ],
+  "run_command": "uv run topoforge run --config outputs/amazon-copernicus-aws-quality-v2/build_config.resolved.yaml --output outputs/amazon-global-workflow-phase6-cache-replay-v1 --bbox -60.02 -3.13 -60.0 -3.11 --provider copernicus-aws --terrain-mode best-available --cache-dir cache/providers --no-slice",
+  "schema_version": "topoforge-phase6-local-ux-verification-v1",
+  "source_mode": "global",
+  "workflow_id": "global-61db7c8eadcef2ef5b8bb3c7",
+  "workspace": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-cache-replay-v1"
+}

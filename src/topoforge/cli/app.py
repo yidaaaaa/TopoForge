@@ -14,6 +14,7 @@ import numpy as np
 import rasterio
 import trimesh
 import typer
+import yaml
 from rasterio.errors import RasterioError
 
 from topoforge import __version__
@@ -72,8 +73,13 @@ from topoforge.util import sha256_file
 from topoforge.validation import validate_mesh
 from topoforge.workflow import (
     GlobalAcquisitionConfig,
-    LocalWorkflowConfig,
-    run_local_workflow,
+    WorkflowExecutionResult,
+    WorkflowLaunchConfig,
+    execute_workflow_launch,
+    inspect_workflow_workspace,
+    read_workflow_launch_config,
+    write_workflow_launch_config,
+    write_workflow_report,
 )
 
 app = typer.Typer(
@@ -91,6 +97,39 @@ def _emit(value: Any) -> None:
 def _fail(exc: Exception) -> None:
     typer.echo(f"Error: {exc}", err=True)
     raise typer.Exit(code=2) from exc
+
+
+def _emit_workflow_execution(execution: WorkflowExecutionResult) -> None:
+    result = execution.workflow
+    summary = execution.summary
+    _emit(
+        {
+            "status": summary.state.value,
+            "workflow_id": summary.workflow_id,
+            "source_mode": summary.source_mode,
+            "workspace": str(result.workspace_dir),
+            "manifest": str(result.manifest_path),
+            "workflow_status": str(result.status_path),
+            "launch_config": str(execution.launch_config_path),
+            "summary": str(execution.summary_path),
+            "report": str(execution.report_path),
+            "completed_stages": [stage.value for stage in summary.completed_stages],
+            "reused_stages": [stage.value for stage in summary.reused_stages],
+            "metrics": summary.metrics,
+            "required_checks_passed": summary.required_checks_passed,
+        }
+    )
+
+
+def _prompt_float_tuple(label: str, count: int) -> tuple[float, ...]:
+    raw = typer.prompt(label)
+    try:
+        values = tuple(float(item) for item in raw.replace(",", " ").split())
+    except ValueError as exc:
+        raise ValueError(f"{label} requires {count} numeric values") from exc
+    if len(values) != count:
+        raise ValueError(f"{label} requires exactly {count} numeric values")
+    return values
 
 
 def _fail_provider_selection(exc: ProviderSelectionError) -> None:
@@ -649,14 +688,6 @@ def run_local(
 ) -> None:
     """Run or resume local/global acquisition and manufacturing stages."""
     try:
-        from topoforge.validation.slicers import (
-            BambuStudioAdapter,
-            OrcaSlicerAdapter,
-            PrusaSlicerAdapter,
-            SlicerProfile,
-            select_slicer,
-        )
-
         resolved = load_build_config(config)
         workspace = (output or resolved.output_dir).expanduser().resolve()
         has_global_aoi = any(value is not None for value in (bbox, center, radius_m))
@@ -694,64 +725,378 @@ def run_local(
             if has_global_aoi
             else None
         )
-        adapter = None
-        slicer_profile = None
-        if slicing:
-            settings = tuple(
-                path for path in (machine_profile, process_profile, profile) if path is not None
-            )
-            filaments = () if filament_profile is None else (filament_profile,)
-            slicer_profile = SlicerProfile(
-                name=(
-                    "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic"
-                    if slicer == "bambu-studio"
-                    else None
-                ),
-                settings=settings,
-                filaments=filaments,
-            )
-            adapters = {
-                "bambu-studio": BambuStudioAdapter,
-                "orca": OrcaSlicerAdapter,
-                "prusa": PrusaSlicerAdapter,
-            }
-            if slicer == "auto":
-                adapter = select_slicer()
-            elif slicer in adapters:
-                adapter = adapters[slicer]()
-            else:
-                raise ValueError("--slicer must be bambu-studio, orca, prusa, or auto")
-        result = run_local_workflow(
-            LocalWorkflowConfig(
-                workspace_dir=workspace,
-                build=resolved,
-                global_source=global_source,
-                maximum_tile_width_mm=max_tile_size_mm[0],
-                maximum_tile_depth_mm=max_tile_size_mm[1],
-                overlap_cells=overlap_cells,
-                slicing_enabled=slicing,
-                slice_timeout_seconds=timeout_seconds,
-                project_evidence_enabled=project_evidence,
-                project_timeout_seconds=project_timeout_seconds,
-            ),
-            adapter=adapter,
-            profile=slicer_profile,
+        if slicer not in {"bambu-studio", "orca", "prusa", "auto"}:
+            raise ValueError("--slicer must be bambu-studio, orca, prusa, or auto")
+        settings = tuple(
+            path for path in (machine_profile, process_profile, profile) if path is not None
         )
+        filaments = () if filament_profile is None else (filament_profile,)
+        launch = WorkflowLaunchConfig.model_validate(
+            {
+                "workspace_dir": workspace,
+                "build": resolved,
+                "global_source": global_source,
+                "maximum_tile_width_mm": max_tile_size_mm[0],
+                "maximum_tile_depth_mm": max_tile_size_mm[1],
+                "overlap_cells": overlap_cells,
+                "slicing_enabled": slicing,
+                "slicer_name": slicer,
+                "slicer_settings": settings,
+                "slicer_filaments": filaments,
+                "slice_timeout_seconds": timeout_seconds,
+                "project_evidence_enabled": project_evidence,
+                "project_timeout_seconds": project_timeout_seconds,
+            }
+        )
+        _emit_workflow_execution(execute_workflow_launch(launch))
+    except ProviderSelectionError as exc:
+        _fail_provider_selection(exc)
+    except (ImportError, TopoForgeError, ValueError, OSError, RasterioError) as exc:
+        _fail(exc)
+
+
+@app.command("resume")
+def resume_workflow(
+    launch: Annotated[
+        Path,
+        typer.Argument(help="workflow-launch.yaml or its workspace directory."),
+    ],
+) -> None:
+    """Resume a saved local workflow without reconstructing its command line."""
+    try:
+        path = launch.expanduser().resolve()
+        if path.is_dir():
+            path = path / "workflow-launch.yaml"
+        _emit_workflow_execution(execute_workflow_launch(read_workflow_launch_config(path)))
+    except ProviderSelectionError as exc:
+        _fail_provider_selection(exc)
+    except (ImportError, TopoForgeError, ValueError, OSError, RasterioError) as exc:
+        _fail(exc)
+
+
+@app.command("browse")
+def browse_workflow(
+    workspace: Annotated[Path, typer.Argument(help="Completed workflow workspace.")],
+    open_report: Annotated[
+        bool,
+        typer.Option("--open/--no-open", help="Open the static report in the desktop browser."),
+    ] = False,
+) -> None:
+    """Verify and index reports, previews, maps, models, and output directories."""
+    try:
+        root = workspace.expanduser().resolve()
+        report_path = root / "workflow-report.html"
+        summary = inspect_workflow_workspace(root)
+        summary = summary.model_copy(
+            update={
+                "artifacts": {
+                    **summary.artifacts,
+                    "workflow_report": str(report_path),
+                }
+            }
+        )
+        write_workflow_report(report_path, summary)
+        opened = False
+        if open_report:
+            import webbrowser
+
+            opened = webbrowser.open(report_path.as_uri())
         _emit(
             {
-                "status": "completed",
-                "workflow_id": result.workflow_id,
-                "workspace": str(result.workspace_dir),
-                "manifest": str(result.manifest_path),
-                "workflow_status": str(result.status_path),
-                "completed_stages": [stage.value for stage in result.completed_stages],
-                "reused_stages": [stage.value for stage in result.reused_stages],
-                "stage_outputs": {
-                    stage.value: str(path) for stage, path in result.stage_outputs.items()
-                },
-                "required_checks_passed": result.required_checks_passed,
+                "status": "ready",
+                "workflow_id": summary.workflow_id,
+                "report": str(report_path),
+                "opened": opened,
+                "metrics": summary.metrics,
+                "artifacts": summary.artifacts,
+                "required_checks_passed": summary.required_checks_passed,
             }
         )
+    except (TopoForgeError, ValueError, OSError) as exc:
+        _fail(exc)
+
+
+@app.command("wizard")
+def workflow_wizard(
+    ctx: typer.Context,
+    output: Annotated[Path | None, typer.Option("--output", "-o")] = None,
+    source_mode: Annotated[
+        str | None,
+        typer.Option("--source", help="local, bbox, or center."),
+    ] = None,
+    dem: Annotated[Path | None, typer.Option("--dem", help="Local GeoTIFF source.")] = None,
+    bbox: Annotated[
+        tuple[float, float, float, float] | None,
+        typer.Option("--bbox", metavar="WEST SOUTH EAST NORTH"),
+    ] = None,
+    center: Annotated[
+        tuple[float, float] | None,
+        typer.Option("--center", metavar="LON LAT"),
+    ] = None,
+    radius_m: Annotated[float | None, typer.Option("--radius-m", min=0.001)] = None,
+    build_template: Annotated[
+        Path | None,
+        typer.Option("--build-template", help="Existing BuildConfig YAML to use as defaults."),
+    ] = None,
+    model_width_mm: Annotated[float | None, typer.Option("--model-width-mm", min=0.1)] = None,
+    model_depth_mm: Annotated[float | None, typer.Option("--model-depth-mm", min=0.1)] = None,
+    base_mm: Annotated[float | None, typer.Option("--base-mm", min=0.01)] = None,
+    max_height_mm: Annotated[float | None, typer.Option("--max-height-mm", min=0.1)] = None,
+    printer_profile: Annotated[str, typer.Option("--printer-profile")] = (
+        DEFAULT_PRINTER_PROFILE_ID
+    ),
+    max_tile_size_mm: Annotated[
+        tuple[float, float] | None,
+        typer.Option("--max-tile-size-mm", metavar="WIDTH DEPTH"),
+    ] = None,
+    overlap_cells: Annotated[int, typer.Option("--overlap-cells", min=0)] = 1,
+    sampling_mode: Annotated[
+        SamplingMode | None,
+        typer.Option("--sampling-mode"),
+    ] = None,
+    mesh_sampling_mm: Annotated[
+        float | None,
+        typer.Option("--mesh-sampling-mm", min=0.001),
+    ] = None,
+    slicing: Annotated[bool, typer.Option("--slice/--no-slice")] = False,
+    slicer: Annotated[str, typer.Option("--slicer")] = "bambu-studio",
+    machine_profile: Annotated[Path | None, typer.Option("--machine-profile")] = None,
+    process_profile: Annotated[Path | None, typer.Option("--process-profile")] = None,
+    filament_profile: Annotated[Path | None, typer.Option("--filament-profile")] = None,
+    project_evidence: Annotated[
+        bool,
+        typer.Option("--project-evidence/--no-project-evidence"),
+    ] = False,
+    provider: Annotated[str, typer.Option("--provider")] = "auto",
+    terrain_mode: Annotated[TerrainMode, typer.Option("--terrain-mode")] = (
+        TerrainMode.BEST_AVAILABLE
+    ),
+    cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path("cache/providers"),
+    run_now: Annotated[bool, typer.Option("--run/--no-run")] = True,
+    yes: Annotated[bool, typer.Option("--yes", help="Accept the resolved review.")] = False,
+) -> None:
+    """Create a reviewed local launch config and optionally execute it immediately."""
+    try:
+        workspace = (
+            (output if output is not None else Path(typer.prompt("Workflow workspace")))
+            .expanduser()
+            .resolve()
+        )
+        mode = source_mode
+        if mode is None:
+            if dem is not None:
+                mode = "local"
+            elif bbox is not None:
+                mode = "bbox"
+            elif center is not None or radius_m is not None:
+                mode = "center"
+            else:
+                mode = typer.prompt("Source mode", default="local")
+        mode = mode.strip().lower()
+        if mode not in {"local", "bbox", "center"}:
+            raise ValueError("--source must be local, bbox, or center")
+
+        request: AreaOfInterestInput | None = None
+        source_path: Path
+        if mode == "local":
+            if any(value is not None for value in (bbox, center, radius_m)):
+                raise ValueError("local source cannot be combined with global AOI options")
+            source_path = (
+                (dem if dem is not None else Path(typer.prompt("Local DEM GeoTIFF")))
+                .expanduser()
+                .resolve()
+            )
+            if not source_path.is_file():
+                raise ValueError(f"local DEM does not exist: {source_path}")
+        elif mode == "bbox":
+            if dem is not None or center is not None or radius_m is not None:
+                raise ValueError("bbox source accepts only --bbox")
+            if bbox is None:
+                prompted_bbox = _prompt_float_tuple("WGS84 west south east north", 4)
+                bbox = (
+                    prompted_bbox[0],
+                    prompted_bbox[1],
+                    prompted_bbox[2],
+                    prompted_bbox[3],
+                )
+            request = AreaOfInterestInput(bbox_wgs84=bbox)
+            source_path = workspace / "global-source-managed.tif"
+        else:
+            if dem is not None or bbox is not None:
+                raise ValueError("center source accepts only --center and --radius-m")
+            if center is None:
+                prompted_center = _prompt_float_tuple("WGS84 longitude latitude", 2)
+                center = (prompted_center[0], prompted_center[1])
+            radius_value = radius_m or typer.prompt("Radius metres", type=float)
+            request = AreaOfInterestInput(
+                center_wgs84=center,
+                radius_m=radius_value,
+            )
+            source_path = workspace / "global-source-managed.tif"
+
+        template = load_build_config(build_template) if build_template is not None else None
+        width_default = template.model_width_mm if template is not None else 180.0
+        base_default = template.base_thickness_mm if template is not None else 3.0
+        height_default = template.max_height_mm if template is not None else 45.0
+        width = model_width_mm
+        if width is None:
+            width = (
+                width_default
+                if yes
+                else typer.prompt("Model width mm", default=width_default, type=float)
+            )
+        base = base_mm
+        if base is None:
+            base = (
+                base_default
+                if yes
+                else typer.prompt("Base thickness mm", default=base_default, type=float)
+            )
+        height = max_height_mm
+        if height is None:
+            height = (
+                height_default
+                if yes
+                else typer.prompt("Maximum model height mm", default=height_default, type=float)
+            )
+        selected_printer = (
+            template.printer_profile
+            if template is not None and not _was_provided(ctx, "printer_profile")
+            else get_printer_profile(printer_profile)
+        )
+        selected_depth = (
+            model_depth_mm
+            if model_depth_mm is not None
+            else template.model_depth_mm
+            if template is not None
+            else None
+        )
+        tile_size = max_tile_size_mm
+        if tile_size is None:
+            default_tile = (180.0, 180.0)
+            if yes:
+                tile_size = default_tile
+            else:
+                tile_size = _prompt_float_tuple("Maximum tile width depth mm", 2)
+        selected_sampling = sampling_mode
+        if selected_sampling is None:
+            default_sampling = (
+                template.sampling_mode if template is not None else SamplingMode.PRINT_AWARE
+            )
+            if yes:
+                selected_sampling = default_sampling
+            else:
+                selected_sampling = SamplingMode(
+                    typer.prompt("Sampling mode", default=default_sampling.value)
+                )
+        selected_mesh_spacing = mesh_sampling_mm
+        if selected_sampling is SamplingMode.CUSTOM and selected_mesh_spacing is None:
+            default_spacing = template.mesh_sampling_mm if template is not None else 0.5
+            selected_mesh_spacing = (
+                default_spacing
+                if yes
+                else typer.prompt("Mesh sample spacing mm", default=default_spacing, type=float)
+            )
+        if selected_sampling is not SamplingMode.CUSTOM:
+            selected_mesh_spacing = None
+
+        if template is None:
+            build = BuildConfig(
+                dem_path=source_path,
+                output_dir=workspace,
+                model_width_mm=width,
+                model_depth_mm=selected_depth,
+                base_thickness_mm=base,
+                max_height_mm=height,
+                printer_profile=selected_printer,
+                sampling_mode=selected_sampling,
+                mesh_sampling_mm=selected_mesh_spacing,
+                aoi=request,
+            )
+        else:
+            updates: dict[str, Any] = {
+                "dem_path": source_path,
+                "output_dir": workspace,
+                "model_width_mm": width,
+                "model_depth_mm": selected_depth,
+                "base_thickness_mm": base,
+                "max_height_mm": height,
+                "printer_profile": selected_printer,
+                "sampling_mode": selected_sampling,
+                "mesh_sampling_mm": selected_mesh_spacing,
+                "aoi": request,
+            }
+            if mode == "local":
+                updates.update(
+                    {
+                        "dataset_type": DatasetType.UNKNOWN,
+                        "dataset_name": None,
+                        "dataset_version": "unknown",
+                        "acquisition_period": "unknown",
+                        "source_urls": [],
+                        "vertical_crs": "unknown",
+                        "vertical_datum": "unknown",
+                        "data_license": "user-supplied; verify source terms",
+                        "attribution": "Provided by the user",
+                        "source_provider": "local",
+                        "source_download_time": "not-applicable-local-input",
+                        "source_checksums": {},
+                        "source_acquisition_manifest": None,
+                    }
+                )
+            build = BuildConfig.model_validate({**template.model_dump(mode="json"), **updates})
+        global_source = (
+            GlobalAcquisitionConfig(
+                aoi=request,
+                requested_provider_id=provider,
+                terrain_mode=terrain_mode,
+                cache_dir=cache_dir,
+            )
+            if request is not None
+            else None
+        )
+        if slicer not in {"bambu-studio", "orca", "prusa", "auto"}:
+            raise ValueError("--slicer must be bambu-studio, orca, prusa, or auto")
+        settings = tuple(path for path in (machine_profile, process_profile) if path is not None)
+        filaments = () if filament_profile is None else (filament_profile,)
+        launch = WorkflowLaunchConfig.model_validate(
+            {
+                "workspace_dir": workspace,
+                "build": build,
+                "global_source": global_source,
+                "maximum_tile_width_mm": tile_size[0],
+                "maximum_tile_depth_mm": tile_size[1],
+                "overlap_cells": overlap_cells,
+                "slicing_enabled": slicing,
+                "slicer_name": slicer,
+                "slicer_settings": settings,
+                "slicer_filaments": filaments,
+                "project_evidence_enabled": project_evidence,
+            }
+        )
+        typer.echo(
+            yaml.safe_dump(
+                launch.model_dump(mode="json"),
+                sort_keys=True,
+                allow_unicode=True,
+            )
+        )
+        if not yes and not typer.confirm("Use this configuration?", default=True):
+            raise typer.Abort()
+        launch_path = write_workflow_launch_config(launch)
+        if run_now:
+            _emit_workflow_execution(execute_workflow_launch(launch))
+        else:
+            _emit(
+                {
+                    "status": "configured",
+                    "launch_config": str(launch_path),
+                    "workspace": str(workspace),
+                    "source_mode": mode,
+                }
+            )
+    except typer.Abort:
+        raise
     except ProviderSelectionError as exc:
         _fail_provider_selection(exc)
     except (ImportError, TopoForgeError, ValueError, OSError, RasterioError) as exc:

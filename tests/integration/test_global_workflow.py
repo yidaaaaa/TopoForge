@@ -36,6 +36,9 @@ from topoforge.workflow import (
     LocalWorkflowConfig,
     LocalWorkflowResult,
     LocalWorkflowStatus,
+    WorkflowExecutionResult,
+    WorkflowLaunchConfig,
+    WorkflowRunSummary,
     WorkflowStage,
     WorkflowState,
     acquire_global_source,
@@ -442,21 +445,39 @@ def test_run_cli_validates_and_binds_global_source_arguments(
     dump_resolved_config(build, config_path)
     captured: dict[str, Any] = {}
 
-    def fake_run(config: LocalWorkflowConfig, **kwargs: Any) -> LocalWorkflowResult:
-        captured["config"] = config
-        captured["kwargs"] = kwargs
-        return LocalWorkflowResult(
-            workspace_dir=config.workspace_dir,
+    def fake_execute(launch: WorkflowLaunchConfig) -> WorkflowExecutionResult:
+        captured["launch"] = launch
+        workflow = launch.workflow_config()
+        result = LocalWorkflowResult(
+            workspace_dir=workflow.workspace_dir,
             workflow_id="global-fixture",
-            manifest_path=config.workspace_dir / "workflow-manifest.json",
-            status_path=config.workspace_dir / "workflow-status.json",
+            manifest_path=workflow.workspace_dir / "workflow-manifest.json",
+            status_path=workflow.workspace_dir / "workflow-status.json",
             completed_stages=(WorkflowStage.ACQUIRE,),
             reused_stages=(),
-            stage_outputs={WorkflowStage.ACQUIRE: config.workspace_dir / "stages/00-acquire"},
+            stage_outputs={WorkflowStage.ACQUIRE: workflow.workspace_dir / "stages/00-acquire"},
             required_checks_passed=True,
         )
+        summary = WorkflowRunSummary(
+            workflow_id="global-fixture",
+            state=WorkflowState.COMPLETED,
+            source_mode="global",
+            final_stage=WorkflowStage.ACQUIRE,
+            completed_stages=(WorkflowStage.ACQUIRE,),
+            ready_stages=(WorkflowStage.ACQUIRE,),
+            metrics={},
+            artifacts={},
+            required_checks_passed=True,
+        )
+        return WorkflowExecutionResult(
+            workflow=result,
+            launch_config_path=workflow.workspace_dir / "workflow-launch.yaml",
+            summary=summary,
+            summary_path=workflow.workspace_dir / "workflow-summary.json",
+            report_path=workflow.workspace_dir / "workflow-report.html",
+        )
 
-    monkeypatch.setattr("topoforge.cli.app.run_local_workflow", fake_run)
+    monkeypatch.setattr("topoforge.cli.app.execute_workflow_launch", fake_execute)
     result = runner.invoke(
         app,
         [
@@ -488,7 +509,9 @@ def test_run_cli_validates_and_binds_global_source_arguments(
         ],
     )
     assert result.exit_code == 0, result.output
-    workflow = captured["config"]
+    launch = captured["launch"]
+    assert isinstance(launch, WorkflowLaunchConfig)
+    workflow = launch.workflow_config()
     assert isinstance(workflow, LocalWorkflowConfig)
     assert workflow.global_source is not None
     assert workflow.global_source.aoi.bbox_wgs84 == (101.2, 29.2, 101.21, 29.21)

@@ -426,3 +426,21 @@ Result: first run completed acquire/source/build/layout/extract/mesh/connect; al
 Command: final `uv run ruff format --check .`, `uv run ruff check .`, `uv run pyright`, and `uv run pytest`.
 
 Result: format `127 files already formatted`; Ruff `All checks passed!`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `175 passed, 2278 warnings in 47.48s`; `git diff --check` passed; all 21 retained/replayed workflow checksum roles passed `sha256sum -c`. Warnings remain visible under TF-006.
+
+### Phase 6 local configuration and artifact UX increment
+
+Command: add strict `WorkflowLaunchConfig`, `topoforge wizard`, `topoforge resume`, concise measured `workflow-summary.json`, `topoforge browse`, and dependency-free `workflow-report.html`; route `topoforge run` through the same saved launch execution function.
+
+Result: local DEM, bbox, and center-radius launch inputs share one reviewed YAML contract. Resume requires only a workspace or launch path. Artifact inspection checks completed workflow/status identity, every stage-manifest SHA-256, required-check booleans, and path containment before linking validation/provenance, previews, connector maps, models, slice/project roles, and directories. No server is required.
+
+Command: `uv run pytest tests/integration/test_workflow_ux.py tests/integration/test_local_workflow.py tests/integration/test_global_workflow.py -q`.
+
+Result: `12 passed, 1248 warnings in 19.65s`; tests cover stable launch round-trip, first execution, all-stage reuse, summary/report publication, manifest tamper rejection, local/global wizard generation, resume, browse, and existing acquisition/local workflow behavior.
+
+Command: strictly reuse the retained Amazon workflow with the formal `topoforge run` command, then execute `topoforge browse ... --no-open` and verify `artifacts/verification/topoforge-0.4.0-phase6-local-ux-checksums.sha256`.
+
+Result: all seven stages were reused; source and processed grids remained 74 x 74 at 29.763799 m with 0.0 m peak loss/shift and 21,900 triangles. Launch, summary, report, canonical workflow manifest, preview PNG, connector map, and verification record all report `OK`. No provider fetch, terrain rebuild, slicing, or server occurred.
+
+Command: full `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, and `git diff --check`.
+
+Result: Ruff `All checks passed!`; format `129 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `178 passed, 2800 warnings in 55.39s`; whitespace check passed. TF-006 warnings remain visible for the next Phase 6 hardening item.

@@ -235,3 +235,11 @@
 - **Reproduction:** Before this increment, `topoforge run` required `BuildConfig.dem_path`; bbox/center-radius users had to invoke separate acquisition/build commands and could not reuse provider evidence as a strict workflow stage.
 - **Expected behavior:** The one-command local workflow accepts a normalized no-key global AOI, preserves provider/cache/source evidence, records acquisition failures, resumes without a second fetch, and rejects changed raster/manifest/mask evidence.
 - **Resolution:** Added typed `GlobalAcquisitionConfig`/`GlobalSourceEvidence`, production provider-selection reuse, `WorkflowStage.ACQUIRE`, canonical `acquire.json`, source-stage acquisition-manifest hash binding, global workflow ids, dataset-aware `BuildConfig` enrichment, separate acquisition transport CLI limits, offline real-GeoTIFF tests, failure recovery, and a production Amazon cache-only replay with 7/7 hits and zero network attempts.
+
+## TF-028 — Local workflow lacked a saved configuration and artifact browser
+
+- **Severity:** Medium
+- **Status:** Resolved
+- **Reproduction:** Before this increment, complete `topoforge run` arguments had to be reconstructed and users manually searched content-addressed stage directories for reports, previews, maps, and manufacturing roles.
+- **Expected behavior:** One reviewed local/global launch can be saved, resumed with a short command, summarized with measured results, and browsed without deploying a service.
+- **Resolution:** Added strict `WorkflowLaunchConfig` YAML round-trip, `topoforge wizard`, `resume`, and `browse`; automatic `workflow-summary.json` and dependency-free `workflow-report.html`; workspace containment and stage-manifest hash checks; preview/connector-map links; local/global wizard tests; resume/reuse/tamper tests; and a retained Amazon all-stage-reuse UX verification record with seven checksum-verified roles.

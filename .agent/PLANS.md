@@ -108,8 +108,8 @@ Real evidence: eight connectors over four seams, `0.2 mm` total lateral / `0.2 m
 
 1. [x] Add `topoforge run` for local source identity, build, tiling, connectors, optional slicing, and optional Bambu project evidence. Stages are content-addressed by complete settings/upstream SHA-256 values, strictly reopened before reuse, atomically status-tracked, and resumable after retained failure records.
 2. [x] Connect the existing no-key global provider/cache acquisition path to the same source-stage contract. `topoforge run` accepts bbox or center-radius, publishes canonical `acquire.json`, strictly binds provider/manifest/raster/mask evidence, records acquisition failure/recovery, and reuses verified stages without a second fetch.
-3. [ ] Add a local configuration wizard and concise run summary so ordinary solo use does not require assembling long CLI commands.
-4. [ ] Improve local artifact browsing: open reports, previews, connector maps, and output directories without a server. A lightweight desktop/TUI shell may call the Python core directly.
+3. [x] Add `topoforge wizard`, saved `workflow-launch.yaml`, and `topoforge resume` so local DEM/bbox/center-radius, manufacturing, slicing, and project choices are reviewed once and resumed without reconstructing a long command. Every run publishes a concise measured `workflow-summary.json`.
+4. [x] Add `topoforge browse` and dependency-free `workflow-report.html` with strictly workspace-bound links to validation, provenance, previews, connector maps, models, slice/project roles, and stage directories. Browser opening is optional and no server is required.
 5. [ ] Evaluate and validate an exhaustive self-intersection backend for TF-005.
 6. [ ] Resolve or constrain the Rasterio/NumPy compatibility warning tracked by TF-006 using benchmark and regression evidence.
 7. [ ] Add disk-space estimates, reviewed cleanup commands, backup/export, and offline end-to-end documentation; the workflow's stage failure/retry record is complete.

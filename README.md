@@ -172,6 +172,16 @@ The config's `output_dir` is used as the workflow workspace unless `--output` ov
 
 The retained Amazon Phase 6 cache replay used the production Copernicus AWS provider with a fail-on-network transport: all seven source requests were cache hits, network-open attempts were zero, the retained and replayed 74 x 74 elevation arrays matched exactly with `0.0 m` maximum difference, and the second run plus the formal CLI reopen reused all seven stages. Evidence: `artifacts/verification/topoforge-0.4.0-amazon-global-workflow-phase6-cache-replay.json`; checksums: `artifacts/verification/topoforge-0.4.0-amazon-global-workflow-phase6-cache-replay-checksums.sha256`.
 
+For ordinary local use, create and review a saved launch once, then resume or browse it without reconstructing the full command:
+
+```bash
+uv run topoforge wizard --output outputs/my-terrain
+uv run topoforge resume outputs/my-terrain
+uv run topoforge browse outputs/my-terrain --open
+```
+
+The wizard accepts a local GeoTIFF, WGS84 bbox, or center-radius source; model/tile/sampling settings; optional slicing profiles; and optional Bambu project evidence. It writes `workflow-launch.yaml` and can execute immediately or stop after review with `--no-run`. `topoforge run` also writes the same launch file. Successful execution publishes concise measured `workflow-summary.json` and dependency-free `workflow-report.html`. The report uses relative local links and embeds the terrain preview and connector map when present; no API, Web server, database, or network listener is involved. `topoforge browse` verifies every stage-manifest SHA-256 and rejects paths outside the workspace before regenerating the artifact index. Real retained evidence: `artifacts/verification/topoforge-0.4.0-phase6-local-ux.json`.
+
 ## Plan, extract, mesh, connect, and slice deterministic terrain tiles
 
 ```bash
@@ -316,6 +326,9 @@ Evidence is attached to `validation.json`, `provenance.json`, `build_manifest.js
 ```text
 topoforge build       local GeoTIFF to complete artifact bundle
 topoforge run         resumable local/global acquire/build/tile/connect/slice workflow
+topoforge wizard      reviewed local/global launch configuration and optional execution
+topoforge resume      execute or resume a saved workflow-launch.yaml
+topoforge browse      strict no-server artifact index and static HTML report
 topoforge build-global no-key Copernicus AWS AOI to complete artifact bundle
 topoforge preflight   printer fit, sampling, triangles, memory, and vertical-scale report
 topoforge tile-plan   deterministic tile IDs, overlap windows, and physical bounds

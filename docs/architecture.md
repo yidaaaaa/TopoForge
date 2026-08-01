@@ -58,7 +58,7 @@ Builds use a sibling staging directory. Every required file is written and reope
 Phase 6 adds a content-addressed single-workstation local/global orchestration layer without duplicating the core algorithms:
 
 ```text
-topoforge run + resolved BuildConfig
+topoforge wizard/run/resume + saved WorkflowLaunchConfig
   -> optional acquire/<request SHA-256> -> normalized AOI + provider/cache selection
   -> canonical acquire.json -> raster/provider-manifest/quality-mask SHA-256 binding
   -> source/<content SHA-256> -> local or acquired DEM identity record
@@ -70,6 +70,7 @@ topoforge run + resolved BuildConfig
   -> slice/<stage SHA-256> -> optional actual G-code/release verification
   -> project/<stage SHA-256> -> optional Bambu export + isolated reopen/reslice
   -> canonical workflow manifest + atomic status + retained failure record
+  -> measured workflow-summary.json + dependency-free workflow-report.html
 ```
 
 Each stage identity binds its upstream manifest SHA-256 values and effective content settings. For global acquisition, AOI and provider-selection policy determine the stage identity while cache location, timeout, attempts, and rate-limit timing remain operational controls. Reuse strictly reopens the metric single-band raster, normalized AOI, provider/dataset trace, NoData count, source-acquisition manifest hash, and every aligned quality mask through canonical `acquire.json`; file existence alone is never sufficient. Changed settings choose another content-addressed path, failures receive retained status records, and reviewed evidence is never silently overwritten. The execution-specific CLI summary reports newly completed versus reused stages without making canonical artifacts depend on invocation history.
@@ -85,8 +86,8 @@ Each stage identity binds its upstream manifest SHA-256 values and effective con
 - `rendering`: hillshade/color derived only from measured elevation samples.
 - `provenance`: stable JSON and dependency-free HTML reports.
 - `engine`: atomic build orchestration, reusable local preflight, and bundle verification. `preflight_local_terrain()` runs the production raster/scaling path in a temporary directory without publishing a build.
-- `workflow`: normalized global acquisition plus local source identity, content-addressed stage manifests, strict reuse, status/failure records, and direct composition of existing core functions.
-- `cli`: Typer argument parsing and JSON presentation.
+- `workflow`: normalized global acquisition plus local source identity, content-addressed stage manifests, strict reuse, saved launch/resume settings, measured summaries, a workspace-contained static artifact browser, status/failure records, and direct composition of existing core functions.
+- `cli`: Typer argument parsing, reviewed wizard prompts, JSON presentation, optional desktop-browser opening, and no business-logic duplication.
 - `providers`: normalized-AOI provider contracts, explainable deterministic selection/fetch fallback, Copernicus AWS catalog/tile/ancillary-mask planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
 - `geocoding`: cached Nominatim-compatible candidate search and explicit ambiguity resolution; selected candidates become ordinary recorded AOIs before provider selection.
 - `tiling`: versioned deterministic layout/extraction, numerical and mesh seam measurement, global-frame assembly, printer-derived connectors, reversible print-local placement, actual per-tile slicer evidence, deterministic maps/previews, complete SHA-256 binding, canonical JSON, and atomic publication. Overlap halos remain evidence rather than duplicate solids; terrain tops remain unchanged by base-only connector booleans.
