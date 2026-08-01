@@ -1,6 +1,6 @@
 # Authoritative Plan
 
-Updated: 2026-08-01
+Updated: 2026-08-02
 
 ## Roadmap
 
@@ -107,13 +107,15 @@ Real evidence: eight connectors over four seams, `0.2 mm` total lateral / `0.2 m
 ## Current Phase 6 — local software completion
 
 1. [x] Add `topoforge run` for local source identity, build, tiling, connectors, optional slicing, and optional Bambu project evidence. Stages are content-addressed by complete settings/upstream SHA-256 values, strictly reopened before reuse, atomically status-tracked, and resumable after retained failure records.
-2. [ ] Connect the existing no-key global provider acquisition path to the same source-stage contract so one invocation can start from bbox/center AOI without duplicating CLI/provider logic.
+2. [x] Connect the existing no-key global provider/cache acquisition path to the same source-stage contract. `topoforge run` accepts bbox or center-radius, publishes canonical `acquire.json`, strictly binds provider/manifest/raster/mask evidence, records acquisition failure/recovery, and reuses verified stages without a second fetch.
 3. [ ] Add a local configuration wizard and concise run summary so ordinary solo use does not require assembling long CLI commands.
 4. [ ] Improve local artifact browsing: open reports, previews, connector maps, and output directories without a server. A lightweight desktop/TUI shell may call the Python core directly.
 5. [ ] Evaluate and validate an exhaustive self-intersection backend for TF-005.
 6. [ ] Resolve or constrain the Rasterio/NumPy compatibility warning tracked by TF-006 using benchmark and regression evidence.
 7. [ ] Add disk-space estimates, reviewed cleanup commands, backup/export, and offline end-to-end documentation; the workflow's stage failure/retry record is complete.
 8. [ ] Freeze the local software workflow before beginning overlay work.
+
+Real global-workflow evidence: `artifacts/verification/topoforge-0.4.0-amazon-global-workflow-phase6-cache-replay.json`. The production Copernicus AWS provider replayed the retained Amazon bbox with 7/7 cache hits and a fail-on-network opener that recorded zero network attempts. The retained and replayed 74 x 74 elevation arrays match exactly; all seven stages strictly reopen and the repeat/CLI runs reuse all seven stages with a byte-identical workflow manifest.
 
 ## Deferred non-blocking physical validation
 

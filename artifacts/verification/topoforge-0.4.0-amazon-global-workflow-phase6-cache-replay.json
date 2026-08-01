@@ -1,0 +1,146 @@
+{
+  "acquire_manifest_sha256": "a7f5c5efff2d6c81ce5fac690d8f309c62eb218dc48c40a6f7c6e95aafaee44d",
+  "aoi_bbox_wgs84": [
+    -60.02,
+    -3.13,
+    -60.0,
+    -3.11
+  ],
+  "cache_status_count": 7,
+  "cache_statuses": [
+    "hit",
+    "hit",
+    "hit",
+    "hit",
+    "hit",
+    "hit",
+    "hit"
+  ],
+  "cache_summary": {
+    "content_bytes": 152952754,
+    "content_objects": 9,
+    "exists": true,
+    "request_entries": 9,
+    "root": "/root/autodl-tmp/bambu/TopoForge/cache/providers",
+    "temporary_files": 0
+  },
+  "cli_reopen_command": "uv run topoforge run --config outputs/amazon-copernicus-aws-quality-v2/build_config.resolved.yaml --output outputs/amazon-global-workflow-phase6-cache-replay-v1 --bbox -60.02 -3.13 -60.0 -3.11 --provider copernicus-aws --terrain-mode best-available --cache-dir cache/providers --no-slice",
+  "cli_reopen_completed_stages": [],
+  "cli_reopen_exit_code": 0,
+  "cli_reopen_reused_stages": [
+    "acquire",
+    "source",
+    "build",
+    "layout",
+    "extract",
+    "mesh",
+    "connect"
+  ],
+  "command": "production CopernicusAwsProvider with cache/providers and a fail-on-network opener",
+  "completed_stages_first_run": [
+    "acquire",
+    "source",
+    "build",
+    "layout",
+    "extract",
+    "mesh",
+    "connect"
+  ],
+  "measured_build": {
+    "dataset_provider": "copernicus-aws",
+    "dimensions_mm": [
+      80.0,
+      80.65869140625,
+      9.714625358581543
+    ],
+    "estimated_triangle_count": 21900,
+    "orientation": {
+      "coordinate_correction_only": true,
+      "east_axis": "+X = East",
+      "north_axis": "+Y = North",
+      "north_edge": "y=model_depth_mm",
+      "orientation_transform": "mesh_heightfield=flipud(processed_dem); source row 0 north maps to y=model_depth_mm",
+      "source_bounds": {
+        "full_grid_shape": [
+          74,
+          74
+        ],
+        "native": [
+          -1111.5663698538108,
+          -1105.7810415954134,
+          1081.9245999898142,
+          1105.7702718701496
+        ],
+        "native_crs": "PROJCS[\"unknown\",GEOGCS[\"unknown\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Azimuthal_Equidistant\"],PARAMETER[\"latitude_of_center\",-3.12],PARAMETER[\"longitude_of_center\",-60.01],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
+        "wgs84": [
+          -60.02000018900119,
+          -3.130000047787117,
+          -60.0002664827055,
+          -3.109999999999998
+        ]
+      },
+      "up_axis": "+Z = Up"
+    },
+    "peak_elevation_loss_m": 0.0,
+    "peak_horizontal_shift_m": 0.0,
+    "physical_sample_spacing_mm": 1.100401976692707,
+    "processed_grid_shape": [
+      74,
+      74
+    ],
+    "processed_horizontal_resolution_m": 29.763799211548566,
+    "source_grid_shape": [
+      74,
+      74
+    ],
+    "source_horizontal_resolution_m": 29.763799211548566,
+    "terrain_fidelity_status": "source-resolution-preserved"
+  },
+  "network_open_attempts": 0,
+  "provider_manifest": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-cache-replay-v1/stages/00-acquire/8e496c4d29b547f332eae9f0f3122f329ef5bbe6c7bc97cfa8a9bb2f5adb0767/global-aoi.tif.source_acquisition.json",
+  "provider_manifest_sha256": "c237a04c4e9619d2ca759a8505fae4ef0911daa9203e13d36913161a492f4379",
+  "repeat_manifest_byte_identical": true,
+  "required_checks_passed": true,
+  "retained_source_comparison": {
+    "crs_equal": true,
+    "elevation_values_exact": true,
+    "finite_mask_equal": true,
+    "grid_shape_equal": true,
+    "maximum_absolute_elevation_difference_m": 0.0,
+    "nodata_equal": true,
+    "retained_source_path": "/root/autodl-tmp/bambu/TopoForge/downloads/amazon-copernicus-aws-quality-v1-build-source/copernicus-aws-aoi.tif",
+    "retained_source_sha256": "a600b9b4d9f2a69aceb310b1a39ff2d42dbcbbf2540decf6662990c29b71d01c",
+    "transform_equal": true
+  },
+  "reused_stages_second_run": [
+    "acquire",
+    "source",
+    "build",
+    "layout",
+    "extract",
+    "mesh",
+    "connect"
+  ],
+  "schema_version": "topoforge-phase6-global-workflow-cache-replay-v1",
+  "source_raster": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-cache-replay-v1/stages/00-acquire/8e496c4d29b547f332eae9f0f3122f329ef5bbe6c7bc97cfa8a9bb2f5adb0767/global-aoi.tif",
+  "source_raster_sha256": "a8d22d28a80c384ebe1824e03ab7e41c7bb992bc99485d7b1faeb8ba3e922903",
+  "stage_manifest_sha256": {
+    "acquire": "a7f5c5efff2d6c81ce5fac690d8f309c62eb218dc48c40a6f7c6e95aafaee44d",
+    "build": "ef3eca243ca83830c94e8d63110c3595e119fdbe3b8fa6c4f11aa38863eadf95",
+    "connect": "450a772f3869f9711100b22db3af620d6e7520b706f1eaaaba52be6ee27462f7",
+    "extract": "70beda20835f99de4c5ebd6c27e71acf39427f790a05954c0c01f8130adedf49",
+    "layout": "0b649675865a764995ba35519ae0af994a3a06d0a2f6104656479bc0c0d6e386",
+    "mesh": "6c888bced845dd35b0a811a2473a388045aee2df16b4045a1a8a06396d128bb7",
+    "source": "83dc3de843b2c94075f4d53dfff243d9475cabeb1f24782ab74fe195ddc0ff16"
+  },
+  "strict_reopen": {
+    "build_required_checks_passed": true,
+    "connect_required_checks_passed": true,
+    "extract_required_checks_passed": true,
+    "mesh_required_checks_passed": true
+  },
+  "workflow_id": "global-61db7c8eadcef2ef5b8bb3c7",
+  "workflow_manifest_sha256": "491793b5288957dd133a82d12706f7153de4a8a5b5f5417da504146ce2675cff",
+  "workflow_manifest_sha256_after_cli_reopen": "491793b5288957dd133a82d12706f7153de4a8a5b5f5417da504146ce2675cff",
+  "workspace": "/root/autodl-tmp/bambu/TopoForge/outputs/amazon-global-workflow-phase6-cache-replay-v1"
+}

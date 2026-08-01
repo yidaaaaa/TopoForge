@@ -408,3 +408,21 @@ Result: status `verified`; tile count 4; all projects reopened true; all release
 Command: final increment gate `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, and `git diff --check`.
 
 Result: Ruff `All checks passed!`; format `125 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `168 passed, 2115 warnings in 43.37s`; whitespace check passed. The visible warnings remain the TF-006 Rasterio/NumPy compatibility work, not hidden or suppressed.
+
+### Phase 6 global acquisition workflow increment
+
+Command: implement `GlobalAcquisitionConfig`/`GlobalSourceEvidence`, strict `acquire_global_source()`/`verify_global_source()`, `WorkflowStage.ACQUIRE`, canonical `acquire.json`, acquisition-manifest SHA-256 binding in the shared source stage, provider-derived `BuildConfig` enrichment, global workflow ids, and `topoforge run` bbox/center-radius/provider/cache/transport options with slicing timeout kept separate.
+
+Result: local DEM behavior remains on the existing source/build chain. Global requests identity normalized AOI and provider policy while excluding operational cache/retry location, strictly reopen projected single-band raster/NoData/provider/dataset/selection/mask evidence, reject raster/manifest/mask tampering, retain acquisition failure status, resume without a second provider fetch, and produce byte-identical repeat workflow manifests. New offline tests use real metric GeoTIFF and aligned quality-mask files.
+
+Command: `uv run pytest tests/providers/test_selection.py tests/providers/test_copernicus_aws.py tests/integration/test_local_workflow.py tests/integration/test_global_workflow.py tests/cli -q`.
+
+Result: `38 passed, 874 warnings in 16.89s`.
+
+Command: production Copernicus AWS cache replay for Amazon bbox `[-60.02, -3.13, -60.00, -3.11]` through `run_local_workflow`, using retained `cache/providers` and an opener that raises on any network request; then repeat and formally reopen with `uv run topoforge run --config outputs/amazon-copernicus-aws-quality-v2/build_config.resolved.yaml --output outputs/amazon-global-workflow-phase6-cache-replay-v1 --bbox -60.02 -3.13 -60.0 -3.11 --provider copernicus-aws --terrain-mode best-available --cache-dir cache/providers --no-slice`.
+
+Result: first run completed acquire/source/build/layout/extract/mesh/connect; all 7 provider requests were cache hits; network opener calls were 0. Retained and replayed 74 x 74 rasters have identical CRS/transform/finite mask/elevation values and 0.0 m maximum difference. Build/extract/mesh/connect strict reopen passed. Repeat and CLI runs reused all seven stages; workflow manifest remained byte-identical. Evidence: `artifacts/verification/topoforge-0.4.0-amazon-global-workflow-phase6-cache-replay.json`.
+
+Command: final `uv run ruff format --check .`, `uv run ruff check .`, `uv run pyright`, and `uv run pytest`.
+
+Result: format `127 files already formatted`; Ruff `All checks passed!`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `175 passed, 2278 warnings in 47.48s`; `git diff --check` passed; all 21 retained/replayed workflow checksum roles passed `sha256sum -c`. Warnings remain visible under TF-006.

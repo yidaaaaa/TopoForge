@@ -70,7 +70,11 @@ from topoforge.tiling import (
 )
 from topoforge.util import sha256_file
 from topoforge.validation import validate_mesh
-from topoforge.workflow import LocalWorkflowConfig, run_local_workflow
+from topoforge.workflow import (
+    GlobalAcquisitionConfig,
+    LocalWorkflowConfig,
+    run_local_workflow,
+)
 
 app = typer.Typer(
     name="topoforge",
@@ -558,6 +562,7 @@ def preview(
 
 @app.command("run")
 def run_local(
+    ctx: typer.Context,
     config: Annotated[
         Path,
         typer.Option("--config", help="Resolved local build YAML used by the workflow."),
@@ -566,6 +571,42 @@ def run_local(
         Path | None,
         typer.Option("--output", "-o", help="Workflow workspace; defaults to config output_dir."),
     ] = None,
+    bbox: Annotated[
+        tuple[float, float, float, float] | None,
+        typer.Option("--bbox", metavar="WEST SOUTH EAST NORTH", help="WGS84 global AOI bbox."),
+    ] = None,
+    center: Annotated[
+        tuple[float, float] | None,
+        typer.Option("--center", metavar="LON LAT", help="WGS84 global AOI center."),
+    ] = None,
+    radius_m: Annotated[
+        float | None, typer.Option("--radius-m", min=0.001, help="Geodesic AOI radius.")
+    ] = None,
+    provider: Annotated[str, typer.Option("--provider")] = "auto",
+    terrain_mode: Annotated[TerrainMode, typer.Option("--terrain-mode")] = (
+        TerrainMode.BEST_AVAILABLE
+    ),
+    allow_semantic_fallback: Annotated[
+        bool,
+        typer.Option(
+            "--allow-semantic-fallback",
+            help="Permit an explicitly recorded DTM/DSM/mixed semantic downgrade.",
+        ),
+    ] = False,
+    preferred_provider: Annotated[
+        list[str] | None,
+        typer.Option("--preferred-provider", help="Repeat in deterministic preference order."),
+    ] = None,
+    cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path("cache/providers"),
+    acquisition_timeout_seconds: Annotated[
+        float, typer.Option("--acquisition-timeout-seconds", min=0.1)
+    ] = 30.0,
+    acquisition_max_attempts: Annotated[
+        int, typer.Option("--acquisition-max-attempts", min=1, max=10)
+    ] = 4,
+    acquisition_min_request_interval_seconds: Annotated[
+        float, typer.Option("--acquisition-min-request-interval-seconds", min=0.0)
+    ] = 0.2,
     max_tile_size_mm: Annotated[
         tuple[float, float],
         typer.Option("--max-tile-size-mm", metavar="WIDTH DEPTH"),
@@ -606,7 +647,7 @@ def run_local(
         float, typer.Option("--project-timeout-seconds", min=1.0)
     ] = 1800.0,
 ) -> None:
-    """Run or resume local build, tiling, connectors, slicing, and project evidence."""
+    """Run or resume local/global acquisition and manufacturing stages."""
     try:
         from topoforge.validation.slicers import (
             BambuStudioAdapter,
@@ -618,6 +659,41 @@ def run_local(
 
         resolved = load_build_config(config)
         workspace = (output or resolved.output_dir).expanduser().resolve()
+        has_global_aoi = any(value is not None for value in (bbox, center, radius_m))
+        global_control_names = (
+            "provider",
+            "terrain_mode",
+            "allow_semantic_fallback",
+            "preferred_provider",
+            "cache_dir",
+            "acquisition_timeout_seconds",
+            "acquisition_max_attempts",
+            "acquisition_min_request_interval_seconds",
+        )
+        global_controls_provided = any(_was_provided(ctx, name) for name in global_control_names)
+        if not has_global_aoi and global_controls_provided:
+            raise ValueError(
+                "global acquisition options require --bbox or --center with --radius-m"
+            )
+        global_source = (
+            GlobalAcquisitionConfig(
+                aoi=AreaOfInterestInput(
+                    bbox_wgs84=bbox,
+                    center_wgs84=center,
+                    radius_m=radius_m,
+                ),
+                requested_provider_id=provider,
+                terrain_mode=terrain_mode,
+                allow_semantic_fallback=allow_semantic_fallback,
+                preferred_provider_ids=tuple(preferred_provider or ()),
+                cache_dir=cache_dir,
+                timeout_seconds=acquisition_timeout_seconds,
+                max_attempts=acquisition_max_attempts,
+                min_request_interval_seconds=(acquisition_min_request_interval_seconds),
+            )
+            if has_global_aoi
+            else None
+        )
         adapter = None
         slicer_profile = None
         if slicing:
@@ -649,6 +725,7 @@ def run_local(
             LocalWorkflowConfig(
                 workspace_dir=workspace,
                 build=resolved,
+                global_source=global_source,
                 maximum_tile_width_mm=max_tile_size_mm[0],
                 maximum_tile_depth_mm=max_tile_size_mm[1],
                 overlap_cells=overlap_cells,
@@ -675,6 +752,8 @@ def run_local(
                 "required_checks_passed": result.required_checks_passed,
             }
         )
+    except ProviderSelectionError as exc:
+        _fail_provider_selection(exc)
     except (ImportError, TopoForgeError, ValueError, OSError, RasterioError) as exc:
         _fail(exc)
 

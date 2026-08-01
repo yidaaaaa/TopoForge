@@ -214,7 +214,11 @@ def test_local_run_resumes_after_slice_failure_and_reuses_verified_stages(
 
     reused = run_local_workflow(workflow, adapter=slicer)
     assert reused.completed_stages == ()
-    expected_stages = tuple(stage for stage in WorkflowStage if stage is not WorkflowStage.PROJECT)
+    expected_stages = tuple(
+        stage
+        for stage in WorkflowStage
+        if stage not in {WorkflowStage.ACQUIRE, WorkflowStage.PROJECT}
+    )
     assert reused.reused_stages == expected_stages
     assert manifest_path.read_bytes() == recovered_bytes
     final_status = LocalWorkflowStatus.model_validate_json(

@@ -132,9 +132,9 @@ uv run topoforge preflight \
 
 Preflight reuses the production raster and scaling path in a temporary directory and reports resolved dimensions, build-volume headroom/utilization, source/processed grids, exact triangle estimate, memory estimate, physical spacing, vertical exaggeration, hard-gate booleans, warnings, and suggested actions.
 
-## Run or resume the complete local workflow
+## Run or resume the complete local or global workflow
 
-`topoforge run` calls the existing Python core directly for source identity, build, tile layout, raster extraction, mesh assembly, connectors, software slicing, and optional Bambu project export/reopen evidence. It never shells out to the other TopoForge CLI commands.
+`topoforge run` calls the existing Python core directly for optional global acquisition, source identity, build, tile layout, raster extraction, mesh assembly, connectors, software slicing, and optional Bambu project export/reopen evidence. It never shells out to the other TopoForge CLI commands or duplicates provider algorithms.
 
 ```bash
 uv run topoforge run \
@@ -142,6 +142,17 @@ uv run topoforge run \
   --output outputs/synthetic-local-workflow \
   --max-tile-size-mm 100 100 \
   --overlap-cells 1 \
+  --no-slice
+
+# Start the same resumable workflow from a normalized no-key global AOI.
+uv run topoforge run \
+  --config BUILD_TEMPLATE.yaml \
+  --output outputs/global-workflow \
+  --bbox WEST SOUTH EAST NORTH \
+  --provider copernicus-aws \
+  --terrain-mode best-available \
+  --cache-dir cache/providers \
+  --acquisition-timeout-seconds 30 \
   --no-slice
 
 # Complete official P2S software evidence when profiles and Bambu Studio are available.
@@ -155,9 +166,11 @@ TOPOFORGE_BAMBU_STUDIO=/PATH/TO/BambuStudio.AppImage uv run topoforge run \
   --project-evidence
 ```
 
-The config's `output_dir` is used as the workflow workspace unless `--output` overrides it. Generated stages live below `stages/NN-name/SHA256/`. A stage identity binds its complete settings and upstream manifest hashes; an existing stage is reused only after strict format, checksum, source, seam, geometry, connector, or G-code verification. Changed settings select a new content-addressed directory instead of overwriting prior evidence.
+The config's `output_dir` is used as the workflow workspace unless `--output` overrides it. Generated stages live below `stages/NN-name/SHA256/`. Global runs add `00-acquire`, whose canonical `acquire.json` binds the normalized AOI, provider policy/trace, metric raster SHA-256, source-acquisition manifest SHA-256, dataset identity, and aligned quality-mask hashes. Local and global runs then share `05-source` and the unchanged manufacturing stages. A stage identity binds its complete content settings and upstream manifest hashes; operational cache location/retry timing does not change terrain identity. Existing stages are reused only after strict format, checksum, source, seam, geometry, connector, or G-code verification.
 
-`workflow-request.json`, canonical `workflow-manifest.json`, and atomically updated `workflow-status.json` provide a concise local record. If a stage fails, a canonical record is retained below `failures/`; rerunning the same command revalidates and reuses every completed stage before continuing. `--no-slice` stops after verified print-local geometry and requires no slicer. `--project-evidence` requires software slicing with official Bambu Studio, exports one project 3MF per tile, validates its ZIP/embedded G-code MD5, and independently reopens/reslices without external profiles. It remains software evidence and does not claim a physical print.
+`workflow-request.json`, canonical `workflow-manifest.json`, and atomically updated `workflow-status.json` provide a concise local record. If acquisition or a later stage fails, a canonical record is retained below `failures/`; rerunning the same command revalidates and reuses every completed stage before continuing. Network bounds use `--acquisition-timeout-seconds`, `--acquisition-max-attempts`, and `--acquisition-min-request-interval-seconds`; `--timeout-seconds` remains the independent slicing limit. `--no-slice` stops after verified print-local geometry and requires no slicer. `--project-evidence` requires software slicing with official Bambu Studio and remains software evidence rather than a physical-print claim.
+
+The retained Amazon Phase 6 cache replay used the production Copernicus AWS provider with a fail-on-network transport: all seven source requests were cache hits, network-open attempts were zero, the retained and replayed 74 x 74 elevation arrays matched exactly with `0.0 m` maximum difference, and the second run plus the formal CLI reopen reused all seven stages. Evidence: `artifacts/verification/topoforge-0.4.0-amazon-global-workflow-phase6-cache-replay.json`; checksums: `artifacts/verification/topoforge-0.4.0-amazon-global-workflow-phase6-cache-replay-checksums.sha256`.
 
 ## Plan, extract, mesh, connect, and slice deterministic terrain tiles
 
@@ -302,7 +315,7 @@ Evidence is attached to `validation.json`, `provenance.json`, `build_manifest.js
 
 ```text
 topoforge build       local GeoTIFF to complete artifact bundle
-topoforge run         resumable local build/tiling/connector/slice/project workflow
+topoforge run         resumable local/global acquire/build/tile/connect/slice workflow
 topoforge build-global no-key Copernicus AWS AOI to complete artifact bundle
 topoforge preflight   printer fit, sampling, triangles, memory, and vertical-scale report
 topoforge tile-plan   deterministic tile IDs, overlap windows, and physical bounds
@@ -347,7 +360,7 @@ uv run pyright
 uv run pytest
 ```
 
-The 161-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, adapt/strict manufacturing preflight and build-volume gates, deterministic tile IDs/overlap windows/canonical layout reopen, per-tile raster/mask extraction, assembly-bound raster seams, global-frame tile STL/3MF/GLB bounds and peak consistency, mesh-boundary seams, volume/footprint assembly, coverage PNG, tamper detection, and repeat-byte determinism, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run. The current run reports 774 visible tracked warnings under TF-006.
+The 175-test suite covers analytic surfaces, CRS reprojection, rotated GeoTIFFs, NoData policies, printer-aware/source-preserving/custom sampling, AOI clipping and dateline/high-latitude/cross-zone cases, direction consistency, baseline/height contracts, YAML/CLI overrides, manifest tamper detection, deterministic STL/3MF/GLB, property-based arbitrary heightfields, provider registry semantics, adapt/strict manufacturing preflight and build-volume gates, deterministic tile IDs/overlap windows/canonical layout reopen, per-tile raster/mask extraction, assembly-bound raster seams, global-frame tile STL/3MF/GLB bounds and peak consistency, mesh-boundary seams, volume/footprint assembly, coverage PNG, tamper detection, and repeat-byte determinism, official Bambu Studio/P2S parameter gates, slicer parsers/adapters, and the historical PrusaSlicer diagnostic run. The current run reports 2278 visible tracked warnings under TF-006.
 
 ## Documentation
 

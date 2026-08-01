@@ -1,5 +1,11 @@
 """Single-workstation resumable workflow contracts."""
 
+from topoforge.workflow.acquisition import (
+    GlobalAcquisitionConfig,
+    GlobalSourceEvidence,
+    acquire_global_source,
+    verify_global_source,
+)
 from topoforge.workflow.local import (
     LocalWorkflowConfig,
     LocalWorkflowManifest,
@@ -12,6 +18,8 @@ from topoforge.workflow.local import (
 )
 
 __all__ = [
+    "GlobalAcquisitionConfig",
+    "GlobalSourceEvidence",
     "LocalWorkflowConfig",
     "LocalWorkflowManifest",
     "LocalWorkflowResult",
@@ -19,5 +27,7 @@ __all__ = [
     "WorkflowStage",
     "WorkflowStageRecord",
     "WorkflowState",
+    "acquire_global_source",
     "run_local_workflow",
+    "verify_global_source",
 ]

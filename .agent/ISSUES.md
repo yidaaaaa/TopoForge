@@ -224,6 +224,14 @@
 ## TF-026 — Multi-command local workflow lacked resumability and strict stage reuse
 
 - **Severity:** High
-- **Status:** Resolved for local DEM sources
+- **Status:** Resolved; global source front-end completed by TF-027
 - **Reproduction:** Run build, tile-plan, tile-extract, tile-mesh, tile-connect, tile-slice, and the project script manually; an interruption has no single status or safe automatic resume contract.
-- **Resolution:** Added typed content-addressed workflow stages, canonical request/manifest/status/failure schemas, strict source/config/upstream identity checks, verifier-backed reuse, a single `topoforge run` command, optional software slicing and Bambu project evidence, and end-to-end interruption/recovery/determinism coverage. Global provider acquisition is the next source-front-end increment.
+- **Resolution:** Added typed content-addressed workflow stages, canonical request/manifest/status/failure schemas, strict source/config/upstream identity checks, verifier-backed reuse, a single `topoforge run` command, optional software slicing and Bambu project evidence, and end-to-end interruption/recovery/determinism coverage. TF-027 attaches normalized provider acquisition to the same contract.
+
+## TF-027 — Resumable workflow could not start from a global AOI
+
+- **Severity:** High
+- **Status:** Resolved
+- **Reproduction:** Before this increment, `topoforge run` required `BuildConfig.dem_path`; bbox/center-radius users had to invoke separate acquisition/build commands and could not reuse provider evidence as a strict workflow stage.
+- **Expected behavior:** The one-command local workflow accepts a normalized no-key global AOI, preserves provider/cache/source evidence, records acquisition failures, resumes without a second fetch, and rejects changed raster/manifest/mask evidence.
+- **Resolution:** Added typed `GlobalAcquisitionConfig`/`GlobalSourceEvidence`, production provider-selection reuse, `WorkflowStage.ACQUIRE`, canonical `acquire.json`, source-stage acquisition-manifest hash binding, global workflow ids, dataset-aware `BuildConfig` enrichment, separate acquisition transport CLI limits, offline real-GeoTIFF tests, failure recovery, and a production Amazon cache-only replay with 7/7 hits and zero network attempts.

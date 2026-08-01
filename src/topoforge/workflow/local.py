@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+from collections.abc import Mapping, Sequence
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from topoforge.engine import build_local_terrain, verify_artifact_bundle
 from topoforge.exceptions import ConfigurationError
 from topoforge.models import BuildConfig
+from topoforge.providers import ElevationProvider, ProviderDescriptor
 from topoforge.tiling import (
     TileLayoutConfig,
     canonical_tile_layout_bytes,
@@ -37,15 +39,23 @@ from topoforge.validation.bambu_projects import (
     verify_bambu_project_evidence,
 )
 from topoforge.validation.slicers import SlicerAdapter, SlicerProfile
+from topoforge.workflow.acquisition import (
+    GlobalAcquisitionConfig,
+    GlobalSourceEvidence,
+    acquire_global_source,
+    verify_global_source,
+)
 
 _WORKFLOW_SCHEMA_VERSION = "topoforge-local-workflow-v1"
 _WORKFLOW_STATUS_SCHEMA_VERSION = "topoforge-local-workflow-status-v1"
 _SOURCE_SCHEMA_VERSION = "topoforge-local-source-v1"
+_ACQUISITION_STAGE_SCHEMA_VERSION = "topoforge-global-acquisition-stage-v1"
 
 
 class WorkflowStage(StrEnum):
     """Ordered local workflow stages."""
 
+    ACQUIRE = "acquire"
     SOURCE = "source"
     BUILD = "build"
     LAYOUT = "layout"
@@ -71,6 +81,7 @@ class LocalWorkflowConfig(BaseModel):
 
     workspace_dir: Path
     build: BuildConfig
+    global_source: GlobalAcquisitionConfig | None = None
     maximum_tile_width_mm: float = Field(default=180.0, gt=0)
     maximum_tile_depth_mm: float = Field(default=180.0, gt=0)
     overlap_cells: int = Field(default=1, ge=0)
@@ -197,6 +208,110 @@ def _build_identity_payload(config: BuildConfig, source_sha256: str) -> dict[str
     }
 
 
+_GLOBAL_SOURCE_BUILD_FIELDS = {
+    "acquisition_period",
+    "aoi",
+    "data_license",
+    "dataset_name",
+    "dataset_type",
+    "dataset_version",
+    "dem_path",
+    "output_dir",
+    "source_acquisition_manifest",
+    "source_checksums",
+    "source_download_time",
+    "source_provider",
+    "source_urls",
+    "terrain_mode",
+    "vertical_crs",
+    "vertical_datum",
+}
+
+
+def _global_build_template_payload(config: BuildConfig) -> dict[str, Any]:
+    """Return manufacturing settings without ignored local-source placeholders."""
+    payload = config.model_dump(mode="json")
+    for field in _GLOBAL_SOURCE_BUILD_FIELDS:
+        payload.pop(field, None)
+    return payload
+
+
+def _global_build_config(
+    template: BuildConfig,
+    acquisition: GlobalAcquisitionConfig,
+    evidence: GlobalSourceEvidence,
+) -> BuildConfig:
+    """Bind verified provider metadata and AOI to the manufacturing template."""
+    dataset = evidence.dataset
+    return template.model_copy(
+        update={
+            "dem_path": evidence.raster_path,
+            "aoi": acquisition.aoi,
+            "terrain_mode": acquisition.terrain_mode,
+            "dataset_type": dataset.dataset_type,
+            "dataset_name": dataset.dataset_name,
+            "dataset_version": dataset.dataset_version,
+            "acquisition_period": dataset.acquisition_period,
+            "source_urls": dataset.source_urls,
+            "vertical_crs": dataset.vertical_crs,
+            "vertical_datum": dataset.vertical_datum,
+            "data_license": dataset.license,
+            "attribution": dataset.attribution,
+            "source_provider": dataset.provider,
+            "source_download_time": dataset.download_time,
+            "source_checksums": dataset.checksums,
+            "source_acquisition_manifest": evidence.acquisition_manifest_path,
+        }
+    )
+
+
+def _acquisition_stage_payload(
+    config: GlobalAcquisitionConfig,
+    evidence: GlobalSourceEvidence,
+) -> dict[str, Any]:
+    """Return canonical, strictly reopenable acquisition-stage evidence."""
+    return {
+        "schema_version": _ACQUISITION_STAGE_SCHEMA_VERSION,
+        "acquisition_identity": config.identity_payload(),
+        "raster_path": str(evidence.raster_path),
+        "raster_sha256": evidence.raster_sha256,
+        "acquisition_manifest_path": str(evidence.acquisition_manifest_path),
+        "acquisition_manifest_sha256": evidence.acquisition_manifest_sha256,
+        "dataset": evidence.dataset.model_dump(mode="json"),
+        "normalized_aoi": evidence.normalized_aoi.model_dump(mode="json"),
+        "provider_selection": evidence.provider_selection.model_dump(mode="json"),
+        "quality_masks": [
+            {"path": str(path), "sha256": sha256_file(path)} for path in evidence.quality_mask_paths
+        ],
+        "required_checks_passed": evidence.required_checks_passed,
+    }
+
+
+def _write_acquisition_stage_manifest(
+    path: Path,
+    config: GlobalAcquisitionConfig,
+    evidence: GlobalSourceEvidence,
+) -> Path:
+    manifest = _write_canonical(path, _acquisition_stage_payload(config, evidence))
+    _verify_acquisition_stage_manifest(manifest, config, evidence)
+    return manifest
+
+
+def _verify_acquisition_stage_manifest(
+    path: Path,
+    config: GlobalAcquisitionConfig,
+    evidence: GlobalSourceEvidence,
+) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ConfigurationError(f"acquisition stage manifest is unreadable: {path}") from exc
+    expected = _acquisition_stage_payload(config, evidence)
+    if payload != expected or path.read_bytes() != _canonical_bytes(expected):
+        raise ConfigurationError("acquisition stage manifest is non-canonical or changed")
+    return expected
+
+
 def _slicer_identity(
     adapter: SlicerAdapter | None,
     profile: SlicerProfile | None,
@@ -238,12 +353,11 @@ def _slicer_identity(
 def _request_payload(
     config: LocalWorkflowConfig,
     *,
-    source_sha256: str,
+    source_sha256: str | None,
     slicer_identity: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    return {
+    common = {
         "schema_version": _WORKFLOW_SCHEMA_VERSION,
-        "build": _build_identity_payload(config.build, source_sha256),
         "maximum_tile_width_mm": config.maximum_tile_width_mm,
         "maximum_tile_depth_mm": config.maximum_tile_depth_mm,
         "overlap_cells": config.overlap_cells,
@@ -251,11 +365,34 @@ def _request_payload(
         "project_evidence_enabled": config.project_evidence_enabled,
         "slicer": slicer_identity,
     }
+    if config.global_source is None:
+        if source_sha256 is None:
+            raise AssertionError("local workflow source SHA-256 disappeared")
+        return {
+            "schema_version": _WORKFLOW_SCHEMA_VERSION,
+            "build": _build_identity_payload(config.build, source_sha256),
+            "maximum_tile_width_mm": config.maximum_tile_width_mm,
+            "maximum_tile_depth_mm": config.maximum_tile_depth_mm,
+            "overlap_cells": config.overlap_cells,
+            "slicing_enabled": config.slicing_enabled,
+            "project_evidence_enabled": config.project_evidence_enabled,
+            "slicer": slicer_identity,
+        }
+    return {
+        **common,
+        "global_source": config.global_source.identity_payload(),
+        "build_template": _global_build_template_payload(config.build),
+    }
 
 
 def _summary(value: dict[str, Any]) -> dict[str, Any]:
     useful = (
         "status",
+        "selected_provider",
+        "dataset_name",
+        "raster_sha256",
+        "acquisition_manifest_sha256",
+        "quality_mask_count",
         "raster_shape",
         "layout_id",
         "tile_grid_shape",
@@ -370,15 +507,26 @@ def _existing_stage(
         ) from exc
 
 
-def _publish_source(root: Path, source: Path, source_sha256: str) -> tuple[Path, bool]:
-    payload = {
+def _publish_source(
+    root: Path,
+    source: Path,
+    source_sha256: str,
+    *,
+    acquisition_manifest: Path | None = None,
+) -> tuple[Path, bool]:
+    payload: dict[str, Any] = {
         "schema_version": _SOURCE_SCHEMA_VERSION,
         "source_dem_path": str(source),
         "source_dem_sha256": source_sha256,
         "source_size_bytes": source.stat().st_size,
     }
+    if acquisition_manifest is not None:
+        payload["source_acquisition_manifest"] = {
+            "path": str(acquisition_manifest.resolve()),
+            "sha256": sha256_file(acquisition_manifest),
+        }
     identity = _identity(payload)
-    destination = _stage_directory(root, 0, WorkflowStage.SOURCE, identity)
+    destination = _stage_directory(root, 5, WorkflowStage.SOURCE, identity)
     manifest = destination / "source.json"
     if destination.exists():
         if not manifest.is_file() or manifest.read_bytes() != _canonical_bytes(payload):
@@ -405,8 +553,10 @@ def run_local_workflow(
     *,
     adapter: SlicerAdapter | None = None,
     profile: SlicerProfile | None = None,
+    acquisition_providers: Mapping[str, ElevationProvider] | None = None,
+    acquisition_descriptors: Sequence[ProviderDescriptor] | None = None,
 ) -> LocalWorkflowResult:
-    """Run or resume build, tiling, connector, and optional slicing stages.
+    """Run or resume acquisition, build, tiling, connector, and slicing stages.
 
     Every generated stage is content-addressed by its complete upstream manifests and
     settings. Existing stages are reused only after the same strict reopen checks used
@@ -414,10 +564,20 @@ def run_local_workflow(
     of overwriting prior evidence.
     """
     root = config.workspace_dir.expanduser().resolve()
-    source = config.build.dem_path.expanduser().resolve()
-    if not source.is_file():
-        raise ConfigurationError(f"source DEM does not exist: {source}")
-    source_sha256 = sha256_file(source)
+    source: Path | None = None
+    source_sha256: str | None = None
+    effective_build: BuildConfig | None = None
+    acquisition_manifest: Path | None = None
+    if config.global_source is None:
+        if acquisition_providers is not None or acquisition_descriptors is not None:
+            raise ConfigurationError(
+                "acquisition provider overrides require LocalWorkflowConfig.global_source"
+            )
+        source = config.build.dem_path.expanduser().resolve()
+        if not source.is_file():
+            raise ConfigurationError(f"source DEM does not exist: {source}")
+        source_sha256 = sha256_file(source)
+        effective_build = config.build
     slicer_value = _slicer_identity(
         adapter,
         profile,
@@ -444,7 +604,8 @@ def run_local_workflow(
         slicer_identity=slicer_value,
     )
     request_sha256 = _identity(request)
-    workflow_id = f"local-{request_sha256[:24]}"
+    prefix = "global" if config.global_source is not None else "local"
+    workflow_id = f"{prefix}-{request_sha256[:24]}"
     root.mkdir(parents=True, exist_ok=True)
     _write_canonical(root / "workflow-request.json", request)
 
@@ -452,7 +613,7 @@ def run_local_workflow(
     completed: list[WorkflowStage] = []
     reused: list[WorkflowStage] = []
     outputs: dict[WorkflowStage, Path] = {}
-    current = WorkflowStage.SOURCE
+    current = WorkflowStage.ACQUIRE if config.global_source is not None else WorkflowStage.SOURCE
     _status(
         root,
         workflow_id=workflow_id,
@@ -462,7 +623,90 @@ def run_local_workflow(
     )
 
     try:
-        source_manifest, was_reused = _publish_source(root, source, source_sha256)
+        if config.global_source is not None:
+            acquisition_config = config.global_source
+            acquisition_identity = _identity(
+                {
+                    "schema_version": _WORKFLOW_SCHEMA_VERSION,
+                    "global_source": acquisition_config.identity_payload(),
+                }
+            )
+            acquisition_dir = _stage_directory(root, 0, current, acquisition_identity)
+            acquisition_raster = acquisition_dir / "global-aoi.tif"
+            acquisition_stage_manifest = acquisition_dir / "acquire.json"
+            if acquisition_dir.exists() and any(acquisition_dir.iterdir()):
+                try:
+                    acquisition_evidence = verify_global_source(
+                        acquisition_config, acquisition_raster
+                    )
+                    _verify_acquisition_stage_manifest(
+                        acquisition_stage_manifest,
+                        acquisition_config,
+                        acquisition_evidence,
+                    )
+                except Exception as exc:
+                    raise ConfigurationError(
+                        "existing acquire stage failed strict reuse at "
+                        f"{acquisition_dir}; preserve it for inspection and choose a "
+                        f"different workspace or remove only that reviewed stage: {exc}"
+                    ) from exc
+                reused.append(current)
+            else:
+                acquisition_evidence = acquire_global_source(
+                    acquisition_config,
+                    acquisition_raster,
+                    providers=acquisition_providers,
+                    descriptors=acquisition_descriptors,
+                )
+                _write_acquisition_stage_manifest(
+                    acquisition_stage_manifest,
+                    acquisition_config,
+                    acquisition_evidence,
+                )
+                completed.append(current)
+            acquisition_verification = {
+                "status": "ready",
+                "selected_provider": acquisition_evidence.provider_selection.selected_provider,
+                "dataset_name": acquisition_evidence.dataset.dataset_name,
+                "raster_sha256": acquisition_evidence.raster_sha256,
+                "acquisition_manifest_sha256": (acquisition_evidence.acquisition_manifest_sha256),
+                "quality_mask_count": len(acquisition_evidence.quality_mask_paths),
+                "required_checks_passed": acquisition_evidence.required_checks_passed,
+            }
+            records.append(
+                _record(
+                    root,
+                    stage=current,
+                    identity=acquisition_identity,
+                    output=acquisition_dir,
+                    manifest=acquisition_stage_manifest,
+                    verification=acquisition_verification,
+                )
+            )
+            outputs[current] = acquisition_dir
+            source = acquisition_evidence.raster_path
+            source_sha256 = acquisition_evidence.raster_sha256
+            acquisition_manifest = acquisition_evidence.acquisition_manifest_path
+            effective_build = _global_build_config(
+                config.build, acquisition_config, acquisition_evidence
+            )
+
+        if source is None or source_sha256 is None or effective_build is None:
+            raise AssertionError("workflow source resolution disappeared")
+        current = WorkflowStage.SOURCE
+        _status(
+            root,
+            workflow_id=workflow_id,
+            state=WorkflowState.RUNNING,
+            current_stage=current,
+            records=records,
+        )
+        source_manifest, was_reused = _publish_source(
+            root,
+            source,
+            source_sha256,
+            acquisition_manifest=acquisition_manifest,
+        )
         source_identity = source_manifest.parent.name
         source_verification = {"required_checks_passed": True}
         records.append(
@@ -486,9 +730,9 @@ def run_local_workflow(
             current_stage=current,
             records=records,
         )
-        build_identity = _identity(_build_identity_payload(config.build, source_sha256))
+        build_identity = _identity(_build_identity_payload(effective_build, source_sha256))
         build_dir = _stage_directory(root, 10, current, build_identity)
-        resolved_build = config.build.model_copy(
+        resolved_build = effective_build.model_copy(
             update={"dem_path": source, "output_dir": build_dir}
         )
         build_verification = _existing_stage(
