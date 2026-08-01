@@ -378,3 +378,7 @@ Result: 37 connector/print-local, 12 official-slice, and 44 Bambu-project files 
 Command: final 0.4.0 gate: `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, `git diff --check`, and all three Phase 5 `sha256sum -c` lists; output captured in `artifacts/logs/topoforge-0.4.0-phase5-final-quality-gates.log`.
 
 Result: exit 0; Ruff `All checks passed!`; format `121 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `166 passed, 1552 warnings in 36.35s`; Git whitespace passed; all 93 retained connector/slice/project entries report `OK`. Warnings remain visible under TF-006.
+
+Command: commit Phase 5 implementation as `d8342ddc069bf070981c8484e24ddf509d08eec0`; generate `artifacts/patches/topoforge-0.4.0-source.patch` from baseline `d82ce3af6c69fab109733be9532170bb3d925d6f`; verify forward/reverse patch application and `scripts/rollback-topoforge-0.4.0.sh --confirm-rollback` in independent no-hardlink clones.
+
+Result: patch SHA-256 `16513093a5cd635a3ae3c09f46b5e988b3f3f3ad85989fbe7b3ed7c81aa723bc`, 243,854 bytes. Forward check/apply/diff check, reverse check/apply-clean, and isolated rollback all pass; record: `artifacts/verification/topoforge-0.4.0-patch-rollback.txt`.

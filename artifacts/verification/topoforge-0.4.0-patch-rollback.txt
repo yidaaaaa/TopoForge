@@ -1,0 +1,50 @@
+Cloning into '/tmp/topoforge-040-patch.epdSl4/repo'...
+done.
+Note: switching to 'd82ce3af6c69fab109733be9532170bb3d925d6f'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at d82ce3a feat: add global-frame tile mesh assembly
+forward_check=passed
+forward_apply_and_diff_check=passed
+reverse_check=passed
+reverse_apply_clean=passed
+Cloning into '/tmp/topoforge-040-rollback.37NgwO/repo'...
+done.
+Note: switching to 'd8342dd'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at d8342dd feat: complete deterministic manufacturing tiling v0.4.0
+HEAD is now at d82ce3a feat: add global-frame tile mesh assembly
+before_head=d8342ddc069bf070981c8484e24ddf509d08eec0
+rollback_head=d82ce3af6c69fab109733be9532170bb3d925d6f
+working_tree_clean=true
+isolated_rollback_verified=true
+patch_sha256=16513093a5cd635a3ae3c09f46b5e988b3f3f3ad85989fbe7b3ed7c81aa723bc

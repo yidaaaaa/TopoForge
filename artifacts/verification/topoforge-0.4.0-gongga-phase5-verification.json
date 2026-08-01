@@ -315,6 +315,22 @@
     }
   ],
   "required_checks_passed": true,
+  "rollback": {
+    "baseline_commit": "d82ce3af6c69fab109733be9532170bb3d925d6f",
+    "command": "scripts/rollback-topoforge-0.4.0.sh --confirm-rollback",
+    "forward_apply_diff_check_passed": true,
+    "forward_check_passed": true,
+    "implementation_commit": "d8342ddc069bf070981c8484e24ddf509d08eec0",
+    "isolated_rollback_verified": true,
+    "reverse_apply_clean": true,
+    "reverse_check_passed": true,
+    "script": "/root/autodl-tmp/bambu/TopoForge/scripts/rollback-topoforge-0.4.0.sh",
+    "source_patch": "/root/autodl-tmp/bambu/TopoForge/artifacts/patches/topoforge-0.4.0-source.patch",
+    "source_patch_sha256": "16513093a5cd635a3ae3c09f46b5e988b3f3f3ad85989fbe7b3ed7c81aa723bc",
+    "source_patch_size_bytes": 243854,
+    "verification_record": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.4.0-patch-rollback.txt",
+    "verification_record_sha256": "8e0283136648b8164a8c5fe79f3b0632eb35dc02d26a3c4a743b60015a0a386c"
+  },
   "schema_version": "topoforge-phase5-verification-v1",
   "scope": "Phase 5 deterministic tiling, connectors, print-local placement, actual per-tile P2S slicing, and Bambu project reopen/reslice",
   "source": {
