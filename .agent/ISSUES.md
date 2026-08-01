@@ -220,3 +220,10 @@
 - **Reproduction:** Review the 0.4.0 connector record: geometry, clearance envelopes, P2S slicing, and project reopen pass, but no printed coupon or assembled tile has measured insertion force, play, shrinkage, or dimensional error.
 - **Expected behavior:** Material/nozzle/layer-specific connector presets are backed by printed tolerance coupons and recorded measurements.
 - **Next action:** When hardware validation resumes, generate deterministic coupons across a bounded clearance matrix, publish a worksheet, obtain measurements, and only then promote physically calibrated presets.
+
+## TF-026 — Multi-command local workflow lacked resumability and strict stage reuse
+
+- **Severity:** High
+- **Status:** Resolved for local DEM sources
+- **Reproduction:** Run build, tile-plan, tile-extract, tile-mesh, tile-connect, tile-slice, and the project script manually; an interruption has no single status or safe automatic resume contract.
+- **Resolution:** Added typed content-addressed workflow stages, canonical request/manifest/status/failure schemas, strict source/config/upstream identity checks, verifier-backed reuse, a single `topoforge run` command, optional software slicing and Bambu project evidence, and end-to-end interruption/recovery/determinism coverage. Global provider acquisition is the next source-front-end increment.

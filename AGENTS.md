@@ -16,6 +16,7 @@ The validated core includes local and no-key global AOI acquisition, printer-awa
 - `src/topoforge/validation`: geometry and slicer verification.
 - `src/topoforge/rendering`: deterministic preview rendering.
 - `src/topoforge/providers`: provider protocol and provider implementations.
+- `src/topoforge/workflow`: resumable content-addressed local orchestration; no core algorithm duplication.
 - `src/topoforge/cli`: thin Typer adapters calling the engine.
 - `tests`: unit, property, geometry, provider, slicer, integration, and golden evidence.
 

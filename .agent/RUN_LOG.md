@@ -394,3 +394,17 @@ Result: `.agent/PLANS.md`, `STATE.md`, ADR-025, TF-025, AGENTS.md, README, and a
 Decision: skip all tasks that require a physical printer or manual measurements for now. Keep TF-025 and coupon/preset work as saved non-blocking tasks; retain the 0.2 mm connector wording as software-validated only.
 
 Result: Phase 6 now starts with resumable one-command local orchestration, followed by local configuration/artifact UX, core hardening, recovery, cleanup, backup, and offline documentation. API/Web remains deferred separately.
+
+### Phase 6 resumable local workflow increment
+
+Command: implement `topoforge.workflow` and `topoforge run` over the existing build/layout/extract/mesh/connect/slice core functions; add content-addressed stage identities, canonical request/manifest/status/failure records, strict reuse, and optional project evidence.
+
+Result: the end-to-end synthetic test executes six stages, reruns them as six strict reuses, records a synthetic slicer failure with all upstream stages ready, resumes only the slice stage, and then reuses all seven ready stages with byte-identical canonical workflow manifest. Project evidence is rejected without slicing or with a diagnostic slicer.
+
+Command: migrate `scripts/verify_phase5_bambu_tile_projects.py` logic into `topoforge.validation.bambu_projects`, keep the script as a compatibility wrapper, then run its `--verify-only` path against the retained four-tile Gongga evidence.
+
+Result: status `verified`; tile count 4; all projects reopened true; all release gates passed true; required checks passed true. No DEM download, slicing, project regeneration, or physical print occurred.
+
+Command: final increment gate `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, and `git diff --check`.
+
+Result: Ruff `All checks passed!`; format `125 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `168 passed, 2115 warnings in 43.37s`; whitespace check passed. The visible warnings remain the TF-006 Rasterio/NumPy compatibility work, not hidden or suppressed.

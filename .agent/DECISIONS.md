@@ -193,3 +193,11 @@
 - **Decision:** Preserve the API/Web design as deferred Phase 9. Complete resumable one-command local orchestration, local configuration/report UX, overlays, recovery, packaging, CI, and offline documentation first. Physical connector calibration remains a saved, non-blocking evidence task. A future API must wrap the same core contracts and may start only after the local software product is frozen.
 - **Alternatives:** Begin FastAPI immediately; cancel API permanently; build Web logic that duplicates the Python core.
 - **Impact:** Current work targets local software utility without waiting for hardware measurements. No API or physical-validation plan is lost, but neither blocks near-term progress.
+
+## ADR-026 — Local workflow stages are content-addressed and strictly reopened
+
+- **Date:** 2026-08-01
+- **Context:** Manually invoking build and five tile commands is error-prone, while overwriting stage directories would discard manufacturing evidence and a file-exists cache would trust corruption.
+- **Decision:** `topoforge run` calls the existing Python core functions directly. Every stage path is keyed by its effective settings and upstream manifest SHA-256 values; reuse requires the production strict verifier. Changed inputs create another stage path. Canonical request/manifest/status and retained failure records support resume. Slicing and Bambu project export are explicit software-only stages; physical printing remains separate.
+- **Alternatives:** Shell out to CLI subcommands; use modification times; overwrite fixed directories; treat file existence as completion.
+- **Impact:** An interrupted local run resumes without recomputing verified work or hiding damage. The next increment can attach provider acquisition to the same source contract.

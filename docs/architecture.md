@@ -55,6 +55,23 @@ processed_dem.tif + original_nodata_mask.tif + validation dimensions
 
 Builds use a sibling staging directory. Every required file is written and reopened before the stage is atomically renamed to the requested new output directory. A non-empty destination is preserved and rejected.
 
+Phase 6 adds a content-addressed local orchestration layer without duplicating the core algorithms:
+
+```text
+topoforge run + resolved BuildConfig
+  -> source path/SHA-256 identity record
+  -> build/<stage SHA-256> -> build_local_terrain + strict bundle reopen
+  -> layout/<stage SHA-256> -> deterministic layout plan
+  -> extract/<stage SHA-256> -> exact raster tiles + seam verification
+  -> mesh/<stage SHA-256> -> global-frame assembly verification
+  -> connect/<stage SHA-256> -> connector/print-local verification
+  -> slice/<stage SHA-256> -> optional actual G-code/release verification
+  -> project/<stage SHA-256> -> optional Bambu export + isolated reopen/reslice
+  -> canonical workflow manifest + atomic status + retained failure record
+```
+
+Each stage identity binds its upstream manifest SHA-256 values and effective settings. Reuse executes the full existing verifier; file existence alone is never sufficient. Changed settings choose another content-addressed path, failed staging outputs remain unpublished, and reviewed evidence is never silently overwritten. The execution-specific CLI summary reports newly completed versus reused stages without making canonical artifacts depend on invocation history.
+
 ## Package responsibilities
 
 - `models` and `config`: external validation, units, semantics, printer profiles, resolved YAML.
@@ -65,7 +82,8 @@ Builds use a sibling staging directory. Every required file is written and reope
 - `validation`: measured geometry, official Bambu Studio/P2S release checks, and optional OrcaSlicer/PrusaSlicer diagnostics.
 - `rendering`: hillshade/color derived only from measured elevation samples.
 - `provenance`: stable JSON and dependency-free HTML reports.
-- `engine`: atomic orchestration, reusable local preflight, and bundle verification. `preflight_local_terrain()` runs the production raster/scaling path in a temporary directory without publishing a build.
+- `engine`: atomic build orchestration, reusable local preflight, and bundle verification. `preflight_local_terrain()` runs the production raster/scaling path in a temporary directory without publishing a build.
+- `workflow`: content-addressed stage identities, strict reuse, status/failure records, and direct composition of existing core functions.
 - `cli`: Typer argument parsing and JSON presentation.
 - `providers`: normalized-AOI provider contracts, explainable deterministic selection/fetch fallback, Copernicus AWS catalog/tile/ancillary-mask planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
 - `geocoding`: cached Nominatim-compatible candidate search and explicit ambiguity resolution; selected candidates become ordinary recorded AOIs before provider selection.

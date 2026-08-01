@@ -106,13 +106,14 @@ Real evidence: eight connectors over four seams, `0.2 mm` total lateral / `0.2 m
 
 ## Current Phase 6 — local software completion
 
-1. [ ] Add one resumable local command for acquisition/build/tiling/connectors/slicing/project evidence, reusing completed stages by manifest SHA-256.
-2. [ ] Add a local configuration wizard and concise run summary so ordinary solo use does not require assembling long CLI commands.
-3. [ ] Improve local artifact browsing: open reports, previews, connector maps, and output directories without a server. A lightweight desktop/TUI shell may call the Python core directly.
-4. [ ] Evaluate and validate an exhaustive self-intersection backend for TF-005.
-5. [ ] Resolve or constrain the Rasterio/NumPy compatibility warning tracked by TF-006 using benchmark and regression evidence.
-6. [ ] Add local failure recovery, disk-space estimates, cleanup commands, backup/export, and offline end-to-end documentation.
-7. [ ] Freeze the local software workflow before beginning overlay work.
+1. [x] Add `topoforge run` for local source identity, build, tiling, connectors, optional slicing, and optional Bambu project evidence. Stages are content-addressed by complete settings/upstream SHA-256 values, strictly reopened before reuse, atomically status-tracked, and resumable after retained failure records.
+2. [ ] Connect the existing no-key global provider acquisition path to the same source-stage contract so one invocation can start from bbox/center AOI without duplicating CLI/provider logic.
+3. [ ] Add a local configuration wizard and concise run summary so ordinary solo use does not require assembling long CLI commands.
+4. [ ] Improve local artifact browsing: open reports, previews, connector maps, and output directories without a server. A lightweight desktop/TUI shell may call the Python core directly.
+5. [ ] Evaluate and validate an exhaustive self-intersection backend for TF-005.
+6. [ ] Resolve or constrain the Rasterio/NumPy compatibility warning tracked by TF-006 using benchmark and regression evidence.
+7. [ ] Add disk-space estimates, reviewed cleanup commands, backup/export, and offline end-to-end documentation; the workflow's stage failure/retry record is complete.
+8. [ ] Freeze the local software workflow before beginning overlay work.
 
 ## Deferred non-blocking physical validation
 

@@ -70,6 +70,7 @@ from topoforge.tiling import (
 )
 from topoforge.util import sha256_file
 from topoforge.validation import validate_mesh
+from topoforge.workflow import LocalWorkflowConfig, run_local_workflow
 
 app = typer.Typer(
     name="topoforge",
@@ -552,6 +553,129 @@ def preview(
         evidence["preview_glb"] = str((build_dir / "preview.glb").resolve())
         _emit(evidence)
     except (TopoForgeError, ValueError, OSError) as exc:
+        _fail(exc)
+
+
+@app.command("run")
+def run_local(
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Resolved local build YAML used by the workflow."),
+    ],
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Workflow workspace; defaults to config output_dir."),
+    ] = None,
+    max_tile_size_mm: Annotated[
+        tuple[float, float],
+        typer.Option("--max-tile-size-mm", metavar="WIDTH DEPTH"),
+    ] = (180.0, 180.0),
+    overlap_cells: Annotated[int, typer.Option("--overlap-cells", min=0)] = 1,
+    slicing: Annotated[
+        bool,
+        typer.Option("--slice/--no-slice", help="Run actual per-tile software slicing."),
+    ] = True,
+    profile: Annotated[
+        Path | None, typer.Option("--profile", help="Legacy process/machine settings file.")
+    ] = None,
+    machine_profile: Annotated[
+        Path | None, typer.Option("--machine-profile", help="Resolved machine preset JSON.")
+    ] = None,
+    process_profile: Annotated[
+        Path | None, typer.Option("--process-profile", help="Resolved process preset JSON.")
+    ] = None,
+    filament_profile: Annotated[
+        Path | None, typer.Option("--filament-profile", help="Resolved filament preset JSON.")
+    ] = None,
+    slicer: Annotated[
+        str,
+        typer.Option(
+            "--slicer",
+            help="bambu-studio (release gate), orca, prusa, or auto (diagnostic fallback).",
+        ),
+    ] = "bambu-studio",
+    timeout_seconds: Annotated[float, typer.Option("--timeout-seconds", min=1.0)] = 1200.0,
+    project_evidence: Annotated[
+        bool,
+        typer.Option(
+            "--project-evidence/--no-project-evidence",
+            help="Export and independently reopen per-tile Bambu project 3MF evidence.",
+        ),
+    ] = False,
+    project_timeout_seconds: Annotated[
+        float, typer.Option("--project-timeout-seconds", min=1.0)
+    ] = 1800.0,
+) -> None:
+    """Run or resume local build, tiling, connectors, slicing, and project evidence."""
+    try:
+        from topoforge.validation.slicers import (
+            BambuStudioAdapter,
+            OrcaSlicerAdapter,
+            PrusaSlicerAdapter,
+            SlicerProfile,
+            select_slicer,
+        )
+
+        resolved = load_build_config(config)
+        workspace = (output or resolved.output_dir).expanduser().resolve()
+        adapter = None
+        slicer_profile = None
+        if slicing:
+            settings = tuple(
+                path for path in (machine_profile, process_profile, profile) if path is not None
+            )
+            filaments = () if filament_profile is None else (filament_profile,)
+            slicer_profile = SlicerProfile(
+                name=(
+                    "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic"
+                    if slicer == "bambu-studio"
+                    else None
+                ),
+                settings=settings,
+                filaments=filaments,
+            )
+            adapters = {
+                "bambu-studio": BambuStudioAdapter,
+                "orca": OrcaSlicerAdapter,
+                "prusa": PrusaSlicerAdapter,
+            }
+            if slicer == "auto":
+                adapter = select_slicer()
+            elif slicer in adapters:
+                adapter = adapters[slicer]()
+            else:
+                raise ValueError("--slicer must be bambu-studio, orca, prusa, or auto")
+        result = run_local_workflow(
+            LocalWorkflowConfig(
+                workspace_dir=workspace,
+                build=resolved,
+                maximum_tile_width_mm=max_tile_size_mm[0],
+                maximum_tile_depth_mm=max_tile_size_mm[1],
+                overlap_cells=overlap_cells,
+                slicing_enabled=slicing,
+                slice_timeout_seconds=timeout_seconds,
+                project_evidence_enabled=project_evidence,
+                project_timeout_seconds=project_timeout_seconds,
+            ),
+            adapter=adapter,
+            profile=slicer_profile,
+        )
+        _emit(
+            {
+                "status": "completed",
+                "workflow_id": result.workflow_id,
+                "workspace": str(result.workspace_dir),
+                "manifest": str(result.manifest_path),
+                "workflow_status": str(result.status_path),
+                "completed_stages": [stage.value for stage in result.completed_stages],
+                "reused_stages": [stage.value for stage in result.reused_stages],
+                "stage_outputs": {
+                    stage.value: str(path) for stage, path in result.stage_outputs.items()
+                },
+                "required_checks_passed": result.required_checks_passed,
+            }
+        )
+    except (ImportError, TopoForgeError, ValueError, OSError, RasterioError) as exc:
         _fail(exc)
 
 
