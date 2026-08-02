@@ -321,3 +321,11 @@
 - **Decision:** Treat an axis size within 0.001 mm of an integer multiple of the tile limit as that boundary count. Preserve the exact model dimensions, use the tolerance only for tile-count selection, include `topoforge-tile-layout-planner-v2` in the layout-stage identity, and accept both current and pre-tolerance deterministic v1 layouts during strict reopen.
 - **Alternatives:** Round or clamp model dimensions; silently delete old stages; bump every tiling artifact schema and invalidate all non-edge evidence; require users to increase tile limits manually.
 - **Impact:** Sub-micron numerical drift no longer changes assembly topology, material overages still partition, old evidence remains readable, and reruns create a new layout stage without overwriting retained data.
+
+## ADR-042 — Web relief presentation derives from manufacturing geometry without mutating it
+
+- **Date:** 2026-08-03
+- **Context:** The retained Great Trango STL, 3MF, and GLB had correct bounds, orientation, peak mapping, and positive volume, but a low southeast-oblique camera, south-biased key light, colorless GLB, and tiny unlabeled guides made valid ridges and valleys look inverted or ambiguous in the Web viewer.
+- **Decision:** Keep the manufacturing GLB and +X East/+Y North/+Z Up coordinates unchanged. Frame the browser camera from due south at a higher elevation so East projects right and North projects up, light relief primarily from the northwest, derive deterministic display-only vertex colors from model Z, render world-space E/N guide labels, expose an icon reset control, and require an explicit loaded-model state plus colorful WebGL samples in Playwright.
+- **Alternatives:** Rotate or rewrite the GLB; change vertical scale; fabricate terrain color/material data in exported manufacturing artifacts; keep a low oblique view and rely on a text legend; accept a nonblank placeholder canvas as proof.
+- **Impact:** The 770,880-triangle retained model loads in 3.093 s with 98 sampled colors and zero browser errors while model.stl, model.3mf, and preview.glb remain byte-identical. The change is presentation-only and does not alter terrain, scale, slicing, or provenance.

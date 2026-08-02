@@ -1,3 +1,4 @@
+import { RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -18,7 +19,31 @@ export interface CameraFrame {
   far: number;
 }
 
-const ISOMETRIC_DIRECTION = new THREE.Vector3(1, -1.25, 0.8).normalize();
+const DEFAULT_CAMERA_DIRECTION = new THREE.Vector3(0, -1.35, 1.45).normalize();
+const TERRAIN_COLOR_STOPS = [
+  { position: 0, color: new THREE.Color(0x365e54) },
+  { position: 0.34, color: new THREE.Color(0x6f8668) },
+  { position: 0.66, color: new THREE.Color(0xb09a70) },
+  { position: 0.86, color: new THREE.Color(0xcfc5aa) },
+  { position: 1, color: new THREE.Color(0xf1f0e8) },
+] as const;
+
+export function terrainColorForNormalizedHeight(
+  value: number,
+  target = new THREE.Color(),
+): THREE.Color {
+  const normalized = THREE.MathUtils.clamp(value, 0, 1);
+  for (let index = 1; index < TERRAIN_COLOR_STOPS.length; index += 1) {
+    const upper = TERRAIN_COLOR_STOPS[index]!;
+    const lower = TERRAIN_COLOR_STOPS[index - 1]!;
+    if (normalized <= upper.position) {
+      const span = upper.position - lower.position;
+      const amount = span > 0 ? (normalized - lower.position) / span : 0;
+      return target.copy(lower.color).lerp(upper.color, amount);
+    }
+  }
+  return target.copy(TERRAIN_COLOR_STOPS.at(-1)!.color);
+}
 
 export function cameraFrameForBounds(
   bounds: THREE.Box3,
@@ -34,7 +59,9 @@ export function cameraFrameForBounds(
   const distance = (radius / Math.sin(limitingFov / 2)) * 1.18;
   return {
     center: sphere.center.clone(),
-    position: sphere.center.clone().addScaledVector(ISOMETRIC_DIRECTION, distance),
+    position: sphere.center
+      .clone()
+      .addScaledVector(DEFAULT_CAMERA_DIRECTION, distance),
     near: Math.max(distance - radius * 2.5, radius / 1000, 0.01),
     far: distance + radius * 8,
   };
@@ -62,14 +89,84 @@ function placeholderTerrain(): THREE.Mesh {
   );
 }
 
+function applyTerrainPresentation(object: THREE.Object3D, bounds: THREE.Box3) {
+  const height = Math.max(bounds.max.z - bounds.min.z, 0.001);
+  object.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) {
+      return;
+    }
+    const positions = child.geometry.getAttribute("position");
+    const colors = new Float32Array(positions.count * 3);
+    const color = new THREE.Color();
+    for (let index = 0; index < positions.count; index += 1) {
+      const normalized = (positions.getZ(index) - bounds.min.z) / height;
+      terrainColorForNormalizedHeight(normalized, color);
+      colors[index * 3] = color.r;
+      colors[index * 3 + 1] = color.g;
+      colors[index * 3 + 2] = color.b;
+    }
+    child.geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    const previous = Array.isArray(child.material)
+      ? child.material
+      : [child.material];
+    child.material = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.9,
+      metalness: 0,
+      flatShading: child.geometry.getAttribute("normal") === undefined,
+      side: THREE.FrontSide,
+    });
+    previous.forEach((material) => material.dispose());
+  });
+}
+
 function disposeObject(object: THREE.Object3D) {
   object.traverse((child) => {
     if (child instanceof THREE.Mesh || child instanceof THREE.Line) {
       child.geometry.dispose();
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       materials.forEach((material) => material.dispose());
+    } else if (child instanceof THREE.Sprite) {
+      child.material.map?.dispose();
+      child.material.dispose();
     }
   });
+}
+
+function guideLabel(
+  label: string,
+  color: THREE.ColorRepresentation,
+  position: THREE.Vector3,
+  size: number,
+): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  canvas.width = 96;
+  canvas.height = 96;
+  const context = canvas.getContext("2d");
+  if (context) {
+    const hexColor = `#${new THREE.Color(color).getHexString()}`;
+    context.fillStyle = "rgba(255, 255, 255, 0.94)";
+    context.beginPath();
+    context.arc(48, 48, 34, 0, Math.PI * 2);
+    context.fill();
+    context.lineWidth = 5;
+    context.strokeStyle = hexColor;
+    context.stroke();
+    context.fillStyle = hexColor;
+    context.font = "700 40px system-ui, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(label, 48, 50);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }),
+  );
+  sprite.position.copy(position);
+  sprite.scale.set(size, size, 1);
+  sprite.renderOrder = 10;
+  return sprite;
 }
 
 function sceneGuides(bounds: THREE.Box3): THREE.Group {
@@ -114,6 +211,22 @@ function sceneGuides(bounds: THREE.Box3): THREE.Group {
       arrowLength * 0.12,
     ),
   );
+  const labelSize = horizontalExtent * 0.065;
+  const labelOffset = arrowLength * 1.18;
+  guide.add(
+    guideLabel(
+      "E",
+      0xb54d3f,
+      origin.clone().add(new THREE.Vector3(labelOffset, 0, labelSize * 0.2)),
+      labelSize,
+    ),
+    guideLabel(
+      "N",
+      0x146b62,
+      origin.clone().add(new THREE.Vector3(0, labelOffset, labelSize * 0.2)),
+      labelSize,
+    ),
+  );
   return guide;
 }
 
@@ -128,7 +241,9 @@ export function TerrainPreview({
   const guidesRef = useRef<THREE.Group | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
+  const resetViewRef = useRef<(() => void) | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [modelLoaded, setModelLoaded] = useState(false);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -136,8 +251,8 @@ export function TerrainPreview({
       return;
     }
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xe5ebe9);
-    const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 10000);
+    scene.background = new THREE.Color(0xecf1ef);
+    const camera = new THREE.PerspectiveCamera(32, 1, 0.01, 10000);
     camera.up.set(0, 0, 1);
     camera.position.set(10, -13, 9);
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -150,31 +265,43 @@ export function TerrainPreview({
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
+    controls.minPolarAngle = THREE.MathUtils.degToRad(8);
+    controls.maxPolarAngle = THREE.MathUtils.degToRad(82);
     controls.target.set(0, 0, 0.5);
 
-    const hemisphere = new THREE.HemisphereLight(0xffffff, 0x64706b, 2.2);
+    const hemisphere = new THREE.HemisphereLight(0xffffff, 0x5d6863, 1.75);
     scene.add(hemisphere);
-    const key = new THREE.DirectionalLight(0xffffff, 2.5);
-    key.position.set(-6, -8, 14);
+    const key = new THREE.DirectionalLight(0xfff9eb, 2.85);
+    key.position.set(-8, 10, 16);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0xaad8cf, 1.1);
-    fill.position.set(10, 6, 5);
+    const fill = new THREE.DirectionalLight(0x9fc8c1, 0.85);
+    fill.position.set(10, -6, 7);
     scene.add(fill);
+
+    const frameModel = () => {
+      if (!boundsRef.current) {
+        return;
+      }
+      const frame = cameraFrameForBounds(
+        boundsRef.current,
+        camera.aspect,
+        camera.fov,
+      );
+      controls.target.copy(frame.center);
+      camera.position.copy(frame.position);
+      camera.near = frame.near;
+      camera.far = frame.far;
+      camera.updateProjectionMatrix();
+      controls.update();
+    };
+    resetViewRef.current = frameModel;
 
     const resize = () => {
       const width = Math.max(container.clientWidth, 1);
       const height = Math.max(container.clientHeight, 1);
       camera.aspect = width / height;
-      if (boundsRef.current) {
-        const frame = cameraFrameForBounds(boundsRef.current, camera.aspect, camera.fov);
-        controls.target.copy(frame.center);
-        camera.position.copy(frame.position);
-        camera.near = frame.near;
-        camera.far = frame.far;
-      }
-      camera.updateProjectionMatrix();
       renderer.setSize(width, height, false);
-      controls.update();
+      frameModel();
     };
     const observer = new ResizeObserver(resize);
     observer.observe(container);
@@ -219,6 +346,7 @@ export function TerrainPreview({
       guidesRef.current = null;
       cameraRef.current = null;
       controlsRef.current = null;
+      resetViewRef.current = null;
     };
   }, []);
 
@@ -230,6 +358,7 @@ export function TerrainPreview({
       return;
     }
     setLoadError(false);
+    setModelLoaded(false);
     const loader = new GLTFLoader();
     let active = true;
     loader.load(
@@ -244,9 +373,10 @@ export function TerrainPreview({
           disposeObject(contentRef.current);
         }
         const object = gltf.scene;
+        const bounds = new THREE.Box3().setFromObject(object);
+        applyTerrainPresentation(object, bounds);
         scene.add(object);
         contentRef.current = object;
-        const bounds = new THREE.Box3().setFromObject(object);
         boundsRef.current = bounds;
         if (guidesRef.current) {
           scene.remove(guidesRef.current);
@@ -255,18 +385,14 @@ export function TerrainPreview({
         const guides = sceneGuides(bounds);
         scene.add(guides);
         guidesRef.current = guides;
-        const frame = cameraFrameForBounds(bounds, camera.aspect, camera.fov);
-        controls.target.copy(frame.center);
-        camera.near = frame.near;
-        camera.far = frame.far;
-        camera.position.copy(frame.position);
-        camera.updateProjectionMatrix();
-        controls.update();
+        resetViewRef.current?.();
+        setModelLoaded(true);
       },
       undefined,
       () => {
         if (active) {
           setLoadError(true);
+          setModelLoaded(false);
         }
       },
     );
@@ -276,8 +402,21 @@ export function TerrainPreview({
   }, [modelUrl]);
 
   return (
-    <div className="preview-shell" data-testid="terrain-preview">
+    <div
+      className="preview-shell"
+      data-testid="terrain-preview"
+      data-model-loaded={modelLoaded}
+    >
       <div ref={containerRef} className="preview-canvas" />
+      <button
+        type="button"
+        className="preview-reset"
+        title={translate(language, "resetModelView")}
+        aria-label={translate(language, "resetModelView")}
+        onClick={() => resetViewRef.current?.()}
+      >
+        <RotateCcw size={16} />
+      </button>
       <div className="axis-legend" aria-label={translate(language, "directionContract")}>
         <span className="axis-east">{translate(language, "eastAxis")}</span>
         <span className="axis-north">{translate(language, "northAxis")}</span>

@@ -1,6 +1,6 @@
 # Authoritative Plan
 
-Updated: 2026-08-02
+Updated: 2026-08-03
 
 ## Roadmap
 
@@ -19,6 +19,7 @@ Updated: 2026-08-02
 - [x] Phase 10 — deterministic local processed-DEM maps and synchronized 2D/3D manufacturing assembly. Completed in 0.9.0 on 2026-08-02.
 - [x] Phase 11 — bilingual local project lifecycle and automated GitHub Releases. Completed in 0.10.0 on 2026-08-02.
 - [x] Post-Phase 11 local Web hotfix — daily-use instance diagnosis, micron-scale tile-boundary tolerance, cache-version binding, legacy layout reopen, and persistent-state Playwright identity. Completed on main 2026-08-02.
+- [x] Post-Phase 11 3D presentation hotfix — elevated south-facing camera, northwest relief lighting, display-only elevation colors, world-space N/E markers, reset control, and loaded-model browser regression. Completed on main 2026-08-03.
 
 ## Completed Phase 9 — bilingual local Web application
 

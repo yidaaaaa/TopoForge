@@ -622,7 +622,8 @@ input:checked + .toggle::after {
 .map-mode,
 .map-coordinate,
 .preview-status,
-.axis-legend {
+.axis-legend,
+.preview-reset {
   position: absolute;
   z-index: 4;
   color: #324449;
@@ -631,6 +632,24 @@ input:checked + .toggle::after {
   border-radius: 5px;
   box-shadow: 0 2px 8px rgb(31 45 49 / 10%);
   backdrop-filter: blur(5px);
+}
+
+.preview-reset {
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: #31534d;
+  cursor: pointer;
+}
+
+.preview-reset:hover {
+  color: #0f655b;
+  border-color: #86aaa3;
+  background: #fff;
 }
 
 .map-mode {

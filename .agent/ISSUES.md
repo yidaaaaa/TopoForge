@@ -396,3 +396,11 @@
 - **Reproduction:** Run the Phase 11 Playwright lifecycle scenario repeatedly without deleting `/tmp/topoforge-playwright-state`; multiple backup rows share the same workflow ID and the global restore-button selector becomes ambiguous or selects an older restore target.
 - **Expected behavior:** Browser acceptance remains valid with retained historical jobs and backups, matching the supported local lifecycle UI.
 - **Resolution:** Capture the exact backup POST response, assert its backup ID is listed, and scope restore to that checksum-bound backup row. The retained-state Playwright rerun reports 2 passed and 2 project-inapplicable skipped.
+
+## TF-048 — Correct terrain geometry looked inverted or ambiguous in the Web 3D viewer
+
+- **Severity:** High local usability
+- **Status:** Resolved on main after 0.10.0
+- **Reproduction:** Open the retained 180 x 180.0001526 x 45 mm Great Trango GLB. The previous low southeast-oblique view, south-biased lighting, default gray material, and tiny direction arrows make the central valleys and surrounding ridges look like a distorted basin even though strict format checks and peak mapping pass.
+- **Expected behavior:** The whole solid is immediately legible, North and East are spatially clear, relief does not exhibit lighting-induced inversion, reset restores a known view, and browser tests wait for the actual GLB rather than the placeholder.
+- **Resolution:** Added an elevated due-south frame, northwest key light, deterministic display-only elevation colors, world-space N/E labels, a reset icon, loaded-model state, orientation/color unit tests, and stronger Playwright assertions. The real GLB loads in 3.093 s with palette 98 and zero console errors; STL, 3MF, and GLB hashes remain unchanged.

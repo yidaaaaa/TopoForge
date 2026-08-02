@@ -658,3 +658,17 @@ Result: the same workspace creates a new 1 x 1 layout stage while preserving the
 Command: run `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, `npm --prefix web run typecheck`, `npm --prefix web run test`, and retained-state `npm --prefix web run test:ui`.
 
 Result: Ruff passes; 163 files are formatted; Pyright reports 0 errors; Pytest reports 214 passed in 89.74 s; Vitest reports 18 passed; Playwright reports 2 passed and 2 project-inapplicable skipped. No source DEM was downloaded, modified, or replaced.
+
+### Post-Phase 11 Web 3D presentation hotfix
+
+Command: reproduce the user-visible issue against the retained Great Trango job on port 8772, capture the full page and 740 x 898 WebGL canvas, and strictly parse the GLB scene/material/accessor metadata.
+
+Result: manufacturing geometry is correct and unchanged at 180 x 180.00015258789062 x 45 mm with 770,880 triangles, but the low southeast-oblique camera, south-biased light, default uncolored material, and tiny unlabeled direction arrows make relief visually ambiguous. The original model canvas sampled 28 colors with zero browser errors.
+
+Command: implement an elevated due-south camera contract, northwest primary lighting, deterministic display-only elevation colors, world-space N/E labels, a reset icon, and explicit loaded-model state; add orientation/color unit tests and actual-GLB Playwright assertions.
+
+Result: East projects screen-right and North screen-top without rotating the GLB. The retained Great Trango model loads in 3.093 s, the final 740 x 898 canvas samples 98 colors and 91 colorful points, the complete solid remains in frame, the reset control works, and browser errors are empty.
+
+Command: rebuild packaged Web assets; run npm typecheck, 20 Vitest tests, desktop/mobile Playwright, Ruff check/format, Pyright, uv lock, full Pytest, Git whitespace, and before/after manufacturing SHA verification.
+
+Result: TypeScript passes; Vitest reports 20 passed; Playwright reports 2 passed and 2 project-inapplicable skipped; Ruff passes; 163 Python files are formatted; Pyright reports 0 errors; uv lock passes; Pytest reports 214 passed in 91.05 s. Great Trango model.stl, model.3mf, and preview.glb remain byte-identical at b6ee4feb681c2d15845e0408e87915dc27c15af4d13774ebd6253184046149b4, 5cfd545cdffc67be694a123d6d2d011a03c21f320b7ad6120bc7f7861501c2dd, and 59d4a0da077c9e9de6c0ee27ee6ef307f7b236d8da975af8d59f5bb3030b4872. No DEM was downloaded or rebuilt.

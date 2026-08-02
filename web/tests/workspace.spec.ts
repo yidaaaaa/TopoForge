@@ -28,6 +28,40 @@ async function nonBlankCanvas(page: import("@playwright/test").Page, selector: s
   });
 }
 
+async function sampledColorfulPixels(
+  page: import("@playwright/test").Page,
+  selector: string,
+) {
+  return page.locator(selector).evaluate((canvas: HTMLCanvasElement) => {
+    const context =
+      canvas.getContext("webgl2", { preserveDrawingBuffer: true }) ??
+      canvas.getContext("webgl", { preserveDrawingBuffer: true });
+    if (!context) return 0;
+    let colorful = 0;
+    const pixel = new Uint8Array(4);
+    for (let y = 1; y < 16; y += 1) {
+      for (let x = 1; x < 16; x += 1) {
+        context.readPixels(
+          Math.floor((canvas.width * x) / 16),
+          Math.floor((canvas.height * y) / 16),
+          1,
+          1,
+          context.RGBA,
+          context.UNSIGNED_BYTE,
+          pixel,
+        );
+        const spread =
+          Math.max(pixel[0]!, pixel[1]!, pixel[2]!) -
+          Math.min(pixel[0]!, pixel[1]!, pixel[2]!);
+        if (spread > 18) {
+          colorful += 1;
+        }
+      }
+    }
+    return colorful;
+  });
+}
+
 async function sampledPalette(page: import("@playwright/test").Page, selector: string) {
   return page.locator(selector).evaluate((canvas: HTMLCanvasElement) => {
     const context =
@@ -251,11 +285,21 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   await page.getByRole("tab", { name: "三维模型" }).click();
   const previewCanvas = page.locator(".preview-canvas canvas");
   await expect(previewCanvas).toBeVisible();
+  await expect(page.getByTestId("terrain-preview")).toHaveAttribute(
+    "data-model-loaded",
+    "true",
+  );
   const previewPixels = await nonBlankCanvas(page, ".preview-canvas canvas");
   expect(previewPixels.width).toBeGreaterThan(300);
   expect(previewPixels.height).toBeGreaterThan(300);
   expect(previewPixels.nonZero).toBeGreaterThan(0);
   expect((await sampledPalette(page, ".preview-canvas canvas")).length).toBeGreaterThan(8);
+  await expect
+    .poll(() => sampledColorfulPixels(page, ".preview-canvas canvas"))
+    .toBeGreaterThan(12);
+  const resetModelView = page.getByRole("button", { name: "重置三维视图" });
+  await expect(resetModelView).toBeVisible();
+  await resetModelView.click();
 
   await page.getByRole("tab", { name: "拼装" }).click();
   await expect(page.getByTestId("assembly-panel")).toBeVisible();
