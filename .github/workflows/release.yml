@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-publication
   cancel-in-progress: false
 
 jobs:
@@ -31,12 +31,14 @@ jobs:
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
             tag="$GITHUB_REF_NAME"
           else
+            current_tag="v$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
             tag=""
             while IFS= read -r candidate; do
-              if ! gh release view "$candidate" >/dev/null 2>&1; then
-                tag="$candidate"
-                break
+              if [[ "$candidate" == "$current_tag" ]]; then
+                continue
               fi
+              tag="$candidate"
+              break
             done < <(git tag --merged HEAD --list 'v*' --sort=-v:refname)
           fi
           if [[ -z "$tag" ]]; then

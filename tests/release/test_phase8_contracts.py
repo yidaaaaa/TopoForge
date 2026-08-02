@@ -161,6 +161,9 @@ def test_github_release_workflow_contract() -> None:
     assert workflow[True]["push"]["tags"] == ["v*"]
     assert "workflow_dispatch" in workflow[True]
     assert "fetch-depth: 0" in workflow_text
+    assert "group: release-publication" in workflow_text
+    assert "current_tag=" in workflow_text
+    assert 'if [[ "$candidate" == "$current_tag" ]]' in workflow_text
     assert "git tag --merged HEAD --list 'v*' --sort=-v:refname" in workflow_text
     assert "gh release view" in workflow_text
     assert workflow_text.count("publish=false") >= 2
