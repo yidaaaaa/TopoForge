@@ -404,3 +404,11 @@
 - **Reproduction:** Open the retained 180 x 180.0001526 x 45 mm Great Trango GLB. The previous low southeast-oblique view, south-biased lighting, default gray material, and tiny direction arrows make the central valleys and surrounding ridges look like a distorted basin even though strict format checks and peak mapping pass.
 - **Expected behavior:** The whole solid is immediately legible, North and East are spatially clear, relief does not exhibit lighting-induced inversion, reset restores a known view, and browser tests wait for the actual GLB rather than the placeholder.
 - **Resolution:** Added an elevated due-south frame, northwest key light, deterministic display-only elevation colors, world-space N/E labels, a reset icon, loaded-model state, orientation/color unit tests, and stronger Playwright assertions. The real GLB loads in 3.093 s with palette 98 and zero console errors; STL, 3MF, and GLB hashes remain unchanged.
+
+## TF-049 — High-DPI canvases overflowed the 3D viewport on first open
+
+- **Severity:** High local usability
+- **Status:** Resolved on main after 0.10.0
+- **Reproduction:** Open the corrected model viewer on a desktop using approximately 150% display scaling. A 665 x 656 center container receives a 997 x 984 canvas because Three.js pixel ratio affects the drawing buffer while setSize(..., false) leaves CSS size unset. The model appears enlarged, shifted toward the lower-right, and clipped even though clicking reset may partially mask the problem.
+- **Expected behavior:** Canvas CSS dimensions match the visible container at every device pixel ratio, the high-resolution buffer remains proportional to DPR, the first real GLB frame is centered without manual input, and the assembly view follows the same contract.
+- **Resolution:** Enable CSS size updates in both Three.js renderers, settle initial framing across animation frames and a 250 ms layout window, run desktop Playwright at 1.5 DPR, assert client/container/buffer ratios, and require normalized colorful terrain center within 0.35 to 0.65 on both axes. The retained model finishes at center (0.4895, 0.4593) with zero browser errors and unchanged STL/3MF/GLB hashes.

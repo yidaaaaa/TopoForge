@@ -241,7 +241,9 @@ export function TerrainPreview({
   const guidesRef = useRef<THREE.Group | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
-  const resetViewRef = useRef<(() => void) | null>(null);
+  const resetViewRef = useRef<((onSettled?: () => void) => void) | null>(
+    null,
+  );
   const [loadError, setLoadError] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
 
@@ -287,21 +289,49 @@ export function TerrainPreview({
         camera.aspect,
         camera.fov,
       );
+      const distance = frame.position.distanceTo(frame.center);
       controls.target.copy(frame.center);
       camera.position.copy(frame.position);
       camera.near = frame.near;
       camera.far = frame.far;
+      controls.minDistance = distance * 0.5;
+      controls.maxDistance = distance * 3;
       camera.updateProjectionMatrix();
       controls.update();
     };
-    resetViewRef.current = frameModel;
+    let frameAnimation = 0;
+    let settledAnimation = 0;
+    let frameTimeout = 0;
+    let pendingSettled: (() => void) | null = null;
+    const cancelFrameSchedule = () => {
+      window.cancelAnimationFrame(frameAnimation);
+      window.cancelAnimationFrame(settledAnimation);
+      window.clearTimeout(frameTimeout);
+    };
+    const scheduleFrame = (onSettled?: () => void) => {
+      if (onSettled) {
+        pendingSettled = onSettled;
+      }
+      cancelFrameSchedule();
+      frameModel();
+      frameAnimation = window.requestAnimationFrame(() => {
+        frameModel();
+        settledAnimation = window.requestAnimationFrame(frameModel);
+      });
+      frameTimeout = window.setTimeout(() => {
+        frameModel();
+        pendingSettled?.();
+        pendingSettled = null;
+      }, 250);
+    };
+    resetViewRef.current = scheduleFrame;
 
     const resize = () => {
       const width = Math.max(container.clientWidth, 1);
       const height = Math.max(container.clientHeight, 1);
       camera.aspect = width / height;
-      renderer.setSize(width, height, false);
-      frameModel();
+      renderer.setSize(width, height, true);
+      scheduleFrame();
     };
     const observer = new ResizeObserver(resize);
     observer.observe(container);
@@ -330,6 +360,8 @@ export function TerrainPreview({
 
     return () => {
       window.cancelAnimationFrame(animation);
+      cancelFrameSchedule();
+      pendingSettled = null;
       observer.disconnect();
       controls.dispose();
       if (contentRef.current) {
@@ -385,8 +417,11 @@ export function TerrainPreview({
         const guides = sceneGuides(bounds);
         scene.add(guides);
         guidesRef.current = guides;
-        resetViewRef.current?.();
-        setModelLoaded(true);
+        resetViewRef.current?.(() => {
+          if (active) {
+            setModelLoaded(true);
+          }
+        });
       },
       undefined,
       () => {

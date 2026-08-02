@@ -355,7 +355,7 @@ function AssemblyScene({
       const width = Math.max(container.clientWidth, 1);
       const height = Math.max(container.clientHeight, 1);
       camera.aspect = width / height;
-      renderer.setSize(width, height, false);
+      renderer.setSize(width, height, true);
       frameScene();
     };
     const observer = new ResizeObserver(resize);

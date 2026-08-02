@@ -672,3 +672,17 @@ Result: East projects screen-right and North screen-top without rotating the GLB
 Command: rebuild packaged Web assets; run npm typecheck, 20 Vitest tests, desktop/mobile Playwright, Ruff check/format, Pyright, uv lock, full Pytest, Git whitespace, and before/after manufacturing SHA verification.
 
 Result: TypeScript passes; Vitest reports 20 passed; Playwright reports 2 passed and 2 project-inapplicable skipped; Ruff passes; 163 Python files are formatted; Pyright reports 0 errors; uv lock passes; Pytest reports 214 passed in 91.05 s. Great Trango model.stl, model.3mf, and preview.glb remain byte-identical at b6ee4feb681c2d15845e0408e87915dc27c15af4d13774ebd6253184046149b4, 5cfd545cdffc67be694a123d6d2d011a03c21f320b7ad6120bc7f7861501c2dd, and 59d4a0da077c9e9de6c0ee27ee6ef307f7b236d8da975af8d59f5bb3030b4872. No DEM was downloaded or rebuilt.
+
+### Post-Phase 11 high-DPI 3D first-open hotfix
+
+Command: inspect the user screenshot, reproduce the page at a 1365 x 758 CSS viewport with deviceScaleFactor 1.5, and compare canvas drawing/client dimensions with the visible center container.
+
+Result: the manufacturing model and new presentation material are correct. The container is 665 x 656, but renderer.setSize(width, height, false) leaves CSS size unset, so the 997 x 984 high-DPI drawing buffer also becomes the canvas layout size. The 1.5x overflow clips the model at the lower-right edge and explains why DPR 1 headless checks passed while the user view failed.
+
+Command: enable renderer CSS sizing for whole-model and assembly canvases, settle the loaded model frame across animation frames plus 250 ms, run desktop Playwright at deviceScaleFactor 1.5, and assert canvas/container equality, buffer/DPR ratios, and colorful terrain centering.
+
+Result: the final high-DPI view has container/client 665 x 656, buffer 997 x 984, normalized terrain bounds [0.1645, 0.1992, 0.8144, 0.7195], center [0.4895, 0.4593], 4,011 colorful samples, and zero browser errors. The model is fully visible on first open without using reset.
+
+Command: rebuild packaged Web assets; run TypeScript, 20 Vitest tests, 1.5-DPR desktop/mobile Playwright, Ruff, format, Pyright, uv lock, full Pytest, Git whitespace, and manufacturing artifact checksum verification.
+
+Result: TypeScript passes; Vitest reports 20 passed; Playwright reports 2 passed and 2 project-inapplicable skipped; Ruff passes; 163 Python files are formatted; Pyright reports 0 errors; uv lock passes; Pytest reports 214 passed in 93.80 s. Great Trango model.stl, model.3mf, and preview.glb remain byte-identical, and no DEM was downloaded or rebuilt.
