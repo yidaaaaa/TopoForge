@@ -1276,6 +1276,28 @@ input:checked + .toggle::after {
   padding-inline: 6px;
 }
 
+.task-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 2px 14px 12px;
+  border-bottom: 1px solid #e0e5e4;
+}
+
+.task-actions button {
+  min-width: 0;
+  min-height: 38px;
+  justify-content: center;
+  padding: 6px;
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.task-actions .danger-button {
+  flex: initial;
+}
+
 .backup-list {
   display: grid;
   padding: 0 10px 9px;

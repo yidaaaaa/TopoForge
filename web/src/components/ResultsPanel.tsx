@@ -5,6 +5,7 @@ import {
   Download,
   ExternalLink,
   HardDrive,
+  ListX,
   RefreshCw,
   RotateCcw,
   Square,
@@ -28,10 +29,17 @@ interface ResultsPanelProps {
   maintenance: JobMaintenanceOverview | null;
   loading: boolean;
   maintenanceLoading: boolean;
-  maintenanceBusy: "backup" | "cleanup" | "restore" | null;
+  maintenanceBusy:
+    | "backup"
+    | "cleanup"
+    | "restore"
+    | "delete-record"
+    | "delete-workspace"
+    | null;
   onRefresh: () => void;
   onSelect: (jobId: string) => void;
   onCancel: (jobId: string) => void;
+  onDelete: (jobId: string, workspaceName: string, deleteWorkspace: boolean) => void;
   onBackup: (jobId: string) => void;
   onCleanup: (jobId: string, workflowId: string) => void;
   onRestore: (backupId: string) => void;
@@ -59,6 +67,7 @@ export function ResultsPanel({
   onRefresh,
   onSelect,
   onCancel,
+  onDelete,
   onBackup,
   onCleanup,
   onRestore,
@@ -274,6 +283,47 @@ export function ResultsPanel({
                   </div>
                 </div>
               )}
+            </>
+          )}
+
+          {["cancelled", "failed", "completed"].includes(selectedJob.state) && (
+            <>
+              <div className="subheading">
+                <ListX size={16} />
+                <h3>{t("taskManagement")}</h3>
+              </div>
+              <div className="task-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={maintenanceBusy !== null}
+                  onClick={() =>
+                    onDelete(
+                      selectedJob.job_id,
+                      selectedJob.workspace_dir.split("/").at(-1) ?? selectedJob.workspace_dir,
+                      false,
+                    )
+                  }
+                >
+                  <ListX size={14} />
+                  {t("removeJobRecord")}
+                </button>
+                <button
+                  type="button"
+                  className="danger-button"
+                  disabled={maintenanceBusy !== null}
+                  onClick={() =>
+                    onDelete(
+                      selectedJob.job_id,
+                      selectedJob.workspace_dir.split("/").at(-1) ?? selectedJob.workspace_dir,
+                      true,
+                    )
+                  }
+                >
+                  <Trash2 size={14} />
+                  {t("deleteProjectFiles")}
+                </button>
+              </div>
             </>
           )}
 

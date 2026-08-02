@@ -216,6 +216,21 @@ export interface JobMaintenanceOverview {
   required_checks_passed: boolean;
 }
 
+export interface JobDeleteResult {
+  schema_version: string;
+  job_id: string;
+  previous_state: JobState;
+  workspace: string;
+  workspace_existed: boolean;
+  workspace_removed: boolean;
+  workspace_retained: boolean;
+  deleted_job_record_bytes: number;
+  deleted_workspace_bytes: number;
+  reclaimed_bytes: number;
+  backups_preserved: boolean;
+  required_checks_passed: boolean;
+}
+
 export interface WorkflowCleanupResult {
   workflow_id: string;
   workspace: string;

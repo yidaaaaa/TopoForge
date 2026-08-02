@@ -4,6 +4,7 @@ import type {
   Health,
   JobAssemblyOverview,
   JobCreateRequest,
+  JobDeleteResult,
   JobMaintenanceOverview,
   JobMapManifest,
   JobRecord,
@@ -87,18 +88,39 @@ export function cancelJob(jobId: string): Promise<JobRecord> {
   });
 }
 
-export function fetchJobMap(jobId: string): Promise<JobMapManifest> {
-  return request<JobMapManifest>(`/api/v1/jobs/${jobId}/map/manifest`);
+export function deleteJob(
+  jobId: string,
+  deleteWorkspace: boolean,
+): Promise<JobDeleteResult> {
+  return request<JobDeleteResult>(`/api/v1/jobs/${jobId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ confirm_job_id: jobId, delete_workspace: deleteWorkspace }),
+  });
 }
 
-export function fetchJobAssembly(jobId: string): Promise<JobAssemblyOverview> {
-  return request<JobAssemblyOverview>(`/api/v1/jobs/${jobId}/assembly`);
+export function fetchJobMap(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<JobMapManifest> {
+  return request<JobMapManifest>(`/api/v1/jobs/${jobId}/map/manifest`, { signal });
+}
+
+export function fetchJobAssembly(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<JobAssemblyOverview> {
+  return request<JobAssemblyOverview>(`/api/v1/jobs/${jobId}/assembly`, {
+    signal,
+  });
 }
 
 export function fetchJobMaintenance(
   jobId: string,
+  signal?: AbortSignal,
 ): Promise<JobMaintenanceOverview> {
-  return request<JobMaintenanceOverview>(`/api/v1/jobs/${jobId}/maintenance`);
+  return request<JobMaintenanceOverview>(`/api/v1/jobs/${jobId}/maintenance`, {
+    signal,
+  });
 }
 
 export function createJobBackup(jobId: string): Promise<WorkflowBackupRecord> {

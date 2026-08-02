@@ -14,6 +14,7 @@ import {
   cleanupJob,
   createJob,
   createJobBackup,
+  deleteJob,
   fetchJobAssembly,
   fetchJobMaintenance,
   fetchJobMap,
@@ -107,7 +108,12 @@ export default function App() {
   const [maintenance, setMaintenance] = useState<JobMaintenanceOverview | null>(null);
   const [maintenanceLoading, setMaintenanceLoading] = useState(false);
   const [maintenanceBusy, setMaintenanceBusy] = useState<
-    "backup" | "cleanup" | "restore" | null
+    | "backup"
+    | "cleanup"
+    | "restore"
+    | "delete-record"
+    | "delete-workspace"
+    | null
   >(null);
   const [jobMap, setJobMap] = useState<JobMapManifest | null>(null);
   const [jobAssembly, setJobAssembly] = useState<JobAssemblyOverview | null>(null);
@@ -201,8 +207,31 @@ export default function App() {
       setMaintenanceLoading(false);
       return;
     }
-    void loadMaintenance(selectedJob.job_id);
-  }, [loadMaintenance, selectedJob?.job_id, selectedJob?.state]);
+    let active = true;
+    const controller = new AbortController();
+    setMaintenanceLoading(true);
+    void fetchJobMaintenance(selectedJob.job_id, controller.signal)
+      .then((overview) => {
+        if (active) {
+          setMaintenance(overview);
+        }
+      })
+      .catch((reason) => {
+        if (active) {
+          setMaintenance(null);
+          setNotice({ tone: "error", text: errorMessage(reason, language) });
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setMaintenanceLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [language, selectedJob?.job_id, selectedJob?.state]);
 
   useEffect(() => {
     const jobId = selectedJob?.job_id;
@@ -215,9 +244,13 @@ export default function App() {
       return;
     }
     let active = true;
+    const controller = new AbortController();
     setVisualizationLoading(true);
     setVisualizationError(null);
-    void Promise.all([fetchJobMap(jobId), fetchJobAssembly(jobId)])
+    void Promise.all([
+      fetchJobMap(jobId, controller.signal),
+      fetchJobAssembly(jobId, controller.signal),
+    ])
       .then(([mapManifest, assembly]) => {
         if (!active) {
           return;
@@ -246,6 +279,7 @@ export default function App() {
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [language, selectedJob?.job_id, selectedJob?.state]);
 
@@ -374,6 +408,39 @@ export default function App() {
       setNotice({ tone: "success", text: t("restoreCompleted") });
     } catch (reason) {
       setNotice({ tone: "error", text: errorMessage(reason, language) });
+    } finally {
+      setMaintenanceBusy(null);
+    }
+  };
+
+  const handleDelete = async (
+    jobId: string,
+    workspaceName: string,
+    deleteWorkspace: boolean,
+  ) => {
+    const confirmation = t(
+      deleteWorkspace ? "confirmDeleteProject" : "confirmRemoveJob",
+    ).replace("{workspace}", workspaceName);
+    if (!window.confirm(confirmation)) {
+      return;
+    }
+    setMaintenanceBusy(deleteWorkspace ? "delete-workspace" : "delete-record");
+    setSelectedJobId(null);
+    setMaintenance(null);
+    setJobMap(null);
+    setJobAssembly(null);
+    setSelectedTileId(null);
+    try {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+      await deleteJob(jobId, deleteWorkspace);
+      await loadJobs();
+      setNotice({
+        tone: "success",
+        text: t(deleteWorkspace ? "projectFilesDeleted" : "jobRecordRemoved"),
+      });
+    } catch (reason) {
+      setNotice({ tone: "error", text: errorMessage(reason, language) });
+      await loadJobs();
     } finally {
       setMaintenanceBusy(null);
     }
@@ -548,6 +615,9 @@ export default function App() {
           onBackup={(jobId) => void handleBackup(jobId)}
           onCleanup={(jobId, workflowId) => void handleCleanup(jobId, workflowId)}
           onRestore={(backupId) => void handleRestore(backupId)}
+          onDelete={(jobId, workspaceName, deleteWorkspace) =>
+            void handleDelete(jobId, workspaceName, deleteWorkspace)
+          }
         />
       </div>
 

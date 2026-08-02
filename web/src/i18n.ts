@@ -170,6 +170,14 @@ const zh = {
   noBackups: "暂无备份",
   backupFiles: "个文件",
   downloadBackup: "下载备份",
+  taskManagement: "任务管理",
+  removeJobRecord: "移除任务记录",
+  deleteProjectFiles: "删除项目文件",
+  confirmRemoveJob: "仅从任务列表移除“{workspace}”？工作区文件和备份会保留。",
+  confirmDeleteProject:
+    "永久删除“{workspace}”的任务记录和工作区文件？备份会保留。此操作不可撤销。",
+  jobRecordRemoved: "任务记录已移除，项目文件已保留",
+  projectFilesDeleted: "项目文件和任务记录已删除，备份已保留",
 } as const;
 
 export type TranslationKey = keyof typeof zh;
@@ -344,6 +352,15 @@ const en: Record<TranslationKey, string> = {
   noBackups: "No backups",
   backupFiles: "files",
   downloadBackup: "Download backup",
+  taskManagement: "Task management",
+  removeJobRecord: "Remove job record",
+  deleteProjectFiles: "Delete project files",
+  confirmRemoveJob:
+    'Remove "{workspace}" from the job list? Workspace files and backups will be retained.',
+  confirmDeleteProject:
+    'Permanently delete the job record and workspace files for "{workspace}"? Backups will be retained. This action cannot be undone.',
+  jobRecordRemoved: "Job record removed; project files retained",
+  projectFilesDeleted: "Project files and job record deleted; backups retained",
 };
 
 const dictionaries: Record<Language, Record<TranslationKey, string>> = {

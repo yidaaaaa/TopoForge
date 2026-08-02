@@ -67,6 +67,37 @@ const completedJob = {
   artifacts: [],
 };
 
+const cancelledJob = {
+  ...completedJob,
+  job_id: "a".repeat(32),
+  state: "cancelled",
+  workspace_dir: "/tmp/workspaces/cancelled-project",
+  progress_fraction: 0.4,
+  current_stage: "build",
+  ready_stages: ["source"],
+  exit_code: -15,
+  cancellation_requested: true,
+  summary: null,
+};
+
+const failedJob = {
+  ...completedJob,
+  job_id: "b".repeat(32),
+  state: "failed",
+  workspace_dir: "/tmp/workspaces/failed-project",
+  progress_fraction: 0.2,
+  current_stage: "source",
+  ready_stages: [],
+  exit_code: 2,
+  error: {
+    code: "workflow-execution-failed",
+    message: "fixture failure",
+    corrective_action: "review fixture",
+    exception_type: "ConfigurationError",
+  },
+  summary: null,
+};
+
 const backupRecord = {
   backup_id: "e".repeat(64),
   workflow_id: "workflow-phase10",
@@ -308,6 +339,80 @@ describe("TopoForge bilingual workspace", () => {
       "data-selected-tile",
       "tile-r0000-c0000",
     );
+  });
+
+  it("removes terminal job records and optionally deletes project files", async () => {
+    let jobs = [cancelledJob, failedJob];
+    const deletionBodies: unknown[] = [];
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path.endsWith("/api/v1/health")) {
+          return response(health);
+        }
+        if (init?.method === "DELETE") {
+          const jobId = path.split("/").at(-1)!;
+          const body = JSON.parse(String(init.body)) as {
+            confirm_job_id: string;
+            delete_workspace: boolean;
+          };
+          deletionBodies.push(body);
+          expect(body.confirm_job_id).toBe(jobId);
+          jobs = jobs.filter((job) => job.job_id !== jobId);
+          return response({
+            schema_version: "topoforge-web-job-delete-v1",
+            job_id: jobId,
+            previous_state: jobId === cancelledJob.job_id ? "cancelled" : "failed",
+            workspace:
+              jobId === cancelledJob.job_id
+                ? cancelledJob.workspace_dir
+                : failedJob.workspace_dir,
+            workspace_existed: true,
+            workspace_removed: body.delete_workspace,
+            workspace_retained: !body.delete_workspace,
+            deleted_job_record_bytes: 2048,
+            deleted_workspace_bytes: body.delete_workspace ? 8192 : 0,
+            reclaimed_bytes: body.delete_workspace ? 10240 : 2048,
+            backups_preserved: true,
+            required_checks_passed: true,
+          });
+        }
+        if (path.endsWith("/api/v1/jobs")) {
+          return response(jobs);
+        }
+        return response({});
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<App />);
+    const removeRecord = await screen.findByRole("button", {
+      name: "移除任务记录",
+    });
+    fireEvent.click(removeRecord);
+    await waitFor(() =>
+      expect(screen.getByText("任务记录已移除，项目文件已保留")).toBeInTheDocument(),
+    );
+    expect(confirm).toHaveBeenCalledWith(
+      "仅从任务列表移除“cancelled-project”？工作区文件和备份会保留。",
+    );
+    expect(
+      await screen.findByRole("heading", { name: "failed-project" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除项目文件" }));
+    await waitFor(() =>
+      expect(screen.getByText("项目文件和任务记录已删除，备份已保留")).toBeInTheDocument(),
+    );
+    expect(confirm).toHaveBeenLastCalledWith(
+      "永久删除“failed-project”的任务记录和工作区文件？备份会保留。此操作不可撤销。",
+    );
+    expect(deletionBodies).toEqual([
+      { confirm_job_id: cancelledJob.job_id, delete_workspace: false },
+      { confirm_job_id: failedJob.job_id, delete_workspace: true },
+    ]);
+    expect(screen.getByText("暂无任务")).toBeInTheDocument();
   });
 
   it("creates backups, confirms cleanup, and restores a completed project", async () => {

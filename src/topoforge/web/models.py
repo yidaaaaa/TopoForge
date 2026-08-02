@@ -139,6 +139,34 @@ class JobMaintenanceOverview(BaseModel):
     required_checks_passed: bool
 
 
+class JobDeleteRequest(BaseModel):
+    """Exact job-id confirmation and workspace policy for terminal job deletion."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    confirm_job_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    delete_workspace: bool = False
+
+
+class JobDeleteResult(BaseModel):
+    """Measured result of removing one terminal job record and optional workspace."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: str = "topoforge-web-job-delete-v1"
+    job_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    previous_state: JobState
+    workspace: Path
+    workspace_existed: bool
+    workspace_removed: bool
+    workspace_retained: bool
+    deleted_job_record_bytes: int = Field(ge=0)
+    deleted_workspace_bytes: int = Field(ge=0)
+    reclaimed_bytes: int = Field(ge=0)
+    backups_preserved: bool
+    required_checks_passed: bool
+
+
 class WorkflowCleanupRequest(BaseModel):
     """Exact workflow-id confirmation required before cleanup."""
 

@@ -732,3 +732,17 @@ Result: the 54,978,232-byte project SHA-256 is `11adff28363ecfcf7e6e4fccbc3f3fb1
 Command: run `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, `npm --prefix web run typecheck`, `npm --prefix web test -- --run`, `npm --prefix web run build`, `npm --prefix web run test:ui`, `uv lock --check`, and `uv run topoforge web --check` with the real AppImage and three P2S profiles.
 
 Result: Ruff `All checks passed!`; format `163 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `217 passed in 96.79s`; Vitest `22 passed`; production Web build publishes nine checksum-bound assets; Playwright `2 passed / 2 project-inapplicable skipped`; lock resolves 69 packages; `web --check` reports the four resolved Bambu paths and `required_checks_passed=true`.
+
+### Post-Phase 11 safe Web job deletion
+
+Command: implement terminal-job DELETE models, route, manager behavior, record-only removal, project-workspace removal, exact job-id confirmation, root/symlink/path/shared-workspace protection, measured reclaimed bytes, and backup preservation.
+
+Result: focused Web manager/API tests report 19 passed. Running jobs are rejected, cancelled jobs can be removed, record-only deletion preserves workspace files, shared workspaces block recursive deletion, the workspace root and symlink workspaces are rejected, project deletion removes the unshared workspace, and backup files remain byte-readable.
+
+Command: add Chinese/English task management controls, confirmation dialogs, typed DELETE requests, next-job selection, stale maintenance/map/assembly request cancellation, Vitest coverage, and Playwright deletion of only a test-created restored copy.
+
+Result: TypeScript passes; Vitest reports 23 passed. The first Playwright trace exposed old map/assembly requests returning 404 after workspace removal; AbortController integration fixes the race without hiding errors. Final Playwright reports 2 passed and 2 project-inapplicable skipped, the deleted job returns 404, its backup remains downloadable, and browser errors are empty.
+
+Command: rebuild checksum-bound Web assets; run all repository gates; validate the retained Bambu runtime; restart port 8772 with the existing outputs/local-web state; verify the live DELETE contract using a nonexistent ID.
+
+Result: Ruff and format pass for 163 files; Pyright reports 0 errors; Pytest reports 219 passed in 92.27 s; uv lock and Git whitespace pass. The production manifest contains nine assets at SHA-256 281b2fb7149cf277fe6688907f0d329aea87d671bb5b3111599b276b85f3edb4. `web --check` passes, the live nonexistent-ID DELETE returns 404, and all 7 existing user jobs remain present. No real terrain source, model, slice, Bambu project, backup, or user workspace was deleted.

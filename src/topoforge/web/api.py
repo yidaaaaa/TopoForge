@@ -33,6 +33,8 @@ from topoforge.web.map_tiles import (
 from topoforge.web.models import (
     FileListing,
     JobCreateRequest,
+    JobDeleteRequest,
+    JobDeleteResult,
     JobMaintenanceOverview,
     JobRecord,
     WebAppConfig,
@@ -246,6 +248,19 @@ def create_app(
     def cancel_job(job_id: str) -> JobRecord:
         try:
             return jobs.cancel(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+
+    @app.delete(
+        "/api/v1/jobs/{job_id}",
+        response_model=JobDeleteResult,
+    )
+    def delete_job(
+        job_id: str,
+        request: JobDeleteRequest,
+    ) -> JobDeleteResult:
+        try:
+            return jobs.delete(job_id, request)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="job not found") from exc
 

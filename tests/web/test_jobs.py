@@ -9,7 +9,7 @@ import pytest
 
 from topoforge.exceptions import ConfigurationError
 from topoforge.web.jobs import LocalJobManager, expected_workflow_stages
-from topoforge.web.models import JobRecord, JobState, WebAppConfig
+from topoforge.web.models import JobDeleteRequest, JobRecord, JobState, WebAppConfig, utc_now
 from topoforge.web.server import is_loopback_host
 from topoforge.workflow import WorkflowStage
 
@@ -223,6 +223,143 @@ def test_running_and_queued_jobs_cancel_without_touching_other_records(
         assert cancelled.state is JobState.CANCELLED
         assert cancelled.cancellation_requested is True
         assert manager.get(queued.job_id).state is JobState.CANCELLED
+    finally:
+        manager.close()
+
+
+def test_terminal_job_deletion_protects_shared_workspaces_and_backups(
+    web_config: WebAppConfig,
+) -> None:
+    manager = SlowJobManager(web_config)
+    manager.start()
+    try:
+        running = manager.submit(make_job_request(web_config, name="shared-delete"))
+        queued = manager.submit(make_job_request(web_config, name="shared-delete"))
+        workspace = running.workspace_dir
+        assert queued.workspace_dir == workspace
+        workspace.mkdir(parents=True, exist_ok=True)
+        marker = workspace / "retained-artifact.bin"
+        marker.write_bytes(b"workspace evidence")
+        backup_marker = manager.backups_dir / "retained-backup.tar.gz"
+        backup_marker.write_bytes(b"backup evidence")
+
+        with pytest.raises(ConfigurationError, match="cancel the selected job first"):
+            manager.delete(
+                running.job_id,
+                JobDeleteRequest(confirm_job_id=running.job_id),
+            )
+
+        manager.cancel(queued.job_id)
+        manager.cancel(running.job_id)
+        assert wait_for_terminal(manager, running.job_id, timeout_seconds=15).state is (
+            JobState.CANCELLED
+        )
+
+        with pytest.raises(ConfigurationError, match="confirmation does not match"):
+            manager.delete(
+                running.job_id,
+                JobDeleteRequest(confirm_job_id="0" * 32),
+            )
+        with pytest.raises(ConfigurationError, match="referenced by other jobs"):
+            manager.delete(
+                running.job_id,
+                JobDeleteRequest(
+                    confirm_job_id=running.job_id,
+                    delete_workspace=True,
+                ),
+            )
+
+        record_only = manager.delete(
+            running.job_id,
+            JobDeleteRequest(confirm_job_id=running.job_id),
+        )
+        assert record_only.previous_state is JobState.CANCELLED
+        assert record_only.workspace_removed is False
+        assert record_only.workspace_retained is True
+        assert record_only.deleted_job_record_bytes > 0
+        assert record_only.deleted_workspace_bytes == 0
+        assert record_only.reclaimed_bytes == record_only.deleted_job_record_bytes
+        assert record_only.backups_preserved is True
+        assert record_only.required_checks_passed is True
+        assert marker.read_bytes() == b"workspace evidence"
+        with pytest.raises(KeyError):
+            manager.get(running.job_id)
+
+        removed = manager.delete(
+            queued.job_id,
+            JobDeleteRequest(
+                confirm_job_id=queued.job_id,
+                delete_workspace=True,
+            ),
+        )
+        assert removed.previous_state is JobState.CANCELLED
+        assert removed.workspace_existed is True
+        assert removed.workspace_removed is True
+        assert removed.workspace_retained is False
+        assert removed.deleted_job_record_bytes > 0
+        assert removed.deleted_workspace_bytes >= len(b"workspace evidence")
+        assert removed.reclaimed_bytes == (
+            removed.deleted_job_record_bytes + removed.deleted_workspace_bytes
+        )
+        assert removed.backups_preserved is True
+        assert removed.required_checks_passed is True
+        assert not workspace.exists()
+        assert backup_marker.read_bytes() == b"backup evidence"
+        with pytest.raises(KeyError):
+            manager.get(queued.job_id)
+    finally:
+        manager.close()
+
+
+def test_workspace_deletion_rejects_root_and_symlink_records(
+    web_config: WebAppConfig,
+    tmp_path: Path,
+) -> None:
+    manager = LocalJobManager(web_config)
+    manager.start()
+    try:
+        job_id = "c" * 32
+        now = utc_now()
+        root_record = JobRecord(
+            job_id=job_id,
+            created_at=now,
+            updated_at=now,
+            state=JobState.CANCELLED,
+            workspace_dir=web_config.workspace_root.resolve(),
+            expected_stages=(),
+            progress_fraction=0.0,
+            cancellation_requested=True,
+        )
+        manager._write_record(root_record)
+        with pytest.raises(ConfigurationError, match="outside the configured workspace root"):
+            manager.delete(
+                job_id,
+                JobDeleteRequest(confirm_job_id=job_id, delete_workspace=True),
+            )
+
+        outside = tmp_path / "outside-workspace"
+        outside.mkdir()
+        outside_marker = outside / "must-survive.bin"
+        outside_marker.write_bytes(b"outside evidence")
+        linked_workspace = web_config.workspace_root / "linked-workspace"
+        linked_workspace.symlink_to(outside, target_is_directory=True)
+        manager._write_record(root_record.model_copy(update={"workspace_dir": linked_workspace}))
+        with pytest.raises(ConfigurationError, match="workspace is a symlink"):
+            manager.delete(
+                job_id,
+                JobDeleteRequest(confirm_job_id=job_id, delete_workspace=True),
+            )
+
+        record_only = manager.delete(
+            job_id,
+            JobDeleteRequest(confirm_job_id=job_id),
+        )
+        assert record_only.workspace_removed is False
+        assert record_only.workspace_retained is True
+        assert outside_marker.read_bytes() == b"outside evidence"
+        assert linked_workspace.is_symlink()
+        with pytest.raises(KeyError):
+            manager.get(job_id)
     finally:
         manager.close()
 

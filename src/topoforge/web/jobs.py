@@ -7,6 +7,7 @@ import itertools
 import json
 import mimetypes
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -35,6 +36,8 @@ from topoforge.web.models import (
     FileListing,
     JobArtifact,
     JobCreateRequest,
+    JobDeleteRequest,
+    JobDeleteResult,
     JobError,
     JobEvent,
     JobMaintenanceOverview,
@@ -136,6 +139,17 @@ def _progress(expected: tuple[WorkflowStage, ...], ready: tuple[WorkflowStage, .
         return 0.0
     complete = sum(stage in ready for stage in expected)
     return min(0.99, complete / len(expected))
+
+
+def _path_size_bytes(path: Path) -> int:
+    """Measure one path without following symlinks outside its tree."""
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return 0
+    if path.is_symlink() or not path.is_dir():
+        return metadata.st_size
+    return metadata.st_size + sum(_path_size_bytes(child) for child in path.iterdir())
 
 
 class LocalJobManager:
@@ -793,6 +807,94 @@ class LocalJobManager:
                     daemon=True,
                 ).start()
             return updated
+
+    def delete(
+        self,
+        job_id: str,
+        request: JobDeleteRequest,
+    ) -> JobDeleteResult:
+        """Remove one terminal job record and optionally its unshared workspace."""
+        with self._lock:
+            self.refresh()
+            record = self._read_record(job_id)
+            if request.confirm_job_id != job_id:
+                raise ConfigurationError(
+                    "job deletion confirmation does not match the selected job"
+                )
+            terminal_states = {
+                JobState.CANCELLED,
+                JobState.COMPLETED,
+                JobState.FAILED,
+            }
+            if record.state not in terminal_states:
+                raise ConfigurationError(
+                    "only cancelled, failed, or completed jobs can be deleted; "
+                    "cancel the selected job first"
+                )
+
+            workspace_path = record.workspace_dir.expanduser()
+            workspace = workspace_path.resolve()
+            workspace_existed = workspace_path.exists() or workspace_path.is_symlink()
+            workspace_bytes = 0
+            if request.delete_workspace:
+                workspace_root = self.config.workspace_root.resolve()
+                if workspace_path.is_symlink():
+                    raise ConfigurationError(
+                        "job workspace is a symlink and will not be recursively deleted"
+                    )
+                if workspace == workspace_root or workspace_root not in workspace.parents:
+                    raise ConfigurationError(
+                        "job workspace is outside the configured workspace root"
+                    )
+                shared = tuple(
+                    item.job_id
+                    for item in self._all_records()
+                    if item.job_id != job_id
+                    and item.workspace_dir.expanduser().resolve() == workspace
+                )
+                if shared:
+                    raise ConfigurationError(
+                        "job workspace is still referenced by other jobs: "
+                        + ", ".join(shared)
+                        + ". Remove only this task record or delete the other task "
+                        "records first."
+                    )
+                workspace_bytes = _path_size_bytes(workspace_path)
+
+            job_dir = self._job_dir(job_id)
+            job_record_bytes = _path_size_bytes(job_dir)
+            workspace_removed = False
+            if request.delete_workspace and workspace_existed:
+                if workspace_path.is_dir():
+                    shutil.rmtree(workspace_path)
+                else:
+                    workspace_path.unlink()
+                workspace_removed = True
+            shutil.rmtree(job_dir)
+            self._processes.pop(job_id, None)
+
+            workspace_retained = workspace_path.exists() or workspace_path.is_symlink()
+            required_checks_passed = not job_dir.exists() and (
+                not request.delete_workspace or not workspace_retained
+            )
+            if not required_checks_passed:
+                raise ConfigurationError(
+                    "job deletion finished without satisfying filesystem checks"
+                )
+            deleted_workspace_bytes = workspace_bytes if workspace_removed else 0
+            return JobDeleteResult(
+                job_id=job_id,
+                previous_state=record.state,
+                workspace=workspace,
+                workspace_existed=workspace_existed,
+                workspace_removed=workspace_removed,
+                workspace_retained=workspace_retained,
+                deleted_job_record_bytes=job_record_bytes,
+                deleted_workspace_bytes=deleted_workspace_bytes,
+                reclaimed_bytes=job_record_bytes + deleted_workspace_bytes,
+                backups_preserved=True,
+                required_checks_passed=True,
+            )
 
     @staticmethod
     def _terminate_process(pid: int) -> None:

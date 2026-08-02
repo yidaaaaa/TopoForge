@@ -335,3 +335,32 @@ def test_completed_job_maintenance_routes_backup_restore_and_cleanup(
         assert cleaned.status_code == 200
         assert cleaned.json()["removed_paths"] == ["stages/99-unused/api-stale"]
         assert not stale.exists()
+
+        rejected_delete = client.request(
+            "DELETE",
+            f"/api/v1/jobs/{job_id}",
+            json={"confirm_job_id": "0" * 32, "delete_workspace": True},
+        )
+        assert rejected_delete.status_code == 422
+        assert workspace.is_dir()
+
+        deleted = client.request(
+            "DELETE",
+            f"/api/v1/jobs/{job_id}",
+            json={"confirm_job_id": job_id, "delete_workspace": True},
+        )
+        assert deleted.status_code == 200
+        deletion = deleted.json()
+        assert deletion["previous_state"] == "completed"
+        assert deletion["workspace_removed"] is True
+        assert deletion["workspace_retained"] is False
+        assert deletion["deleted_job_record_bytes"] > 0
+        assert deletion["deleted_workspace_bytes"] > 0
+        assert deletion["backups_preserved"] is True
+        assert deletion["required_checks_passed"] is True
+        assert not workspace.exists()
+        assert client.get(f"/api/v1/jobs/{job_id}").status_code == 404
+
+        retained_backup = client.get(f"/api/v1/backups/{backup_id}")
+        assert retained_backup.status_code == 200
+        assert retained_backup.content == download.content

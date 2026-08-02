@@ -333,7 +333,19 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   await cleanupButton.click();
   await expect(page.getByText("旧阶段已清理")).toBeVisible();
   await expect(cleanupButton).toBeDisabled();
-  await backupRow.getByRole("button", { name: "恢复副本" }).click();
+  const [restoreResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/v1/backups/${backup.backup_id}/restore`) &&
+        response.request().method() === "POST",
+    ),
+    backupRow.getByRole("button", { name: "恢复副本" }).click(),
+  ]);
+  expect(restoreResponse.ok()).toBe(true);
+  const restoredJob = (await restoreResponse.json()) as {
+    job_id: string;
+    workspace_dir: string;
+  };
   await expect(page.getByText("备份已恢复为新任务")).toBeVisible();
   await expect(
     page.getByRole("heading", {
@@ -457,6 +469,32 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   await expect(page.getByText("Local terrain manufacturing workspace")).toBeVisible();
   await expect(page.getByRole("button", { name: "Start build" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Assembly" })).toBeVisible();
+
+  page.once("dialog", (dialog) => dialog.accept());
+  const [deleteResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/v1/jobs/${restoredJob.job_id}`) &&
+        response.request().method() === "DELETE",
+    ),
+    page.getByRole("button", { name: "Delete project files" }).click(),
+  ]);
+  expect(deleteResponse.ok()).toBe(true);
+  const deletion = (await deleteResponse.json()) as {
+    workspace_removed: boolean;
+    backups_preserved: boolean;
+    required_checks_passed: boolean;
+  };
+  expect(deletion.workspace_removed).toBe(true);
+  expect(deletion.backups_preserved).toBe(true);
+  expect(deletion.required_checks_passed).toBe(true);
+  await expect(
+    page.getByText("Project files and job record deleted; backups retained"),
+  ).toBeVisible();
+  expect((await page.request.get(`/api/v1/jobs/${restoredJob.job_id}`)).status()).toBe(404);
+  expect((await page.request.get(backup.download_url)).ok()).toBe(true);
+  expect((await page.request.get("/api/v1/jobs")).ok()).toBe(true);
+  expect(restoredJob.workspace_dir).toContain("-restored-");
   expect(browserErrors).toEqual([]);
 });
 

@@ -246,3 +246,15 @@ The local API and Web plan is complete and visually stabilized in 0.8.1: typed d
 7. [x] Synchronize 0.10.0 versions, build nine checksum-bound Web assets, run 210 Python tests, 18 Vitest tests, 2 applicable Playwright scenarios, reference definitions, and deterministic benchmarks.
 8. [x] Produce local lifecycle, release, benchmark, reference, screenshot, and summary evidence without real terrain download or rebuild.
 9. [x] Commit/tag v0.10.0, independently verify patch/rollback, push main/tag, and require successful GitHub Actions plus v0.9.0/v0.10.0 Release assets.
+
+## Post-Phase 11 - safe local Web job deletion
+
+1. [x] Add typed terminal-job deletion with exact job-id confirmation.
+2. [x] Support record-only removal while retaining the workspace and backups.
+3. [x] Support project-file deletion while retaining backups.
+4. [x] Reject queued/running/cancelling jobs, workspace roots, symlinks, escaped paths, and shared workspaces.
+5. [x] Add Chinese/English terminal-job management controls and confirmation dialogs.
+6. [x] Abort stale maintenance, map, and assembly requests before deleting a selected workspace.
+7. [x] Verify manager/API/Vitest/Playwright behavior, including deletion of only a test-created restored copy.
+8. [x] Rebuild nine checksum-bound assets and restart the retained 8772 service without deleting existing jobs.
+9. [x] Publish `artifacts/verification/topoforge-main-web-job-deletion.json` and create a reversible local commit.
