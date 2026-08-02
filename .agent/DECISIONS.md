@@ -312,3 +312,12 @@
 - **Decision:** CI reads the version from uv project metadata. A dedicated contents-write workflow selects the pushed tag or the newest reachable unpublished tag on main, checks out that target, requires tag/package identity, builds Web assets, creates two fixed-epoch package sets, runs isolated installed verification, writes and checks SHA256SUMS, and publishes the sdist, wheel, verification JSON, and checksum file. Existing releases cause a clean no-op.
 - **Alternatives:** Manually edit each workflow version; publish archives from main instead of the tag; upload unverified local files; overwrite existing Release assets; leave historical v0.9.0 without a Release page.
 - **Impact:** Release identity is no longer duplicated in YAML. The first Phase 11 main push can bootstrap v0.9.0, while v0.10.0 tag publication uses the same verified generic path.
+
+
+## ADR-041 — Tile counts use bounded boundary tolerance and versioned cache identity
+
+- **Date:** 2026-08-02
+- **Context:** Automatic aspect calculations preserve real raster scale and can differ from a nominal tile limit by fractions of a micron. Exact `ceil(model_size / tile_limit)` turned 180.0001526 mm into two rows, creating unnecessary seams and connectors. Changing the planner without changing the content-addressed stage identity would conflict with retained layouts.
+- **Decision:** Treat an axis size within 0.001 mm of an integer multiple of the tile limit as that boundary count. Preserve the exact model dimensions, use the tolerance only for tile-count selection, include `topoforge-tile-layout-planner-v2` in the layout-stage identity, and accept both current and pre-tolerance deterministic v1 layouts during strict reopen.
+- **Alternatives:** Round or clamp model dimensions; silently delete old stages; bump every tiling artifact schema and invalidate all non-edge evidence; require users to increase tile limits manually.
+- **Impact:** Sub-micron numerical drift no longer changes assembly topology, material overages still partition, old evidence remains readable, and reruns create a new layout stage without overwriting retained data.

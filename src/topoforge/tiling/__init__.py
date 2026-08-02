@@ -27,6 +27,7 @@ from topoforge.tiling.extract import (
     verify_tile_set,
 )
 from topoforge.tiling.layout import (
+    TILE_LAYOUT_ALGORITHM_VERSION,
     GridWindow,
     PhysicalBoundsMm,
     TerrainTile,
@@ -63,6 +64,7 @@ from topoforge.tiling.slicing import (
 )
 
 __all__ = [
+    "TILE_LAYOUT_ALGORITHM_VERSION",
     "AssemblyManifest",
     "AssemblyTileRecord",
     "ConnectorFitMeasurement",

@@ -25,6 +25,7 @@ from topoforge.overlays import (
 )
 from topoforge.providers import ElevationProvider, ProviderDescriptor
 from topoforge.tiling import (
+    TILE_LAYOUT_ALGORITHM_VERSION,
     TileLayoutConfig,
     canonical_tile_layout_bytes,
     extract_tile_set,
@@ -854,6 +855,7 @@ def run_local_workflow(
         layout_identity = _identity(
             {
                 "source_build_manifest_sha256": sha256_file(build_manifest),
+                "layout_algorithm_version": TILE_LAYOUT_ALGORITHM_VERSION,
                 "layout": layout_config.model_dump(mode="json"),
             }
         )

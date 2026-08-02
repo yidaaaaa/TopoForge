@@ -10,6 +10,7 @@ from topoforge.tiling import (
     read_tile_layout,
     write_tile_layout,
 )
+from topoforge.tiling import layout as layout_module
 
 
 def _config(**updates: object) -> TileLayoutConfig:
@@ -120,6 +121,50 @@ def test_uneven_cells_are_distributed_from_north_then_west_deterministically() -
         tile.core_cell_window.column_stop - tile.core_cell_window.column_start
         for tile in north_rows
     ] == [6, 5, 5]
+
+
+@pytest.mark.parametrize(
+    ("model_depth_mm", "maximum_tile_depth_mm", "expected_rows"),
+    [
+        (180.00015258789062, 180.0, 1),
+        (360.0001525878906, 180.0, 2),
+        (180.0011, 180.0, 2),
+    ],
+)
+def test_layout_ignores_only_micron_scale_tile_boundary_drift(
+    model_depth_mm: float,
+    maximum_tile_depth_mm: float,
+    expected_rows: int,
+) -> None:
+    layout = plan_tile_layout(
+        _config(
+            source_grid_shape=(439, 439),
+            model_width_mm=180.0,
+            model_depth_mm=model_depth_mm,
+            maximum_tile_width_mm=180.0,
+            maximum_tile_depth_mm=maximum_tile_depth_mm,
+        )
+    )
+
+    assert layout.model_size_mm == (180.0, model_depth_mm)
+    assert layout.tile_grid_shape == (expected_rows, 1)
+    assert layout.tile_count == expected_rows
+
+
+def test_layout_reopen_accepts_legacy_pre_tolerance_boundary(tmp_path: Path) -> None:
+    config = _config(
+        source_grid_shape=(439, 439),
+        model_width_mm=180.0,
+        model_depth_mm=180.00015258789062,
+        maximum_tile_width_mm=180.0,
+        maximum_tile_depth_mm=180.0,
+    )
+    legacy = layout_module._plan_tile_layout(config, tile_size_tolerance_mm=0.0)
+    path = tmp_path / "legacy-tile-layout.json"
+    path.write_bytes(canonical_tile_layout_bytes(legacy))
+
+    assert legacy.tile_grid_shape == (2, 1)
+    assert read_tile_layout(path) == legacy
 
 
 def test_layout_write_is_canonical_strict_and_refuses_overwrite(tmp_path: Path) -> None:

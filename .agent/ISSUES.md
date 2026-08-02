@@ -379,3 +379,20 @@
 - **Reproduction:** Push main and v0.10.0 close together. Per-ref concurrency allows both jobs to observe no Release; main can publish the current tag while the tag job fails on an existing Release. The first bootstrap correction then fails before setup-python because Ubuntu 22.04 system Python lacks tomllib.
 - **Expected behavior:** Main publishes only the prior missing tag, tag publication is serialized, and version parsing uses the declared Python 3.12 toolchain.
 - **Resolution:** Use one release-publication concurrency group, skip the current project tag during main bootstrap selection, stop after the newest non-current tag, and run setup-python before tomllib. Final bootstrap run 30752306731 succeeds and publishes v0.9.0; final main CI 30752306723 succeeds. The earlier failed runs remain visible as the reproduced evidence and have no unresolved effect.
+
+
+## TF-046 — Auto-aspect floating drift created an unnecessary tile row
+
+- **Severity:** Medium
+- **Status:** Resolved on main after 0.10.0
+- **Reproduction:** Build the retained 439 x 439 Great Trango GLO-30 DEM at 180 mm width with automatic depth and a 180 mm maximum tile depth. The measured model depth is 180.00015258789062 mm, so exact `ceil()` planning produced a 2 x 1 layout and five connectors for a 0.0001526 mm overflow.
+- **Expected behavior:** Numerical drift below the manufacturing geometry tolerance does not create an extra tile, while dimensions that materially exceed the limit still partition.
+- **Resolution:** Added a 0.001 mm tile-boundary tolerance, integer-multiple and over-tolerance regressions, a planner-v2 cache identity, and strict legacy-layout reopen. The same real source now produces 1 x 1, one tile, zero connectors, unchanged terrain/model metrics, and exit code 0.
+
+## TF-047 — Persistent Playwright backup state made restore selection ambiguous
+
+- **Severity:** Low
+- **Status:** Resolved on main after 0.10.0
+- **Reproduction:** Run the Phase 11 Playwright lifecycle scenario repeatedly without deleting `/tmp/topoforge-playwright-state`; multiple backup rows share the same workflow ID and the global restore-button selector becomes ambiguous or selects an older restore target.
+- **Expected behavior:** Browser acceptance remains valid with retained historical jobs and backups, matching the supported local lifecycle UI.
+- **Resolution:** Capture the exact backup POST response, assert its backup ID is listed, and scope restore to that checksum-bound backup row. The retained-state Playwright rerun reports 2 passed and 2 project-inapplicable skipped.

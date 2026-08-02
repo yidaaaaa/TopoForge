@@ -168,7 +168,22 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   const cleanupButton = page.getByRole("button", { name: "清理旧阶段" });
   await expect(backupButton).toBeEnabled();
   await expect(cleanupButton).toBeEnabled();
-  await backupButton.click();
+  const [backupResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/v1/jobs/${completedJob.job_id}/backup`) &&
+        response.request().method() === "POST",
+    ),
+    backupButton.click(),
+  ]);
+  expect(backupResponse.ok()).toBe(true);
+  const backup = (await backupResponse.json()) as {
+    backup_id: string;
+    workflow_id: string;
+    archive_sha256: string;
+    download_url: string;
+  };
+  expect(backup.workflow_id).toBe(completedJob.summary!.workflow_id);
   await expect(page.getByText("备份已校验")).toBeVisible();
   const backupsResponse = await page.request.get("/api/v1/backups");
   expect(backupsResponse.ok()).toBe(true);
@@ -178,25 +193,27 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
     archive_sha256: string;
     download_url: string;
   }>;
-  const backup = backups.find(
-    (candidate) => candidate.workflow_id === completedJob.summary!.workflow_id,
+  expect(backups.some((candidate) => candidate.backup_id === backup.backup_id)).toBe(
+    true,
   );
-  expect(backup).toBeDefined();
-  await expect(page.getByText(backup!.backup_id.slice(0, 12))).toBeVisible();
-  const download = await page.request.get(backup!.download_url);
+  const backupRow = page.locator(".backup-row", {
+    hasText: backup.backup_id.slice(0, 12),
+  });
+  await expect(backupRow).toBeVisible();
+  const download = await page.request.get(backup.download_url);
   expect(download.ok()).toBe(true);
   expect(download.headers()["x-topoforge-backup-sha256"]).toBe(
-    backup!.archive_sha256,
+    backup.archive_sha256,
   );
   page.once("dialog", (dialog) => dialog.accept());
   await cleanupButton.click();
   await expect(page.getByText("旧阶段已清理")).toBeVisible();
   await expect(cleanupButton).toBeDisabled();
-  await page.getByRole("button", { name: "恢复副本" }).click();
+  await backupRow.getByRole("button", { name: "恢复副本" }).click();
   await expect(page.getByText("备份已恢复为新任务")).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: `${basename(completedJob.workspace_dir)}-restored-${backup!.backup_id.slice(0, 8)}`,
+      name: `${basename(completedJob.workspace_dir)}-restored-${backup.backup_id.slice(0, 8)}`,
     }),
   ).toBeVisible();
   const mapCanvas = page.locator(".maplibregl-canvas");

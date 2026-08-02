@@ -22,6 +22,18 @@ The default URL is `http://127.0.0.1:8765/`. `--check` reopens the bundled asset
 verifies every production asset SHA-256 and byte size, and reports the Chinese/English
 language and React/MapLibre/Three.js framework contracts without starting a listener.
 
+## First local build
+
+1. Start the loopback service with a dedicated state directory, workspace root, and one or more explicit input roots.
+2. Select `Local DEM`, browse to an existing GeoTIFF, and choose a unique workspace name.
+3. Keep `Print aware` and `Adapt` for the first build. The defaults are 180 mm width, automatic depth, 45 mm maximum height, 3 mm base, 180 mm tile limits, one overlap cell, and software slicing disabled.
+4. Select `Start build` and follow the durable job in the results panel. Processed terrain map layers, the 3D model, assembly, metrics, and downloads appear after the job reaches `Completed`. Before completion, a local-DEM map intentionally shows only the offline geographic reference background.
+5. Open `Map` for terrain/elevation/hillshade, `3D model` for the whole GLB, and `Assembly` for physical tile layout and per-tile 3D. Download `model.3mf` or `model.stl` from the artifact list.
+
+The online basemap toggle changes geographic context only; it does not change or download the terrain source. Bbox and center-radius sources use the provider/cache workflow and may require network access when the requested data is not already cached. File browsing remains limited to the configured `--input-root` values.
+
+Tile planning treats model dimensions within 0.001 mm of an integer tile-limit boundary as that boundary count. This prevents automatic-aspect floating-point drift from creating a visually surprising extra row or column while preserving the exact model dimensions and still partitioning material overages.
+
 ## Interface
 
 The language switch in the header changes the complete interface between `zh-CN` and

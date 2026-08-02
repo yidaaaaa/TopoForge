@@ -15,6 +15,8 @@ from topoforge.exceptions import ConfigurationError
 
 _TILE_SCHEMA_VERSION = "topoforge-tile-layout-v1"
 _TILE_ID_WIDTH = 4
+_TILE_SIZE_TOLERANCE_MM = 0.001
+TILE_LAYOUT_ALGORITHM_VERSION = "topoforge-tile-layout-planner-v2"
 
 
 class TileLayoutConfig(BaseModel):
@@ -164,6 +166,24 @@ def _partition_cells(cell_count: int, part_count: int) -> list[tuple[int, int]]:
     return ranges
 
 
+def _tile_count_for_axis(
+    model_size_mm: float,
+    maximum_tile_size_mm: float,
+    *,
+    tolerance_mm: float,
+) -> int:
+    quotient = model_size_mm / maximum_tile_size_mm
+    nearest_boundary = round(quotient)
+    if nearest_boundary >= 1 and math.isclose(
+        model_size_mm,
+        nearest_boundary * maximum_tile_size_mm,
+        rel_tol=0.0,
+        abs_tol=tolerance_mm,
+    ):
+        return nearest_boundary
+    return max(1, math.ceil(quotient))
+
+
 def _sample_window(
     core_row_start: int,
     core_row_stop: int,
@@ -182,13 +202,24 @@ def _sample_window(
     )
 
 
-def plan_tile_layout(config: TileLayoutConfig) -> TileLayout:
-    """Partition processed grid cells into stable north-to-south/west-to-east tiles."""
+def _plan_tile_layout(
+    config: TileLayoutConfig,
+    *,
+    tile_size_tolerance_mm: float,
+) -> TileLayout:
     total_rows, total_columns = config.source_grid_shape
     row_cells = total_rows - 1
     column_cells = total_columns - 1
-    tile_rows = max(1, math.ceil(config.model_depth_mm / config.maximum_tile_depth_mm))
-    tile_columns = max(1, math.ceil(config.model_width_mm / config.maximum_tile_width_mm))
+    tile_rows = _tile_count_for_axis(
+        config.model_depth_mm,
+        config.maximum_tile_depth_mm,
+        tolerance_mm=tile_size_tolerance_mm,
+    )
+    tile_columns = _tile_count_for_axis(
+        config.model_width_mm,
+        config.maximum_tile_width_mm,
+        tolerance_mm=tile_size_tolerance_mm,
+    )
     row_ranges = _partition_cells(row_cells, tile_rows)
     column_ranges = _partition_cells(column_cells, tile_columns)
     grid_shape = (tile_rows, tile_columns)
@@ -263,6 +294,14 @@ def plan_tile_layout(config: TileLayoutConfig) -> TileLayout:
     )
 
 
+def plan_tile_layout(config: TileLayoutConfig) -> TileLayout:
+    """Partition processed grid cells into stable north-to-south/west-to-east tiles."""
+    return _plan_tile_layout(
+        config,
+        tile_size_tolerance_mm=_TILE_SIZE_TOLERANCE_MM,
+    )
+
+
 def canonical_tile_layout_bytes(layout: TileLayout) -> bytes:
     """Serialize a tile layout with stable key ordering and separators."""
     return (
@@ -289,7 +328,11 @@ def read_tile_layout(path: Path) -> TileLayout:
     )
     expected = plan_tile_layout(config)
     if layout != expected:
-        raise ConfigurationError("tile layout content does not match its deterministic v1 identity")
+        legacy = _plan_tile_layout(config, tile_size_tolerance_mm=0.0)
+        if layout != legacy:
+            raise ConfigurationError(
+                "tile layout content does not match its deterministic v1 identity"
+            )
     return layout
 
 

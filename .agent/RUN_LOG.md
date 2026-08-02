@@ -639,3 +639,22 @@ Result: the race and Python 3.10 failure are reproduced rather than hidden. Fina
 Command: download all eight GitHub Release assets and run each published SHA256SUMS, then parse both verification JSON files.
 
 Result: every asset reports OK. v0.9.0 publishes the retained final 0.9.0 package hashes 489a7bf48f692a5c77a135b2db24a5d2f4df64b1ecaff2a19902af5e002df4de and 0518d22feed14fe3a124d69d5d913db22cd341c030e137b001b2d96f12428580. v0.10.0 publishes 0c205b920e6022adc71846104576e0cdad9d0b4ac7f7b3417a76f69cea01112f and c0670dac934ee509cd8054291232ce154b36e3f53cd5998d2bd3760bb64942be. Both reports have required_checks_passed=true and byte-reproducible archives.
+
+
+### Post-Phase 11 local Web diagnosis and tile-boundary hotfix
+
+Command: replace the port 8772 Phase 11 acceptance fixture with a daily-use loopback instance rooted at outputs/local-web and expose the retained downloads directory without network acquisition.
+
+Result: health reports TopoForge 0.10.0, jobs initially empty, input browsing is constrained to downloads, the first-page browser console is clean, and Git remains clean before source changes.
+
+Command: submit the retained 439 x 439 Great Trango GLO-30 DEM through the real Web form at 180 mm width, automatic depth, print-aware sampling, adapt budgets, and slicing disabled.
+
+Result: the first job exits 0 with 22 artifacts, but its 180.00015258789062 mm depth crosses the exact 180 mm layout threshold by 0.0001526 mm and incorrectly creates a 2 x 1 layout, two tiles, and five connectors. Source/processed resolution is 29.96579087860559 m, the grid remains 439 x 439, and peak loss/shift are zero.
+
+Command: add a 0.001 mm tile-count boundary tolerance, planner-v2 layout-stage cache identity, legacy v1 strict reopen, focused boundary tests, and retained-state Playwright backup identity selection.
+
+Result: the same workspace creates a new 1 x 1 layout stage while preserving the old 2 x 1 evidence. The corrected job exits 0 with one tile and zero connectors; model dimensions, resolution, grid, peak loss, and peak shift are unchanged. Map/model/assembly WebGL palette samples are 99/28/16, center pixels are nonzero, and browser errors are empty.
+
+Command: run `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, `npm --prefix web run typecheck`, `npm --prefix web run test`, and retained-state `npm --prefix web run test:ui`.
+
+Result: Ruff passes; 163 files are formatted; Pyright reports 0 errors; Pytest reports 214 passed in 89.74 s; Vitest reports 18 passed; Playwright reports 2 passed and 2 project-inapplicable skipped. No source DEM was downloaded, modified, or replaced.

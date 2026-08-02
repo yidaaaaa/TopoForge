@@ -18,6 +18,7 @@ Updated: 2026-08-02
 - [x] Phase 9.1 — WebUI map and 3D presentation stabilization. Completed in 0.8.1 on 2026-08-02.
 - [x] Phase 10 — deterministic local processed-DEM maps and synchronized 2D/3D manufacturing assembly. Completed in 0.9.0 on 2026-08-02.
 - [x] Phase 11 — bilingual local project lifecycle and automated GitHub Releases. Completed in 0.10.0 on 2026-08-02.
+- [x] Post-Phase 11 local Web hotfix — daily-use instance diagnosis, micron-scale tile-boundary tolerance, cache-version binding, legacy layout reopen, and persistent-state Playwright identity. Completed on main 2026-08-02.
 
 ## Completed Phase 9 — bilingual local Web application
 
