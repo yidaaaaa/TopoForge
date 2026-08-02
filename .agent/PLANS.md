@@ -22,6 +22,7 @@ Updated: 2026-08-03
 - [x] Post-Phase 11 3D presentation hotfix — elevated south-facing camera, northwest relief lighting, display-only elevation colors, world-space N/E markers, reset control, and loaded-model browser regression. Completed on main 2026-08-03.
 - [x] Post-Phase 11 high-DPI 3D framing hotfix — CSS-sized WebGL canvases, stable first frame, 1.5x DPR whole-model/assembly checks, and measured terrain centering. Completed on main 2026-08-03.
 - [x] Post-Phase 11 desktop dynamic-controls hotfix — viewport-fixed desktop shell, panel-local scrolling, slicing-control expansion regression, and unchanged mobile document scrolling. Completed locally 2026-08-03.
+- [x] Post-Phase 11 Web vertical-scaling control — expose natural, fit-height, auto-perceptual, and custom core modes with bilingual controls, request binding, and dynamic-layout regression. Completed locally 2026-08-03.
 
 ## Completed Phase 9 — bilingual local Web application
 

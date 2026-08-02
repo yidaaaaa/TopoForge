@@ -345,3 +345,11 @@
 - **Decision:** At desktop widths above 940 px, fix the body to the viewport and clip the root; keep the application shell at 100dvh and preserve scrolling only inside the control and result panels. At tablet/mobile widths, retain the existing auto-height shell and natural document scrolling. Treat dynamic form expansion as an executable viewport contract.
 - **Alternatives:** Reset window.scrollY in React after each state change; remove conditional slicer settings; make the entire desktop page scroll; hide the overflow with an overlay; rely on users refreshing the page.
 - **Impact:** Slicer settings expand without moving the header, map, 3D view, or application shell. The focused control remains reachable through panel scrolling, mobile behavior is unchanged, and the contract is covered at the user-reproduced 1365 x 758 / 1.5 DPR geometry.
+
+## ADR-045 — Web vertical scaling is a typed adapter over the core policy
+
+- **Date:** 2026-08-03
+- **Context:** BuildConfig and the CLI already expose natural, fit-height, auto-perceptual, and custom vertical policies, including hard maximum-height enforcement and requested/resolved exaggeration reporting. The WebUI exposed only max_height_mm, so local users could not select the existing policy or enter a custom coefficient.
+- **Decision:** Add typed bilingual Web controls for the four existing modes. Default to auto-perceptual, reveal vertical_exaggeration only for custom mode, always submit both typed fields, and leave max_height_mm as the backend-enforced hard cap. Do not duplicate scaling calculations or promise that an invalid custom factor will be accepted.
+- **Alternatives:** Add a browser-only Z transform; expose only a free-form multiplier; replace auto-perceptual with a Web-specific algorithm; remove the hard height limit; always display an inactive coefficient input.
+- **Impact:** Local Web, CLI, provenance, validation, and manufacturing preflight use one vertical-scaling truth. Custom values such as 2.5 reach the existing core unchanged, automatic modes retain their resolved behavior, and dynamic control expansion remains covered by the desktop viewport regression.

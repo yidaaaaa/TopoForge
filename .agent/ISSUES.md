@@ -420,3 +420,11 @@
 - **Reproduction:** At a 1365 x 758 CSS viewport and 1.5 device pixel ratio, scroll the left control panel to `Run software slicing` and enable it. The added slicer selector increases root document height, the browser changes window scrollY from 0 to 185 while panel scrollTop remains 287, the header moves to top -185, and a blank white region appears below the fixed-height application.
 - **Expected behavior:** Dynamic controls expand only inside the independently scrollable configuration panel; the desktop header and center workspace remain fixed in the viewport, while the mobile layout retains natural document scrolling.
 - **Resolution:** Fix the desktop body to the viewport and clip the root at widths above 940 px, retain the existing mobile overrides, and add a 1365 x 758 / 1.5 DPR Playwright regression that expands slicing, verifies the Bambu Studio selector, requires window scrollY/header/app top to remain 0, and preserves the panel scroll position. The live 8772 instance passes the same measurement.
+
+## TF-051 — WebUI did not expose the existing vertical scaling policies
+
+- **Severity:** Medium local usability
+- **Status:** Resolved locally after 0.10.0
+- **Reproduction:** Open the local Web configuration. Maximum model height is available, but there is no control for the core vertical_scale_mode or vertical_exaggeration fields that are already supported by BuildConfig and the CLI.
+- **Expected behavior:** A local user can choose automatic perceptual scaling, natural scale, fit-to-height, or a custom exaggeration without bypassing the core maximum-height and validation contracts.
+- **Resolution:** Added typed Chinese/English mode selection, a conditional custom coefficient input, default/custom request serialization tests, language-switch tests, dynamic-layout Playwright coverage, a checksum-bound production build, and a live 8772 measurement at custom 2.5 with scrollY/header/app top all 0.

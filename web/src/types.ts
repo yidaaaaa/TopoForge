@@ -3,6 +3,11 @@ import type { Geometry } from "geojson";
 export type Language = "zh-CN" | "en";
 export type SourceMode = "local" | "bbox" | "center-radius";
 export type SamplingMode = "print-aware" | "source-preserving" | "custom";
+export type VerticalScaleMode =
+  | "natural"
+  | "fit-height"
+  | "auto-perceptual"
+  | "custom";
 export type ResourceBudgetMode = "adapt" | "strict";
 export type TerrainMode = "best-available" | "dtm" | "dsm" | "bathymetry";
 export type WorkspaceTab = "map" | "preview" | "assembly";
@@ -246,6 +251,8 @@ export interface FormState {
   modelDepthMm: number | null;
   baseThicknessMm: number;
   maxHeightMm: number;
+  verticalScaleMode: VerticalScaleMode;
+  verticalExaggeration: number;
   samplingMode: SamplingMode;
   meshSamplingMm: number;
   maxGridCells: number;

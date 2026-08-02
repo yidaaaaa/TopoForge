@@ -696,3 +696,17 @@ Result: before expansion window scrollY is 0, panel scrollTop is 287, and header
 Command: add the desktop viewport lock and Playwright regression, rebuild checksum-bound Web assets, verify the live 8772 instance, and run TypeScript, 20 Vitest tests, desktop/mobile Playwright, Ruff, format, Pyright, full Pytest, uv lock, Git whitespace, and strict Web asset checks.
 
 Result: the live instance reports scrollY 0, header top 0, app top 0, body position fixed, and a visible slicer selector after expansion. TypeScript passes; Vitest reports 20 passed; Playwright reports 2 passed and 2 project-inapplicable skipped; Ruff passes; 163 Python files are formatted; Pyright reports 0 errors; Pytest reports 214 passed in 104.01 s; uv lock, Git whitespace, and the nine-asset Web manifest pass. No DEM, terrain geometry, manufacturing artifact, provider cache, or completed workflow was modified.
+
+### Post-Phase 11 Web vertical-scaling control
+
+Command: inspect BuildConfig, scaling policy, CLI flags, and Web request serialization for existing vertical scaling support.
+
+Result: the core already supports natural, fit-height, auto-perceptual, and custom policies with a 1.0 default request coefficient, a 0.1 to 50.0 configured range, hard maximum-height enforcement, and requested/resolved reporting. Only the Web form and request adapter were missing.
+
+Command: expose the four policies in Chinese and English, reveal a numeric coefficient only for custom mode, bind vertical_scale_mode and vertical_exaggeration into build requests, and extend Vitest/Playwright coverage.
+
+Result: default requests carry auto-perceptual plus 1.0; custom requests preserve 2.5; the live 8772 instance shows the new control and measures scrollY 0, header top 0, app top 0, and body position fixed after dynamic expansion.
+
+Command: rebuild checksum-bound Web assets and run npm typecheck, 22 Vitest tests, production build, desktop/mobile Playwright, Ruff, format, Pyright, full Pytest, uv lock, Git whitespace, and strict Web asset checks.
+
+Result: TypeScript passes; Vitest reports 22 passed; Playwright reports 2 passed and 2 project-inapplicable skipped; Ruff passes; 163 Python files are formatted; Pyright reports 0 errors; Pytest reports 214 passed in 91.13 s; uv lock, Git whitespace, and the nine-asset Web manifest pass. No DEM, terrain geometry, manufacturing artifact, provider cache, or completed workflow was modified.

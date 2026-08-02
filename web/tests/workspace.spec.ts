@@ -252,13 +252,27 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   await expect(page.getByRole("button", { name: "开始构建" })).toBeVisible();
   await page.setViewportSize({ width: 1365, height: 758 });
   const controlPanel = page.locator(".control-panel");
+  const verticalScale = page.getByRole("combobox", { name: "垂直缩放" });
+  await expect(verticalScale).toHaveValue("auto-perceptual");
+  await verticalScale.selectOption("custom");
+  const verticalExaggeration = page.getByRole("spinbutton", {
+    name: "垂直夸张系数",
+  });
+  await expect(verticalExaggeration).toBeVisible();
+  await verticalExaggeration.fill("2.5");
+  await expect(verticalExaggeration).toHaveValue("2.5");
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await verticalScale.selectOption("auto-perceptual");
+  await expect(verticalExaggeration).toBeHidden();
   const slicingToggle = page.getByText("执行软件切片", { exact: true });
   await slicingToggle.scrollIntoViewIfNeeded();
   const panelScrollBeforeSlicing = await controlPanel.evaluate(
     (element) => element.scrollTop,
   );
   await slicingToggle.click();
-  await expect(controlPanel.locator("select")).toHaveValue("bambu-studio");
+  await expect(page.getByRole("combobox", { name: "切片器" })).toHaveValue(
+    "bambu-studio",
+  );
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await expect
     .poll(() =>

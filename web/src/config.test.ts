@@ -41,9 +41,29 @@ describe("bilingual configuration contracts", () => {
     expect(launch.slicing_enabled).toBe(false);
     expect(launch.build).toMatchObject({
       dem_path: "/data/dem.tif",
+      vertical_scale_mode: "auto-perceptual",
+      vertical_exaggeration: 1,
       sampling_mode: "source-preserving",
       mesh_sampling_mm: null,
       resource_budget_mode: "strict",
+    });
+  });
+
+  it("passes a custom vertical exaggeration through to the core build", () => {
+    const request = buildJobRequest(
+      {
+        ...defaultFormState,
+        workspaceName: "vertical-demo",
+        sourcePath: "/data/dem.tif",
+        verticalScaleMode: "custom",
+        verticalExaggeration: 2.5,
+      },
+      health,
+    );
+    expect(request.launch.build).toMatchObject({
+      vertical_scale_mode: "custom",
+      vertical_exaggeration: 2.5,
+      max_height_mm: 45,
     });
   });
 

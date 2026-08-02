@@ -231,6 +231,31 @@ describe("TopoForge bilingual workspace", () => {
     expect(screen.getByRole("heading", { name: "任务" })).toBeInTheDocument();
   });
 
+  it("reveals the custom vertical exaggeration control in both languages", () => {
+    render(<App />);
+    const verticalScale = screen.getByRole("combobox", { name: "垂直缩放" });
+    expect(verticalScale).toHaveValue("auto-perceptual");
+    expect(
+      screen.queryByRole("spinbutton", { name: "垂直夸张系数" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(verticalScale, { target: { value: "custom" } });
+    const exaggeration = screen.getByRole("spinbutton", {
+      name: "垂直夸张系数",
+    });
+    expect(exaggeration).toHaveValue(1);
+    fireEvent.change(exaggeration, { target: { value: "2.5" } });
+    expect(exaggeration).toHaveValue(2.5);
+
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    expect(
+      screen.getByRole("combobox", { name: "Vertical scaling" }),
+    ).toHaveValue("custom");
+    expect(
+      screen.getByRole("spinbutton", { name: "Vertical exaggeration" }),
+    ).toHaveValue(2.5);
+  });
+
   it("synchronizes selected manufacturing tiles between map and assembly", async () => {
     vi.stubGlobal(
       "fetch",

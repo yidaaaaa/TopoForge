@@ -293,6 +293,32 @@ export function BuildPanel({
             onChange={(value) => update("baseThicknessMm", value ?? 0)}
           />
         </div>
+        <label className="field">
+          <span>{t("verticalScale")}</span>
+          <select
+            value={form.verticalScaleMode}
+            onChange={(event) =>
+              update(
+                "verticalScaleMode",
+                event.target.value as FormState["verticalScaleMode"],
+              )
+            }
+          >
+            <option value="auto-perceptual">{t("verticalAuto")}</option>
+            <option value="natural">{t("verticalNatural")}</option>
+            <option value="fit-height">{t("verticalFitHeight")}</option>
+            <option value="custom">{t("verticalCustom")}</option>
+          </select>
+        </label>
+        {form.verticalScaleMode === "custom" && (
+          <NumberField
+            label={t("verticalExaggeration")}
+            value={form.verticalExaggeration}
+            min={0.1}
+            step={0.1}
+            onChange={(value) => update("verticalExaggeration", value ?? 1)}
+          />
+        )}
       </section>
 
       <section className="control-section">

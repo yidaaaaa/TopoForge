@@ -17,6 +17,8 @@ export const defaultFormState: FormState = {
   modelDepthMm: null,
   baseThicknessMm: 3,
   maxHeightMm: 45,
+  verticalScaleMode: "auto-perceptual",
+  verticalExaggeration: 1,
   samplingMode: "print-aware",
   meshSamplingMm: 0.5,
   maxGridCells: 1_500_000,
@@ -80,6 +82,8 @@ export function buildJobRequest(
     model_depth_mm: form.modelDepthMm,
     base_thickness_mm: form.baseThicknessMm,
     max_height_mm: form.maxHeightMm,
+    vertical_scale_mode: form.verticalScaleMode,
+    vertical_exaggeration: form.verticalExaggeration,
     sampling_mode: form.samplingMode,
     mesh_sampling_mm:
       form.samplingMode === "custom" ? form.meshSamplingMm : null,
