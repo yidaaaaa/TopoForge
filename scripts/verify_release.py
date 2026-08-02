@@ -63,7 +63,7 @@ def inspect_sdist(path: Path, version: str) -> dict[str, Any]:
         "benchmarks/baseline.json",
         "pyproject.toml",
         "reference_regions/catalog.yaml",
-        "scripts/rollback-topoforge-0.8.1.sh",
+        "scripts/rollback-topoforge-0.8.0.sh",
         "scripts/run_benchmarks.py",
         "scripts/verify_reference_regions.py",
         "scripts/verify_release.py",
@@ -76,9 +76,6 @@ def inspect_sdist(path: Path, version: str) -> dict[str, Any]:
         "web/package-lock.json",
         "web/package.json",
         "web/src/App.tsx",
-        "web/src/components/MapPanel.tsx",
-        "web/src/components/TerrainPreview.test.ts",
-        "web/src/components/TerrainPreview.tsx",
         "web/tests/workspace.spec.ts",
     }
     with tarfile.open(path, "r:gz") as archive:

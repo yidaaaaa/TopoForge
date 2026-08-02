@@ -15,7 +15,6 @@ Updated: 2026-08-02
 - [x] Phase 7 — local provenance-aware GPX/road/river/contour/label/coast overlays. Completed in 0.6.0 on 2026-08-02.
 - [x] Phase 8 — local release hardening: packaging, CI, benchmarks, reference regions, and offline documentation. Completed in 0.7.0 on 2026-08-02.
 - [x] Phase 9 — worker-backed loopback FastAPI and bilingual React/MapLibre/Three.js local Web application. Completed in 0.8.0 on 2026-08-02.
-- [x] Phase 9.1 — WebUI map and 3D presentation stabilization. Completed in 0.8.1 on 2026-08-02.
 
 ## Completed Phase 9 — bilingual local Web application
 
@@ -30,19 +29,6 @@ Updated: 2026-08-02
 9. [x] Publish Phase 9 release evidence, checksums, rollback, commit, and tag.
 
 Final evidence: 204 Python tests, 6 Vitest tests, 2 applicable Playwright scenarios, 8 checksum-verified production Web assets, one real HTTP workflow with six ready stages and 22 artifacts, byte-reproducible sdist/wheel archives, and isolated installed `topoforge web --check`. Release verification: `artifacts/verification/topoforge-0.8.0-phase9-release-verification-final.json`.
-
-## Completed Phase 9.1 — WebUI stabilization
-
-1. [x] Replace the single-color offline map with bundled Natural Earth country geometry and a deterministic graticule.
-2. [x] Remove duplicate AOI source registration and style-not-loaded browser errors.
-3. [x] Permit the explicit OSM tile origin in both image and Fetch CSP directives.
-4. [x] Frame Z-up GLB models from their bounding sphere and current canvas aspect ratio.
-5. [x] Scale and position the grid and East/North arrows from model bounds.
-6. [x] Reject page/console errors and require spatially varied map/3D pixels plus an intercepted OSM request.
-7. [x] Reuse the retained HTTP smoke input; verify six stages, 22 artifacts, strict 3MF, and unchanged manufacturing hash.
-8. [x] Publish reproducible 0.8.1 archives, isolated installed smoke evidence, screenshots, rollback, commit, and tag.
-
-Final gates: Ruff clean; 160 files formatted; Pyright 0 errors; Pytest 204 passed in 81.24 s; Vitest 9 passed; Playwright 2 applicable passed / 2 project-inapplicable skipped; fixed-epoch sdist/wheel byte-identical; installed 0.8.1 wheel passed doctor, Web asset checks, build, and strict 3MF inspection. Manufacturing model SHA-256 remains `6a237cfd4adfaf0f9eb44ed8c2ebb6b584a8ac2603d47d6c5c35527ba6064ce4`.
 
 ## Completed Milestone 01 gate
 
@@ -192,7 +178,7 @@ These items are intentionally skipped for now and do not block Phases 6-9. The c
 
 ## Completed Phase 9 — API and Web
 
-The local API and Web plan is complete and visually stabilized in 0.8.1: typed durable jobs, bounded isolated workers, loopback FastAPI routes, strict path and artifact checks, saved configuration loading, Chinese/English React controls, MapLibre AOI interaction, Three.js GLB inspection, desktop/mobile browser evidence, packaged assets, CI, release verification, and rollback. Public deployment, authentication, and a remote multi-user contract remain intentionally outside this local release.
+The local API and Web plan is complete in 0.8.0: typed durable jobs, bounded isolated workers, loopback FastAPI routes, strict path and artifact checks, saved configuration loading, Chinese/English React controls, MapLibre AOI interaction, Three.js GLB inspection, desktop/mobile browser evidence, packaged assets, CI, release verification, and rollback. Public deployment, authentication, and a remote multi-user contract remain intentionally outside this local release.
 
 ## Milestone 02 acceptance — passed in 0.3.0
 

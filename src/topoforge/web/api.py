@@ -125,7 +125,7 @@ def create_app(
             "img-src 'self' data: blob: https://tile.openstreetmap.org; "
             "style-src 'self' 'unsafe-inline'; "
             "worker-src 'self' blob:; "
-            "connect-src 'self' https://tile.openstreetmap.org; "
+            "connect-src 'self'; "
             "script-src 'self'; "
             "font-src 'self'; "
             "object-src 'none'; "

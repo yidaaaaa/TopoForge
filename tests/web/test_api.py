@@ -31,9 +31,7 @@ def test_health_capabilities_static_app_and_security_headers(
         assert health.status_code == 200
         assert health.json()["loopback_only"] is True
         assert health.json()["languages"] == ["zh-CN", "en"]
-        content_security_policy = health.headers["content-security-policy"]
-        assert "default-src 'self'" in content_security_policy
-        assert "connect-src 'self' https://tile.openstreetmap.org" in content_security_policy
+        assert "default-src 'self'" in health.headers["content-security-policy"]
 
         capabilities = client.get("/api/v1/capabilities")
         assert capabilities.status_code == 200
