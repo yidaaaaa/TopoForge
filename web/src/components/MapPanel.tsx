@@ -1,4 +1,4 @@
-import type { FeatureCollection, Geometry } from "geojson";
+import type { Feature, FeatureCollection, Geometry, LineString } from "geojson";
 import { Crosshair, MapPinned, SquareDashedMousePointer } from "lucide-react";
 import maplibregl, {
   type GeoJSONSource,
@@ -6,6 +6,9 @@ import maplibregl, {
   type StyleSpecification,
 } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { feature } from "topojson-client";
+import type { GeometryCollection, Topology } from "topojson-specification";
+import countriesTopologyJson from "world-atlas/countries-110m.json";
 
 import { translate } from "../i18n";
 import type { Language, NormalizedAoi, SourceMode } from "../types";
@@ -20,37 +23,106 @@ interface MapPanelProps {
   onCenterChange: (center: [number, number]) => void;
 }
 
-function mapStyle(basemapEnabled: boolean): StyleSpecification {
+const countriesTopology = countriesTopologyJson as unknown as Topology<{
+  countries: GeometryCollection;
+}>;
+
+export const offlineCountries = feature(
+  countriesTopology,
+  countriesTopology.objects.countries,
+) as FeatureCollection;
+
+function buildGraticule(): FeatureCollection<LineString> {
+  const features: Array<Feature<LineString>> = [];
+  for (let longitude = -180; longitude <= 180; longitude += 30) {
+    const coordinates: Array<[number, number]> = [];
+    for (let latitude = -80; latitude <= 80; latitude += 4) {
+      coordinates.push([longitude, latitude]);
+    }
+    features.push({
+      type: "Feature",
+      properties: { kind: longitude === 0 ? "prime-meridian" : "longitude" },
+      geometry: { type: "LineString", coordinates },
+    });
+  }
+  for (let latitude = -60; latitude <= 60; latitude += 30) {
+    const coordinates: Array<[number, number]> = [];
+    for (let longitude = -180; longitude <= 180; longitude += 4) {
+      coordinates.push([longitude, latitude]);
+    }
+    features.push({
+      type: "Feature",
+      properties: { kind: latitude === 0 ? "equator" : "latitude" },
+      geometry: { type: "LineString", coordinates },
+    });
+  }
+  return { type: "FeatureCollection", features };
+}
+
+export const offlineGraticule = buildGraticule();
+
+export function mapStyle(basemapEnabled: boolean): StyleSpecification {
+  const sources: StyleSpecification["sources"] = {
+    countries: { type: "geojson", data: offlineCountries },
+    graticule: { type: "geojson", data: offlineGraticule },
+    aoi: { type: "geojson", data: emptyCollection() },
+  };
   if (basemapEnabled) {
-    return {
-      version: 8,
-      sources: {
-        osm: {
-          type: "raster",
-          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-          tileSize: 256,
-          attribution: "© OpenStreetMap contributors",
-          maxzoom: 19,
-        },
-      },
-      layers: [
-        {
-          id: "background",
-          type: "background",
-          paint: { "background-color": "#dce5e2" },
-        },
-        { id: "osm", type: "raster", source: "osm" },
-      ],
+    sources.osm = {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      attribution: "© OpenStreetMap contributors",
+      maxzoom: 19,
     };
   }
+  const referenceLayers: StyleSpecification["layers"] = basemapEnabled
+    ? [{ id: "osm", type: "raster", source: "osm" }]
+    : [
+        {
+          id: "land",
+          type: "fill",
+          source: "countries",
+          paint: { "fill-color": "#d4ddd1", "fill-opacity": 1 },
+        },
+        {
+          id: "country-borders",
+          type: "line",
+          source: "countries",
+          paint: { "line-color": "#8d9d97", "line-width": 0.65 },
+        },
+        {
+          id: "graticule",
+          type: "line",
+          source: "graticule",
+          paint: {
+            "line-color": "#a9bbb8",
+            "line-width": 0.55,
+            "line-opacity": 0.72,
+          },
+        },
+      ];
   return {
     version: 8,
-    sources: {},
+    sources,
     layers: [
       {
         id: "background",
         type: "background",
-        paint: { "background-color": "#dce5e2" },
+        paint: { "background-color": "#c9dde1" },
+      },
+      ...referenceLayers,
+      {
+        id: "aoi-fill",
+        type: "fill",
+        source: "aoi",
+        paint: { "fill-color": "#0f766e", "fill-opacity": 0.2 },
+      },
+      {
+        id: "aoi-line",
+        type: "line",
+        source: "aoi",
+        paint: { "line-color": "#0f5f59", "line-width": 2.5 },
       },
     ],
   };
@@ -71,6 +143,7 @@ export function MapPanel({
 }: MapPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const basemapRef = useRef(basemapEnabled);
   const [cursor, setCursor] = useState<[number, number] | null>(null);
   const [draft, setDraft] = useState<Geometry | null>(null);
   const activeGeometry = draft ?? normalizedAoi?.normalized_geometry_geojson ?? null;
@@ -110,27 +183,9 @@ export function MapPanel({
       new maplibregl.AttributionControl({ compact: true }),
       "bottom-right",
     );
-    map.on("load", () => {
-      map.addSource("aoi", { type: "geojson", data: emptyCollection() });
-      map.addLayer({
-        id: "aoi-fill",
-        type: "fill",
-        source: "aoi",
-        paint: {
-          "fill-color": "#0f766e",
-          "fill-opacity": 0.2,
-        },
-      });
-      map.addLayer({
-        id: "aoi-line",
-        type: "line",
-        source: "aoi",
-        paint: {
-          "line-color": "#0f5f59",
-          "line-width": 2.5,
-        },
-      });
-    });
+    map.on("load", () =>
+      (map.getSource("aoi") as GeoJSONSource | undefined)?.setData(collection),
+    );
     map.on("mousemove", (event) => {
       setCursor([
         Number(event.lngLat.lng.toFixed(5)),
@@ -146,27 +201,14 @@ export function MapPanel({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) {
+    if (!map || basemapRef.current === basemapEnabled) {
       return;
     }
+    basemapRef.current = basemapEnabled;
     map.setStyle(mapStyle(basemapEnabled));
-    map.once("styledata", () => {
-      if (!map.getSource("aoi")) {
-        map.addSource("aoi", { type: "geojson", data: collection });
-        map.addLayer({
-          id: "aoi-fill",
-          type: "fill",
-          source: "aoi",
-          paint: { "fill-color": "#0f766e", "fill-opacity": 0.2 },
-        });
-        map.addLayer({
-          id: "aoi-line",
-          type: "line",
-          source: "aoi",
-          paint: { "line-color": "#0f5f59", "line-width": 2.5 },
-        });
-      }
-    });
+    map.once("style.load", () =>
+      (map.getSource("aoi") as GeoJSONSource | undefined)?.setData(collection),
+    );
   }, [basemapEnabled]);
 
   useEffect(() => {
@@ -262,7 +304,11 @@ export function MapPanel({
   }, [drawMode, onBboxChange, onCenterChange]);
 
   return (
-    <div className="map-shell" data-testid="map-panel">
+    <div
+      className="map-shell"
+      data-testid="map-panel"
+      data-offline-reference="natural-earth-countries-and-graticule"
+    >
       <div ref={containerRef} className="map-canvas" />
       <div className="map-mode">
         {drawMode === "bbox" && (

@@ -1,0 +1,9 @@
+command: scripts/rollback-topoforge-0.8.1.sh --confirm-rollback
+execution_directory: independent no-hardlink clone checked out at v0.8.1
+rollback_script_exit_code: 0
+literal_output:
+[detached HEAD] Revert "fix: stabilize local map and model preview"
+TopoForge 0.8.1 source rollback completed.
+The worktree now matches v0.8.0; retained DEMs, caches, outputs, and Web workspaces were not deleted.
+tree_diff_vs_v0.8.0: clean
+required_checks_passed: true

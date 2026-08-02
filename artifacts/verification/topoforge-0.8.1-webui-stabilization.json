@@ -1,0 +1,290 @@
+{
+  "baseline_commit": "1909a639d8dbdfc33a903d4a84a211f786770734",
+  "baseline_tag": "v0.8.0",
+  "browser": {
+    "playwright": {
+      "bilingual_switch_verified": true,
+      "console_errors": 0,
+      "mobile_overflow_or_primary_control_overlap": false,
+      "model_palette_diversity_required": true,
+      "offline_map_palette_diversity_required": true,
+      "osm_request_intercepted": true,
+      "page_errors": 0,
+      "passed": 2,
+      "project_inapplicable_skipped": 2
+    },
+    "screenshots_reviewed": true,
+    "vitest": "9 passed"
+  },
+  "geometry": {
+    "dimensions_mm": [
+      40.0,
+      32.0,
+      20.0
+    ],
+    "flat_bottom": true,
+    "manifold": true,
+    "manufacturing_3mf_sha256": "6a237cfd4adfaf0f9eb44ed8c2ebb6b584a8ac2603d47d6c5c35527ba6064ce4",
+    "manufacturing_hash_matches_0_8_0": true,
+    "positive_volume": true,
+    "preview_glb_sha256": "495f1bc694d21e8c86c24680e4961b3f1c1449af61530caaae765913ca29846c",
+    "strict_3mf_warning_count": 0,
+    "triangle_count": 1276,
+    "watertight": true,
+    "winding_consistent": true
+  },
+  "http_workflow": {
+    "artifact_count": 22,
+    "event_count": 7,
+    "exit_code": 0,
+    "job_id": "cfd31ad8517a4bdda25dbf1533f7316c",
+    "metrics": {
+      "connector_count": 0,
+      "connector_fit_status": "passed",
+      "dimensions_mm": [
+        40.0,
+        32.0,
+        20.0
+      ],
+      "estimated_triangle_count": 1276,
+      "peak_elevation_loss_m": 0.0,
+      "peak_horizontal_shift_m": 0.0,
+      "physical_sample_spacing_mm": 2.119298245614035,
+      "processed_grid_shape": [
+        16,
+        20
+      ],
+      "processed_horizontal_resolution_m": 20.0,
+      "source_grid_shape": [
+        16,
+        20
+      ],
+      "source_horizontal_resolution_m": 20.0,
+      "terrain_fidelity_status": "source-resolution-preserved",
+      "tile_count": 1,
+      "tile_grid_shape": [
+        1,
+        1
+      ]
+    },
+    "model_3mf": {
+      "artifact_id": "model_3mf",
+      "download_url": "/api/v1/jobs/cfd31ad8517a4bdda25dbf1533f7316c/artifacts/model_3mf",
+      "filename": "model.3mf",
+      "kind": "file",
+      "media_type": "application/vnd.ms-3mfdocument",
+      "relative_path": "stages/10-build/eb7d072f14a570739bc14b54579a41a365258c013203788c55a190876e244719/model.3mf",
+      "sha256": "6a237cfd4adfaf0f9eb44ed8c2ebb6b584a8ac2603d47d6c5c35527ba6064ce4",
+      "size_bytes": 16443
+    },
+    "preview_glb": {
+      "artifact_id": "preview_glb",
+      "download_url": "/api/v1/jobs/cfd31ad8517a4bdda25dbf1533f7316c/artifacts/preview_glb",
+      "filename": "preview.glb",
+      "kind": "file",
+      "media_type": "model/gltf-binary",
+      "relative_path": "stages/10-build/eb7d072f14a570739bc14b54579a41a365258c013203788c55a190876e244719/preview.glb",
+      "sha256": "495f1bc694d21e8c86c24680e4961b3f1c1449af61530caaae765913ca29846c",
+      "size_bytes": 23976
+    },
+    "progress_fraction": 1.0,
+    "ready_stages": [
+      "source",
+      "build",
+      "layout",
+      "extract",
+      "mesh",
+      "connect"
+    ],
+    "required_checks_passed": true,
+    "state": "completed",
+    "workspace": "/tmp/topoforge-0.8.1-final-workspaces/http-smoke-0.8.1-v1"
+  },
+  "implementation": {
+    "offline_map": {
+      "aoi_style_owned_source": true,
+      "bundled_world_geometry": "Natural Earth country polygons/borders via world-atlas and topojson-client",
+      "deterministic_graticule": true,
+      "duplicate_source_error_removed": true
+    },
+    "online_map": {
+      "browser_request_intercept_verified": true,
+      "csp_connect_src_allowed": true,
+      "csp_img_src_allowed": true,
+      "tile_origin": "https://tile.openstreetmap.org"
+    },
+    "terrain_preview": {
+      "aces_tone_mapping": true,
+      "camera_framing": "bounding sphere plus horizontal/vertical FOV and current canvas aspect ratio",
+      "coordinate_axes": [
+        "+X = East",
+        "+Y = North",
+        "+Z = Up"
+      ],
+      "guides_derived_from_model_bounds": true,
+      "terrain_geometry_changed": false,
+      "tested_aspect_ratios": [
+        0.72,
+        1.0,
+        1.8
+      ]
+    }
+  },
+  "known_limitations": [
+    "physical connector calibration remains deferred",
+    "exhaustive self-intersection remains explicitly not_fully_checked",
+    "network overlay acquisition and arbitrary font shaping are not implemented",
+    "offline installation requires a same-platform dependency wheelhouse"
+  ],
+  "quality": {
+    "git_diff_check": "passed before evidence generation",
+    "packaged_web_check": {
+      "asset_count": 8,
+      "frameworks": [
+        "React",
+        "MapLibre",
+        "Three.js"
+      ],
+      "languages": [
+        "zh-CN",
+        "en"
+      ],
+      "required_checks_passed": true
+    },
+    "playwright": "2 passed, 2 project-inapplicable skipped",
+    "pyright": "0 errors, 0 warnings, 0 informations",
+    "pytest": "204 passed in 81.24s",
+    "ruff_check": "All checks passed!",
+    "ruff_format": "160 files already formatted",
+    "uv_lock_check": "passed",
+    "vitest": "9 passed"
+  },
+  "release": {
+    "installed_smoke": {
+      "build_required_checks_passed": true,
+      "command_exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "installed_origin": "/tmp/topoforge-release-igfhmipc/venv/lib/python3.12/site-packages/topoforge/__init__.py",
+      "installed_version": "0.8.1",
+      "isolated_environment": true,
+      "repository_import_leakage": false,
+      "strict_3mf_warning_count": 0,
+      "web_asset_count": 8
+    },
+    "reproducible_archives": {
+      "sdist": true,
+      "wheel": true
+    },
+    "sdist": {
+      "bytes": 1009917,
+      "forbidden_member_count": 0,
+      "member_count": 214,
+      "path": "/root/autodl-tmp/bambu/TopoForge/dist/0.8.1-release-final-primary/topoforge-0.8.1.tar.gz",
+      "sha256": "dd2d06203b6ce0cbe9cc4d5ccb1f864cb1e86a8aa7bbde0463a2bd3881228bfd"
+    },
+    "wheel": {
+      "bytes": 813482,
+      "member_count": 90,
+      "path": "/root/autodl-tmp/bambu/TopoForge/dist/0.8.1-release-final-primary/topoforge-0.8.1-py3-none-any.whl",
+      "sha256": "baf2b5adfcd563839cb7b3b230ee32d64996ac16dc62b363cb260f8822bfa74a"
+    }
+  },
+  "required_checks_passed": true,
+  "retained_real_data": {
+    "gongga_peak_elevation_loss_m": 5.041504,
+    "gongga_peak_horizontal_shift_m": 24.516276,
+    "gongga_processed_grid_shape": [
+      439,
+      451
+    ],
+    "gongga_processed_horizontal_resolution_m": 68.958882,
+    "gongga_source_grid_shape": [
+      1008,
+      1181
+    ],
+    "gongga_source_horizontal_resolution_m": 28.850814,
+    "gongga_source_sha256": "00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc",
+    "rebuilt": false,
+    "redownloaded": false,
+    "terrain_adjustment_applied": false
+  },
+  "roles": {
+    "http_smoke_3mf": {
+      "bytes": 16443,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/phase9/topoforge-web-http-smoke-model.3mf",
+      "sha256": "6a237cfd4adfaf0f9eb44ed8c2ebb6b584a8ac2603d47d6c5c35527ba6064ce4"
+    },
+    "http_smoke_source": {
+      "bytes": 1460,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/phase9/topoforge-web-http-smoke-input.tif",
+      "sha256": "28a148c5704f3fe48ce1bc37c2672cd6c3b704a9da97fdc956d47f527b89a7b8"
+    },
+    "model_screenshot": {
+      "bytes": 157021,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/previews/topoforge-0.8.1-web-model-zh.png",
+      "sha256": "15c2d78f988918c53474b9dc2396c7de13d839037da72ab80ffaad634f54dd60"
+    },
+    "offline_map_screenshot": {
+      "bytes": 241217,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/previews/topoforge-0.8.1-web-offline-map-zh.png",
+      "sha256": "a10c80ab1f532d775b32f550d0345dd7e547a9b5c76f7df48e8d0d26e682ba35"
+    },
+    "release_verification": {
+      "bytes": 14572,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.8.1-release-verification.json",
+      "sha256": "342ce666c60501bf3fb62535ed943ce4dbcffe13d751d571740cbef831028200"
+    },
+    "rollback": {
+      "bytes": 815,
+      "path": "/root/autodl-tmp/bambu/TopoForge/scripts/rollback-topoforge-0.8.1.sh",
+      "sha256": "a4815a71cb24154a082ecf2f09dcaa748a88d30a0ddb8d0b8d7c6c5a8c79ceb6"
+    },
+    "rollback_verification": {
+      "bytes": 451,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.8.1-rollback.txt",
+      "sha256": "7ff72307349bcdc59dc2fa1fe09c6f336c01d1653bf6cbb6da9cf2422715962e"
+    },
+    "sdist": {
+      "bytes": 1009917,
+      "path": "/root/autodl-tmp/bambu/TopoForge/dist/0.8.1-release-final-primary/topoforge-0.8.1.tar.gz",
+      "sha256": "dd2d06203b6ce0cbe9cc4d5ccb1f864cb1e86a8aa7bbde0463a2bd3881228bfd"
+    },
+    "source_patch": {
+      "bytes": 504146,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/patches/topoforge-0.8.1-source.patch",
+      "sha256": "f41526eb63b1c990a5904cc36000de6f21e3312e13ff83ae7309d7f1fc47750c"
+    },
+    "static_manifest": {
+      "bytes": 1593,
+      "path": "/root/autodl-tmp/bambu/TopoForge/src/topoforge/web/static/asset-manifest.json",
+      "sha256": "e6cc7d6d35ae6120ccefbddb6a4d9e9b401afefabf9beb6f26016b03ef15d8f1"
+    },
+    "wheel": {
+      "bytes": 813482,
+      "path": "/root/autodl-tmp/bambu/TopoForge/dist/0.8.1-release-final-primary/topoforge-0.8.1-py3-none-any.whl",
+      "sha256": "baf2b5adfcd563839cb7b3b230ee32d64996ac16dc62b363cb260f8822bfa74a"
+    }
+  },
+  "rollback_verification": {
+    "baseline_ref": "v0.8.0",
+    "independent_clone": true,
+    "no_hardlinks": true,
+    "release_ref": "v0.8.1",
+    "repository_local_test_identity": true,
+    "required_checks_passed": true,
+    "retained_data_deleted": false,
+    "rollback_script_exit_code": 0,
+    "status": "passed",
+    "tree_diff_vs_v0_8_0": "clean"
+  },
+  "schema_version": "topoforge-webui-stabilization-v1",
+  "topoforge_version": "0.8.1"
+}

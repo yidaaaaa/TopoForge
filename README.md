@@ -2,7 +2,7 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Implemented milestone (TopoForge 0.8.0):** the validated manufacturing core now ships with a worker-backed loopback FastAPI adapter and a Chinese/English React, MapLibre, and Three.js local Web application. The Web surface reuses the saved workflow contract and existing core algorithms, constrains inputs and workspaces to configured roots, persists job state, supports cancellation and artifact downloads, and packages checksum-verified production assets in the wheel.
+**Implemented milestone (TopoForge 0.8.1):** the validated manufacturing core now ships with a worker-backed loopback FastAPI adapter and a Chinese/English React, MapLibre, and Three.js local Web application. The Web surface reuses the saved workflow contract and existing core algorithms, constrains inputs and workspaces to configured roots, persists job state, supports cancellation and artifact downloads, and packages checksum-verified production assets in the wheel.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
 
@@ -26,8 +26,7 @@ progress/cancellation; Three.js GLB inspection; metrics; and checksum-bound arti
 
 The server accepts only loopback hosts. Local file browsing is limited to explicit
 `--input-root` directories, Web-created workflows must be children of
-`--workspace-root`, and job/artifact records remain below `--state-dir`. The default map
-is offline; the optional OpenStreetMap layer is the only browser network request. Verify
+`--workspace-root`, and job/artifact records remain below `--state-dir`. The default map includes bundled Natural Earth country outlines and a graticule, so AOI work remains geographically legible offline; the optional OpenStreetMap layer is the only browser network request. Verify
 an installed application without starting a listener:
 
 ```bash
@@ -478,7 +477,7 @@ SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/primary
 SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/repeat
 uv run python scripts/verify_release.py \
   --primary-dir dist/primary --repeat-dir dist/repeat \
-  --version 0.8.0 --install \
+  --version 0.8.1 --install \
   --report artifacts/logs/phase9-release-verification.json
 uv run python scripts/verify_reference_regions.py \
   --catalog reference_regions/catalog.yaml --definitions-only \
