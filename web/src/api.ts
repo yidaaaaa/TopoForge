@@ -4,9 +4,12 @@ import type {
   Health,
   JobAssemblyOverview,
   JobCreateRequest,
+  JobMaintenanceOverview,
   JobMapManifest,
   JobRecord,
   JsonObject,
+  WorkflowBackupRecord,
+  WorkflowCleanupResult,
   NormalizedAoi,
 } from "./types";
 
@@ -90,6 +93,35 @@ export function fetchJobMap(jobId: string): Promise<JobMapManifest> {
 
 export function fetchJobAssembly(jobId: string): Promise<JobAssemblyOverview> {
   return request<JobAssemblyOverview>(`/api/v1/jobs/${jobId}/assembly`);
+}
+
+export function fetchJobMaintenance(
+  jobId: string,
+): Promise<JobMaintenanceOverview> {
+  return request<JobMaintenanceOverview>(`/api/v1/jobs/${jobId}/maintenance`);
+}
+
+export function createJobBackup(jobId: string): Promise<WorkflowBackupRecord> {
+  return request<WorkflowBackupRecord>(`/api/v1/jobs/${jobId}/backup`, {
+    method: "POST",
+  });
+}
+
+export function cleanupJob(
+  jobId: string,
+  workflowId: string,
+): Promise<WorkflowCleanupResult> {
+  return request<WorkflowCleanupResult>(`/api/v1/jobs/${jobId}/cleanup`, {
+    method: "POST",
+    body: JSON.stringify({ confirm_workflow_id: workflowId }),
+  });
+}
+
+export function restoreBackup(backupId: string): Promise<JobRecord> {
+  return request<JobRecord>(`/api/v1/backups/${backupId}/restore`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
 }
 
 export function listFiles(path?: string): Promise<FileListing> {

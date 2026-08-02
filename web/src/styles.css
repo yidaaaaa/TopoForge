@@ -1223,6 +1223,76 @@ input:checked + .toggle::after {
   line-height: 1.4;
 }
 
+.maintenance-section {
+  border-bottom: 1px solid #e0e5e4;
+}
+
+.maintenance-summary {
+  border-bottom: 0;
+}
+
+.maintenance-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 2px 14px 9px;
+}
+
+.maintenance-actions .secondary {
+  min-width: 0;
+  padding-inline: 6px;
+}
+
+.backup-list {
+  display: grid;
+  padding: 0 10px 9px;
+}
+
+.backup-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid #e4e8e7;
+}
+
+.backup-row > a {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 4px;
+  color: #254a51;
+  text-decoration: none;
+}
+
+.backup-row > a:hover {
+  color: var(--accent-dark);
+}
+
+.backup-row span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.backup-row strong,
+.backup-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backup-row strong {
+  font: 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.backup-row small {
+  color: #738085;
+  font-size: 9px;
+}
+
 .artifact-list {
   display: grid;
   gap: 1px;

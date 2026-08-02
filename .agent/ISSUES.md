@@ -348,11 +348,26 @@
 - **Expected behavior:** Date-line coverage remains local, Web Mercator latitude limits are explicit, and every visible exploded tile remains inside the 3D frame after responsive changes and reset.
 - **Resolution:** Add circular longitude centers, two Mercator coverage segments, explicit partial-clipping metadata, full-outside rejection, unwrapped raster source bounds, deterministic visible/exploded assembly bounds, resize/state/reset reframing, a four-column narrow-aspect corner projection test, and real Playwright maximum-explosion/resize/reset checks.
 
-## TF-042 — GitHub publication credentials are unavailable on this host
+## TF-042 — GitHub publication credentials were unavailable on this host
 
 - **Severity:** Release operations
-- **Status:** External blocker; local 0.9.0 release complete
-- **Reproduction:** Run `git push --dry-run origin main v0.9.0` against `https://github.com/yidaaaaa/TopoForge.git`.
-- **Expected behavior:** Publish the verified `main` release commit and annotated `v0.9.0` tag.
-- **Actual behavior:** Git exits 128 with `fatal: could not read Username for 'https://github.com': No such device or address`. No `gh`, SSH key, `GH_TOKEN`, `GITHUB_TOKEN`, or HTTPS credential helper is configured.
-- **Resolution path:** Configure a GitHub credential for this repository and run `git push origin main` followed by `git push origin v0.9.0`; no source rebuild is required.
+- **Status:** Resolved before Phase 11
+- **Reproduction:** The HTTPS dry-run for main and v0.9.0 exited 128 because no username/token helper was available.
+- **Expected behavior:** Publish the verified main commit and annotated tag without embedding credentials.
+- **Resolution:** Changed origin to git@github.com:yidaaaaa/TopoForge.git, confirmed SSH authentication as yidaaaaa, and pushed main plus v0.9.0. The public repository and tag now resolve through both Git and the GitHub API.
+
+## TF-043 — Public v0.9.0 CI used the wrong release version and no Release page existed
+
+- **Severity:** High release operations
+- **Status:** Resolved in the 0.10.0 release candidate; remote verification pending
+- **Reproduction:** GitHub Actions run 30749563043 checks out v0.9.0 source but invokes verify_release.py with --version 0.8.0, so the release job fails. The public Releases API returns an empty list after the tag push.
+- **Expected behavior:** CI verifies the checked-out package version, and tagged versions publish verified downloadable assets.
+- **Resolution:** CI now uses uv version --short. The generic Release workflow builds and verifies the target tag, bootstraps the newest unpublished reachable tag from main, publishes four checksum-bound assets, and skips existing Release pages.
+
+## TF-044 — Completed Web jobs lacked project backup, cleanup, and restore controls
+
+- **Severity:** Medium local usability
+- **Status:** Resolved in 0.10.0
+- **Reproduction:** Open a completed 0.9.0 job. The WebUI shows manufacturing artifacts but no storage estimate, cleanup candidates, backup archive, or restore action even though the CLI maintenance core already exists.
+- **Expected behavior:** A local operator can manage completed projects in Chinese or English without losing checksum/path/atomicity guarantees.
+- **Resolution:** Added typed maintenance routes and UI over the existing workflow core, explicit cleanup confirmation, strict backup download identity, atomic restored-job registration, 24 focused backend/release tests, 18 Vitest tests, real Playwright lifecycle coverage, and retained HTTP evidence.

@@ -11,13 +11,17 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import {
   ApiError,
   cancelJob,
+  cleanupJob,
   createJob,
+  createJobBackup,
   fetchJobAssembly,
+  fetchJobMaintenance,
   fetchJobMap,
   fetchHealth,
   listJobs,
   loadLocalConfig,
   normalizeAoi,
+  restoreBackup,
   validateJob,
 } from "./api";
 import { BuildPanel } from "./components/BuildPanel";
@@ -34,6 +38,7 @@ import type {
   FormState,
   Health,
   JobAssemblyOverview,
+  JobMaintenanceOverview,
   JobMapManifest,
   JobRecord,
   JsonObject,
@@ -99,6 +104,11 @@ export default function App() {
   const [tab, setTab] = useState<WorkspaceTab>("map");
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [maintenance, setMaintenance] = useState<JobMaintenanceOverview | null>(null);
+  const [maintenanceLoading, setMaintenanceLoading] = useState(false);
+  const [maintenanceBusy, setMaintenanceBusy] = useState<
+    "backup" | "cleanup" | "restore" | null
+  >(null);
   const [jobMap, setJobMap] = useState<JobMapManifest | null>(null);
   const [jobAssembly, setJobAssembly] = useState<JobAssemblyOverview | null>(null);
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
@@ -169,6 +179,30 @@ export default function App() {
     () => jobs.find((job) => job.job_id === selectedJobId) ?? null,
     [jobs, selectedJobId],
   );
+
+  const loadMaintenance = useCallback(
+    async (jobId: string) => {
+      setMaintenanceLoading(true);
+      try {
+        setMaintenance(await fetchJobMaintenance(jobId));
+      } catch (reason) {
+        setMaintenance(null);
+        setNotice({ tone: "error", text: errorMessage(reason, language) });
+      } finally {
+        setMaintenanceLoading(false);
+      }
+    },
+    [language],
+  );
+
+  useEffect(() => {
+    if (!selectedJob || selectedJob.state !== "completed") {
+      setMaintenance(null);
+      setMaintenanceLoading(false);
+      return;
+    }
+    void loadMaintenance(selectedJob.job_id);
+  }, [loadMaintenance, selectedJob?.job_id, selectedJob?.state]);
 
   useEffect(() => {
     const jobId = selectedJob?.job_id;
@@ -298,6 +332,50 @@ export default function App() {
       await loadJobs();
     } catch (reason) {
       setNotice({ tone: "error", text: errorMessage(reason, language) });
+    }
+  };
+
+  const handleBackup = async (jobId: string) => {
+    setMaintenanceBusy("backup");
+    try {
+      await createJobBackup(jobId);
+      await loadMaintenance(jobId);
+      setNotice({ tone: "success", text: t("backupReady") });
+    } catch (reason) {
+      setNotice({ tone: "error", text: errorMessage(reason, language) });
+    } finally {
+      setMaintenanceBusy(null);
+    }
+  };
+
+  const handleCleanup = async (jobId: string, workflowId: string) => {
+    const confirmation = t("confirmCleanup").replace("{workflowId}", workflowId);
+    if (!window.confirm(confirmation)) {
+      return;
+    }
+    setMaintenanceBusy("cleanup");
+    try {
+      await cleanupJob(jobId, workflowId);
+      await loadMaintenance(jobId);
+      setNotice({ tone: "success", text: t("cleanupCompleted") });
+    } catch (reason) {
+      setNotice({ tone: "error", text: errorMessage(reason, language) });
+    } finally {
+      setMaintenanceBusy(null);
+    }
+  };
+
+  const handleRestore = async (backupId: string) => {
+    setMaintenanceBusy("restore");
+    try {
+      const restored = await restoreBackup(backupId);
+      await loadJobs();
+      setSelectedJobId(restored.job_id);
+      setNotice({ tone: "success", text: t("restoreCompleted") });
+    } catch (reason) {
+      setNotice({ tone: "error", text: errorMessage(reason, language) });
+    } finally {
+      setMaintenanceBusy(null);
     }
   };
 
@@ -460,10 +538,16 @@ export default function App() {
           language={language}
           jobs={jobs}
           selectedJob={selectedJob}
+          maintenance={maintenance}
           loading={jobsLoading}
+          maintenanceLoading={maintenanceLoading}
+          maintenanceBusy={maintenanceBusy}
           onRefresh={() => void loadJobs()}
           onSelect={setSelectedJobId}
           onCancel={(jobId) => void handleCancel(jobId)}
+          onBackup={(jobId) => void handleBackup(jobId)}
+          onCleanup={(jobId, workflowId) => void handleCleanup(jobId, workflowId)}
+          onRestore={(backupId) => void handleRestore(backupId)}
         />
       </div>
 

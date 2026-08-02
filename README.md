@@ -2,7 +2,7 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Implemented milestone (TopoForge 0.9.0):** the validated manufacturing core now ships with a worker-backed loopback FastAPI adapter and a Chinese/English React, MapLibre, and Three.js local Web application. The Web surface reuses the saved workflow contract and existing core algorithms, constrains inputs and workspaces to configured roots, persists job state, supports cancellation and artifact downloads, serves deterministic local terrain XYZ tiles, synchronizes manufacturing footprints with 2D/3D tile assembly, and packages checksum-verified production assets in the wheel.
+**Implemented milestone (TopoForge 0.10.0):** the validated single-user local application now includes bilingual project lifecycle management over the existing maintenance core. Completed Web jobs report measured storage and reclaimable stages, create deterministic checksum-verified backups, require exact workflow identity for cleanup, download archives with SHA-256 identity, atomically restore copies below the workspace root, and register restored projects for immediate browsing. CI derives the package version from project metadata and GitHub Releases are built twice, installed, checksummed, and published from the target tag.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
 
@@ -477,23 +477,23 @@ SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/primary
 SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/repeat
 uv run python scripts/verify_release.py \
   --primary-dir dist/primary --repeat-dir dist/repeat \
-  --version 0.9.0 --install \
-  --report artifacts/logs/phase10-release-verification.json
+  --version 0.10.0 --install \
+  --report artifacts/logs/phase11-release-verification.json
 uv run python scripts/verify_reference_regions.py \
   --catalog reference_regions/catalog.yaml --definitions-only \
   --report artifacts/logs/reference-definitions.json
 uv run python scripts/run_benchmarks.py \
   --baseline benchmarks/baseline.json --repeat 2 \
-  --report artifacts/logs/phase9-benchmarks.json
+  --report artifacts/logs/phase11-benchmarks.json
 ```
 
 The suite covers terrain, CRS/AOI, sampling, orientation, exporters, workflows, Web API
 jobs, bilingual browser layout/WebGL, overlays, tiling/connectors, provider/cache behavior,
-slicers, release archives, reference regions, and benchmark contracts. Phase 10 closes with
-206 Python tests, 17 Vitest tests, 2 applicable Playwright scenarios, and byte-identical
-fixed-epoch archives; assembly tamper, antimeridian/polar coverage, maximum explosion,
-responsive reframing, and reset are executable regression contracts. Large DEM, mesh, cache, slicer, and benchmark output files
-remain outside Git.
+slicers, release archives, reference regions, and benchmark contracts. Phase 11 closes with
+210 Python tests, 18 Vitest tests, 2 applicable Playwright scenarios, strict Web lifecycle
+HTTP evidence, and byte-identical fixed-epoch archives. The largest deterministic benchmark
+observed 15.364 seconds and 1002.367 MiB RSS for 256 x 320 samples and 327,676 triangles.
+Large DEM, mesh, cache, slicer, and benchmark output files remain outside Git.
 
 ## Documentation
 

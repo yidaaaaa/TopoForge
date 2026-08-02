@@ -605,3 +605,25 @@ Result: the source patch passes forward apply, whitespace, reverse apply, and ex
 Command: test GitHub publication credentials with `git push --dry-run origin main v0.9.0`.
 
 Result: exit 128 with literal error `fatal: could not read Username for 'https://github.com': No such device or address`. Local release closure remains complete; remote publication requires GitHub credentials.
+
+### Phase 11 local project lifecycle and release candidate
+
+Command: inspect the pushed v0.9.0 GitHub state, complete the existing Phase 11 backend/frontend worktree, and add dynamic CI plus a target-tag GitHub Release workflow.
+
+Result: main and v0.9.0 are public over SSH. GitHub Actions run 30749563043 is confirmed failed because ci.yml passed --version 0.8.0 for the 0.9.0 package; the Releases API is empty. CI now reads uv version --short. release.yml has contents: write, main/tag/manual triggers, target-tag checkout, tag/package identity, fixed-epoch double builds, isolated installed verification, SHA256SUMS, v0.9.0 bootstrap selection, and existing-release no-op behavior. Eight release contract tests pass.
+
+Command: expose Phase 6 workflow maintenance through typed Web routes and bilingual React controls, then execute focused manager, API, Vitest, and real Playwright tests.
+
+Result: GET maintenance, POST backup, GET/list backup, POST exact-id cleanup, and POST atomic restore reuse the existing workflow core. Restored workflows register as completed jobs with strict artifacts. Focused backend/release tests report 24 passed; Vitest reports 18 passed. Playwright generates a deterministic 12 x 16 DEM, completes a 2 x 2 job, creates a stale stage, verifies/downloads a backup, accepts the cleanup identity dialog, restores a copy, and checks desktop/mobile/map/3D behavior: 2 passed and 2 project-inapplicable skipped.
+
+Command: run scripts/verify_phase11_lifecycle.py in a new output directory and strict-read both original and restored 3MF roles.
+
+Result: job df594fb010e249e1ba4d6aaaadb7e104 exits 0 with network_attempts=0. The 395380-byte backup repeats byte-for-byte at SHA-256 c862439fbd6470859bf85a1f32436d2aefbf26ff1e58ff6d1c9a24519199fa46. Wrong cleanup confirmation returns 422; confirmed cleanup removes only stages/99-unused/phase11-stale. Restored job d2c86d1d095b4078844c1ba92c5989e1 exits 0. Both model.3mf hashes are 4957143b4598b2205543117f3853c65f58af3d9dfda073cc975594a76be53333; strict reread reports 764 triangles, 64 x 48 x 20 mm, correct axes, and zero warnings.
+
+Command: build production Web assets; run full Ruff/format/Pyright/Pytest, npm typecheck/Vitest/Playwright, uv lock and Git whitespace, reference definitions, and two-run benchmarks.
+
+Result: Ruff passes and 163 files are formatted; Pyright has 0 errors; Pytest reports 210 passed in 89.64 s; Vitest 18 passed; Playwright 2 passed / 2 project-inapplicable skipped; Web manifest has nine verified assets; lock and whitespace pass. Seven reference AOIs pass with network_attempts=0. All three benchmarks repeat six roles byte-for-byte; the maximum observed case is 15.363904 s and 1002.367188 MiB RSS.
+
+Command: build two fixed-epoch 0.10.0 sdist/wheel sets and run scripts/verify_release.py --version 0.10.0 --install outside the checkout.
+
+Result: the 1052859-byte sdist repeats byte-for-byte at SHA-256 0c205b920e6022adc71846104576e0cdad9d0b4ac7f7b3417a76f69cea01112f; the 833526-byte wheel repeats at SHA-256 c0670dac934ee509cd8054291232ce154b36e3f53cd5998d2bd3760bb64942be. A fresh Python 3.12 environment installs 54 packages, imports 0.10.0 outside the repository, passes doctor and web --check with nine assets, builds 40 x 32 x 20 mm terrain, and strict-reads 3MF with zero warnings. No real DEM was downloaded or rebuilt.

@@ -27,7 +27,7 @@ import App from "./App";
 
 const health = {
   status: "ok",
-  version: "0.8.0",
+  version: "0.10.0",
   loopback_only: true,
   languages: ["zh-CN", "en"],
   workspace_root: "/tmp/workspaces",
@@ -65,6 +65,50 @@ const completedJob = {
     required_checks_passed: true,
   },
   artifacts: [],
+};
+
+const backupRecord = {
+  backup_id: "e".repeat(64),
+  workflow_id: "workflow-phase10",
+  original_workspace: "/tmp/workspaces/phase10",
+  archive_size_bytes: 4096,
+  archive_sha256: "f".repeat(64),
+  file_count: 24,
+  download_url: "/api/v1/backups/" + "e".repeat(64),
+  required_checks_passed: true,
+};
+
+const maintenanceOverview = {
+  job_id: "job-phase10",
+  storage: {
+    workspace: "/tmp/workspaces/phase10",
+    estimate_basis: "completed_workflow_measurements",
+    current_workspace_bytes: 8192,
+    estimated_peak_workspace_bytes: 8192,
+    estimated_additional_bytes: 0,
+    available_bytes: 1024 * 1024,
+    estimated_headroom_bytes: 1024 * 1024,
+    sufficient_for_estimate: true,
+    cleanup_reclaimable_bytes: 2048,
+    backup_input_bytes: 8192,
+  },
+  cleanup: {
+    workflow_id: "workflow-phase10",
+    workspace: "/tmp/workspaces/phase10",
+    current_workspace_bytes: 8192,
+    reclaimable_bytes: 2048,
+    candidates: [
+      {
+        path: "stages/old",
+        kind: "directory",
+        size_bytes: 2048,
+        reason: "unreferenced",
+      },
+    ],
+    required_checks_passed: true,
+  },
+  backups: [],
+  required_checks_passed: true,
 };
 
 const mapManifest = {
@@ -169,7 +213,7 @@ describe("TopoForge bilingual workspace", () => {
     render(<App />);
     expect(screen.getByText("本地地形制造工作台")).toBeInTheDocument();
     expect(screen.getByTestId("map-panel")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("v0.8.0")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("v0.10.0")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "开始构建" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
@@ -200,6 +244,9 @@ describe("TopoForge bilingual workspace", () => {
         }
         if (path.endsWith("/api/v1/jobs/job-phase10/assembly")) {
           return response(assembly);
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10/maintenance")) {
+          return response(maintenanceOverview);
         }
         if (path.endsWith("/api/v1/jobs")) {
           return response([completedJob]);
@@ -236,5 +283,85 @@ describe("TopoForge bilingual workspace", () => {
       "data-selected-tile",
       "tile-r0000-c0000",
     );
+  });
+
+  it("creates backups, confirms cleanup, and restores a completed project", async () => {
+    let backedUp = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith("/api/v1/health")) {
+        return response(health);
+      }
+      if (path.endsWith("/api/v1/jobs/job-phase10/maintenance")) {
+        return response({
+          ...maintenanceOverview,
+          backups: backedUp ? [backupRecord] : [],
+        });
+      }
+      if (path.endsWith("/api/v1/jobs/job-phase10/backup")) {
+        backedUp = true;
+        return response(backupRecord, 201);
+      }
+      if (path.endsWith("/api/v1/jobs/job-phase10/cleanup")) {
+        expect(init?.body).toBe(
+          JSON.stringify({ confirm_workflow_id: "workflow-phase10" }),
+        );
+        return response({
+          workflow_id: "workflow-phase10",
+          workspace: "/tmp/workspaces/phase10",
+          removed_paths: ["stages/old"],
+          reclaimed_bytes: 2048,
+          remaining_workspace_bytes: 6144,
+          required_checks_passed: true,
+        });
+      }
+      if (
+        path.endsWith(
+          "/api/v1/backups/" + backupRecord.backup_id + "/restore",
+        )
+      ) {
+        return response(
+          {
+            ...completedJob,
+            job_id: "job-restored",
+            workspace_dir: "/tmp/workspaces/phase10-restored",
+          },
+          201,
+        );
+      }
+      if (path.endsWith("/api/v1/jobs")) {
+        return response([completedJob]);
+      }
+      if (path.endsWith("/api/v1/jobs/job-phase10/map/manifest")) {
+        return response(mapManifest);
+      }
+      if (path.endsWith("/api/v1/jobs/job-phase10/assembly")) {
+        return response(assembly);
+      }
+      return response({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const backupButton = await screen.findByRole("button", { name: "创建备份" });
+    fireEvent.click(backupButton);
+    await waitFor(() => expect(screen.getByText("备份已校验")).toBeInTheDocument());
+    expect(await screen.findByText(backupRecord.backup_id.slice(0, 12))).toBeInTheDocument();
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "清理旧阶段" }));
+    await waitFor(() => expect(screen.getByText("旧阶段已清理")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "恢复副本" }));
+    await waitFor(() =>
+      expect(screen.getByText("备份已恢复为新任务")).toBeInTheDocument(),
+    );
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith(
+          "/api/v1/backups/" + backupRecord.backup_id + "/restore",
+        ),
+      ),
+    ).toBe(true);
   });
 });

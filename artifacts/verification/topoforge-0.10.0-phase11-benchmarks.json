@@ -1,0 +1,219 @@
+{
+  "baseline": {
+    "cases": [
+      {
+        "columns": 80,
+        "expected_processed_grid_shape": [
+          64,
+          80
+        ],
+        "expected_triangle_count": 20476,
+        "id": "small-64x80",
+        "max_peak_rss_mb": 1536.0,
+        "max_wall_seconds": 60.0,
+        "rows": 64
+      },
+      {
+        "columns": 160,
+        "expected_processed_grid_shape": [
+          128,
+          160
+        ],
+        "expected_triangle_count": 81916,
+        "id": "medium-128x160",
+        "max_peak_rss_mb": 1536.0,
+        "max_wall_seconds": 120.0,
+        "rows": 128
+      },
+      {
+        "columns": 320,
+        "expected_processed_grid_shape": [
+          256,
+          320
+        ],
+        "expected_triangle_count": 327676,
+        "id": "large-256x320",
+        "max_peak_rss_mb": 2048.0,
+        "max_wall_seconds": 300.0,
+        "rows": 256
+      }
+    ],
+    "deterministic_roles": [
+      "model_3mf",
+      "model_stl",
+      "original_nodata_mask",
+      "preview_glb",
+      "preview_png",
+      "processed_dem"
+    ],
+    "max_height_mm": 42.0,
+    "model_width_mm": 180.0,
+    "pixel_size_m": 10.0,
+    "resource_budget_mode": "strict",
+    "sampling_mode": "source-preserving",
+    "schema_version": 1,
+    "terrain": "gaussian-hill"
+  },
+  "baseline_path": "/root/autodl-tmp/bambu/TopoForge/benchmarks/baseline.json",
+  "case_count": 3,
+  "cases": [
+    {
+      "columns": 80,
+      "deterministic_repeat_passed": true,
+      "deterministic_roles": [
+        "model_3mf",
+        "model_stl",
+        "original_nodata_mask",
+        "preview_glb",
+        "preview_png",
+        "processed_dem"
+      ],
+      "deterministic_sha256": {
+        "model_3mf": "a5d4d84557c73c42b3b38b5525424c784969c9c082f0835cdfa1458163d5bc9e",
+        "model_stl": "086b3358a9a1dc741c056dbcfb17945f7e6f5a4d23143e5b2d87cbd5da6aa4f2",
+        "original_nodata_mask": "05af3e2480043fd11afebb5d3970171e8b0645070a5bf4457fb38047b04e2e2b",
+        "preview_glb": "df018159f10d999ef6d71f2c83405f620f6dd89323216bb2c4b1c5a22c8c8355",
+        "preview_png": "2fc3c824c821c734b12f287ec4683dc94eb032e647d9cd2b970a536ecdc0f4f4",
+        "processed_dem": "f5684a1192cc924c401c10e921e26e223543ec3e75ddd10dae1b530e944e9c60"
+      },
+      "id": "small-64x80",
+      "max_peak_rss_mb_threshold": 1536.0,
+      "max_wall_seconds_observed": 1.4401730224490166,
+      "max_wall_seconds_threshold": 60.0,
+      "peak_rss_mb_observed": 239.36328125,
+      "repeat": 2,
+      "required_checks_passed": true,
+      "rows": 64,
+      "validation": [
+        {
+          "estimated_memory_mb": 1.5625,
+          "processed_grid_shape": [
+            64,
+            80
+          ],
+          "required_checks_passed": true,
+          "triangle_count": 20476
+        },
+        {
+          "estimated_memory_mb": 1.5625,
+          "processed_grid_shape": [
+            64,
+            80
+          ],
+          "required_checks_passed": true,
+          "triangle_count": 20476
+        }
+      ],
+      "wall_seconds": [
+        1.4401730224490166,
+        1.325463067740202
+      ]
+    },
+    {
+      "columns": 160,
+      "deterministic_repeat_passed": true,
+      "deterministic_roles": [
+        "model_3mf",
+        "model_stl",
+        "original_nodata_mask",
+        "preview_glb",
+        "preview_png",
+        "processed_dem"
+      ],
+      "deterministic_sha256": {
+        "model_3mf": "204ed6e0a2229ebbba34b6979b0833867e4c6d5e56862b3e56b367487f3b5311",
+        "model_stl": "c058e332de9e902fa549876f8e6bf834fc916a8cb654458501745ebc15242deb",
+        "original_nodata_mask": "5ab0ba81c1ff876d01ce3a6127212647ba3b6187c6ad0a1c4a6b8107abe26a20",
+        "preview_glb": "ca457b0beb7e1680d4361de5e687ce5c9e144f1772b83c9c6e542831ede58005",
+        "preview_png": "4ab79258d22df53bca20bbea060d824b662258948be814cc37aa76805dc201f2",
+        "processed_dem": "88ba9c5959c878b535bb832b900d3889c49d1c9c0e25858407cb0854d77de57d"
+      },
+      "id": "medium-128x160",
+      "max_peak_rss_mb_threshold": 1536.0,
+      "max_wall_seconds_observed": 3.983669701963663,
+      "max_wall_seconds_threshold": 120.0,
+      "peak_rss_mb_observed": 387.6171875,
+      "repeat": 2,
+      "required_checks_passed": true,
+      "rows": 128,
+      "validation": [
+        {
+          "estimated_memory_mb": 6.25,
+          "processed_grid_shape": [
+            128,
+            160
+          ],
+          "required_checks_passed": true,
+          "triangle_count": 81916
+        },
+        {
+          "estimated_memory_mb": 6.25,
+          "processed_grid_shape": [
+            128,
+            160
+          ],
+          "required_checks_passed": true,
+          "triangle_count": 81916
+        }
+      ],
+      "wall_seconds": [
+        3.983669701963663,
+        3.9248741269111633
+      ]
+    },
+    {
+      "columns": 320,
+      "deterministic_repeat_passed": true,
+      "deterministic_roles": [
+        "model_3mf",
+        "model_stl",
+        "original_nodata_mask",
+        "preview_glb",
+        "preview_png",
+        "processed_dem"
+      ],
+      "deterministic_sha256": {
+        "model_3mf": "4ed7d80b38bcf0a93e72f15c7c239f3dc3016a947eabb8cee52f90dd5ef3f292",
+        "model_stl": "47e3b4412f847e8e945dc0d70eedeb891b4aec0a1461b7551ddf5eafd0fff433",
+        "original_nodata_mask": "95f8a198725d990110197e489c7b8234f13821ba182125a43dca0a9f456c36e3",
+        "preview_glb": "22c11a0ad47a2290caae758ce837152aa23cc3898cc9560551cf1c5b9a4f3f8e",
+        "preview_png": "c1325a2d334c01676cb829fc3a7e9f24f1fc3caef2851d59f067f76d0219d339",
+        "processed_dem": "73d5829cba1f73219aaf37e45b742c5d91ac19345c4e3916427fd9c3f516c1e3"
+      },
+      "id": "large-256x320",
+      "max_peak_rss_mb_threshold": 2048.0,
+      "max_wall_seconds_observed": 15.363903682678938,
+      "max_wall_seconds_threshold": 300.0,
+      "peak_rss_mb_observed": 1002.3671875,
+      "repeat": 2,
+      "required_checks_passed": true,
+      "rows": 256,
+      "validation": [
+        {
+          "estimated_memory_mb": 25.0,
+          "processed_grid_shape": [
+            256,
+            320
+          ],
+          "required_checks_passed": true,
+          "triangle_count": 327676
+        },
+        {
+          "estimated_memory_mb": 25.0,
+          "processed_grid_shape": [
+            256,
+            320
+          ],
+          "required_checks_passed": true,
+          "triangle_count": 327676
+        }
+      ],
+      "wall_seconds": [
+        15.363903682678938,
+        15.112089358270168
+      ]
+    }
+  ],
+  "required_checks_passed": true,
+  "schema_version": 1
+}

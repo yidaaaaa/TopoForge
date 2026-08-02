@@ -1,0 +1,129 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_DATE_EPOCH: "1580601600"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: target
+        name: Select unpublished release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag=""
+            while IFS= read -r candidate; do
+              if ! gh release view "$candidate" >/dev/null 2>&1; then
+                tag="$candidate"
+                break
+              fi
+            done < <(git tag --merged HEAD --list 'v*' --sort=-v:refname)
+          fi
+          if [[ -z "$tag" ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git rev-parse --verify "refs/tags/$tag^{commit}" >/dev/null
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Skip when every reachable tag is published
+        if: steps.target.outputs.publish != 'true'
+        run: echo "No unpublished release tag is reachable from this revision."
+      - uses: actions/checkout@v4
+        if: steps.target.outputs.publish == 'true'
+        with:
+          ref: ${{ steps.target.outputs.tag }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        if: steps.target.outputs.publish == 'true'
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        if: steps.target.outputs.publish == 'true'
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+        if: steps.target.outputs.publish == 'true'
+        with:
+          version: "0.8.24"
+          enable-cache: true
+      - id: version
+        name: Verify tag and package version
+        if: steps.target.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
+          test "v$version" = "${{ steps.target.outputs.tag }}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Install locked build dependencies
+        if: steps.target.outputs.publish == 'true'
+        run: uv sync --locked --all-groups
+      - name: Build packaged Web application
+        if: steps.target.outputs.publish == 'true'
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+      - name: Build reproducible archives
+        if: steps.target.outputs.publish == 'true'
+        run: |
+          uv build --no-sources --out-dir dist/primary
+          uv build --no-sources --out-dir dist/repeat
+      - name: Verify archives and isolated installation
+        if: steps.target.outputs.publish == 'true'
+        run: >-
+          uv run python scripts/verify_release.py
+          --primary-dir dist/primary
+          --repeat-dir dist/repeat
+          --version ${{ steps.version.outputs.version }}
+          --install
+          --report artifacts/logs/github-release-verification.json
+      - name: Stage release assets and checksums
+        if: steps.target.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/release
+          cp dist/primary/* dist/release/
+          cp artifacts/logs/github-release-verification.json \
+            "dist/release/topoforge-${{ steps.version.outputs.version }}-release-verification.json"
+          cd dist/release
+          sha256sum topoforge-* > SHA256SUMS
+          sha256sum --check SHA256SUMS
+      - name: Publish GitHub Release
+        if: steps.target.outputs.publish == 'true'
+        shell: bash
+        run: >-
+          gh release create "${{ steps.target.outputs.tag }}"
+          dist/release/*
+          --verify-tag
+          --title "TopoForge ${{ steps.version.outputs.version }}"
+          --generate-notes

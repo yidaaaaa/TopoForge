@@ -1,0 +1,181 @@
+{
+  "backup": {
+    "archive_sha256": "c862439fbd6470859bf85a1f32436d2aefbf26ff1e58ff6d1c9a24519199fa46",
+    "archive_size_bytes": 395380,
+    "backup_id": "fe393cc7399d611d29df2e14879c7c0c6b5489b9bf614f2f358460516a49c6fb",
+    "download_sha256": "c862439fbd6470859bf85a1f32436d2aefbf26ff1e58ff6d1c9a24519199fa46",
+    "download_size_bytes": 395380,
+    "download_url": "/api/v1/backups/fe393cc7399d611d29df2e14879c7c0c6b5489b9bf614f2f358460516a49c6fb",
+    "file_count": 108,
+    "original_workspace": "/root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1/workspaces/phase11-original",
+    "repeat_byte_identical": true,
+    "required_checks_passed": true,
+    "schema_version": "topoforge-web-backup-v1",
+    "workflow_id": "local-362ec3f77efd265b3d69fdf5"
+  },
+  "cleanup": {
+    "reclaimed_bytes": 26,
+    "remaining_workspace_bytes": 695775,
+    "removed_paths": [
+      "stages/99-unused/phase11-stale"
+    ],
+    "required_checks_passed": true,
+    "schema_version": "topoforge-workflow-cleanup-v1",
+    "workflow_id": "local-362ec3f77efd265b3d69fdf5",
+    "workspace": "/root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1/workspaces/phase11-original"
+  },
+  "http_statuses": {
+    "backup_download": 200,
+    "backup_first": 201,
+    "backup_repeat": 201,
+    "cleanup_confirmed": 200,
+    "cleanup_wrong_confirmation": 422,
+    "create_job": 201,
+    "list_backups": 200,
+    "maintenance_after": 200,
+    "maintenance_before": 200,
+    "restore": 201
+  },
+  "maintenance_after": {
+    "backups": [
+      {
+        "archive_sha256": "c862439fbd6470859bf85a1f32436d2aefbf26ff1e58ff6d1c9a24519199fa46",
+        "archive_size_bytes": 395380,
+        "backup_id": "fe393cc7399d611d29df2e14879c7c0c6b5489b9bf614f2f358460516a49c6fb",
+        "download_url": "/api/v1/backups/fe393cc7399d611d29df2e14879c7c0c6b5489b9bf614f2f358460516a49c6fb",
+        "file_count": 108,
+        "original_workspace": "/root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1/workspaces/phase11-original",
+        "required_checks_passed": true,
+        "schema_version": "topoforge-web-backup-v1",
+        "workflow_id": "local-362ec3f77efd265b3d69fdf5"
+      }
+    ],
+    "cleanup": {
+      "apply_command": "topoforge cleanup /root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1/workspaces/phase11-original --apply --confirm-workflow-id local-362ec3f77efd265b3d69fdf5",
+      "candidates": [],
+      "current_workspace_bytes": 695775,
+      "reclaimable_bytes": 0,
+      "required_checks_passed": true,
+      "review_command": "topoforge cleanup /root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1/workspaces/phase11-original",
+      "schema_version": "topoforge-workflow-cleanup-v1",
+      "workflow_id": "local-362ec3f77efd265b3d69fdf5",
+      "workspace": "/root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1/workspaces/phase11-original"
+    },
+    "job_id": "df594fb010e249e1ba4d6aaaadb7e104",
+    "required_checks_passed": true,
+    "storage": {
+      "assumptions": [
+        "Pre-run estimates use configured cell and triangle ceilings; completed runs use measured grid and triangle counts.",
+        "STL, 3MF, GLB, G-code, and ZIP compression ratios vary with terrain and slicer settings.",
+        "The estimate is conservative and is not a reservation or a guaranteed upper bound.",
+        "Provider cache directories outside the workflow workspace are excluded."
+      ],
+      "available_bytes": 368503762944,
+      "backup_input_bytes": 697105,
+      "cleanup_reclaimable_bytes": 0,
+      "component_estimates_bytes": {
+        "build_mesh_formats": 76400,
+        "build_rasters_and_reports": 25168128,
+        "connector_and_print_local_formats": 12743352,
+        "overlay_formats_and_reports": 0,
+        "project_outputs": 0,
+        "slice_outputs": 0,
+        "source_and_stage_metadata": 262144,
+        "tile_mesh_formats": 8468828,
+        "tile_rasters_and_seam_evidence": 2098918
+      },
+      "current_workspace_bytes": 695775,
+      "estimate_basis": "completed_workflow_measurements",
+      "estimated_additional_bytes": 48121995,
+      "estimated_headroom_bytes": 368455640949,
+      "estimated_peak_workspace_bytes": 48817770,
+      "estimated_tile_count": 4,
+      "estimated_triangle_count": 764,
+      "grid_cell_count": 192,
+      "schema_version": "topoforge-workflow-storage-v1",
+      "source_mode": "local",
+      "sufficient_for_estimate": true,
+      "workspace": "/root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1/workspaces/phase11-original"
+    }
+  },
+  "maintenance_before": {
+    "backups": [],
+    "cleanup": {
+      "apply_command": "topoforge cleanup /root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1/workspaces/phase11-original --apply --confirm-workflow-id local-362ec3f77efd265b3d69fdf5",
+      "candidates": [
+        {
+          "kind": "directory",
+          "path": "stages/99-unused/phase11-stale",
+          "reason": "stage identity is not referenced by workflow-manifest.json",
+          "size_bytes": 26
+        }
+      ],
+      "current_workspace_bytes": 695801,
+      "reclaimable_bytes": 26,
+      "required_checks_passed": true,
+      "review_command": "topoforge cleanup /root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1/workspaces/phase11-original",
+      "schema_version": "topoforge-workflow-cleanup-v1",
+      "workflow_id": "local-362ec3f77efd265b3d69fdf5",
+      "workspace": "/root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1/workspaces/phase11-original"
+    },
+    "job_id": "df594fb010e249e1ba4d6aaaadb7e104",
+    "required_checks_passed": true,
+    "storage": {
+      "assumptions": [
+        "Pre-run estimates use configured cell and triangle ceilings; completed runs use measured grid and triangle counts.",
+        "STL, 3MF, GLB, G-code, and ZIP compression ratios vary with terrain and slicer settings.",
+        "The estimate is conservative and is not a reservation or a guaranteed upper bound.",
+        "Provider cache directories outside the workflow workspace are excluded."
+      ],
+      "available_bytes": 368505176064,
+      "backup_input_bytes": 697131,
+      "cleanup_reclaimable_bytes": 26,
+      "component_estimates_bytes": {
+        "build_mesh_formats": 76400,
+        "build_rasters_and_reports": 25168128,
+        "connector_and_print_local_formats": 12743352,
+        "overlay_formats_and_reports": 0,
+        "project_outputs": 0,
+        "slice_outputs": 0,
+        "source_and_stage_metadata": 262144,
+        "tile_mesh_formats": 8468828,
+        "tile_rasters_and_seam_evidence": 2098918
+      },
+      "current_workspace_bytes": 695801,
+      "estimate_basis": "completed_workflow_measurements",
+      "estimated_additional_bytes": 48121969,
+      "estimated_headroom_bytes": 368457054095,
+      "estimated_peak_workspace_bytes": 48817770,
+      "estimated_tile_count": 4,
+      "estimated_triangle_count": 764,
+      "grid_cell_count": 192,
+      "schema_version": "topoforge-workflow-storage-v1",
+      "source_mode": "local",
+      "sufficient_for_estimate": true,
+      "workspace": "/root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1/workspaces/phase11-original"
+    }
+  },
+  "original_job": {
+    "exit_code": 0,
+    "job_id": "df594fb010e249e1ba4d6aaaadb7e104",
+    "model_3mf_sha256": "4957143b4598b2205543117f3853c65f58af3d9dfda073cc975594a76be53333",
+    "workflow_id": "local-362ec3f77efd265b3d69fdf5",
+    "workspace": "/root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1/workspaces/phase11-original"
+  },
+  "required_checks_passed": true,
+  "restored_job": {
+    "exit_code": 0,
+    "job_id": "d2c86d1d095b4078844c1ba92c5989e1",
+    "model_3mf_sha256": "4957143b4598b2205543117f3853c65f58af3d9dfda073cc975594a76be53333",
+    "workflow_id": "local-362ec3f77efd265b3d69fdf5",
+    "workspace": "/root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1/workspaces/phase11-original-restored-fe393cc7"
+  },
+  "root": "/root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1",
+  "schema_version": "topoforge-phase11-lifecycle-verification-v1",
+  "source": {
+    "network_attempts": 0,
+    "path": "/root/autodl-tmp/bambu/TopoForge/outputs/phase11-lifecycle-0.10.0-v1/inputs/phase11-lifecycle.tif",
+    "sha256": "6f58a1c6c952ddc6497537991a2242825cf4d4db2ceb857734140fed069bc519"
+  },
+  "topoforge_version": "0.10.0"
+}

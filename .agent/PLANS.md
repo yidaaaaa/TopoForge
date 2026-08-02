@@ -17,6 +17,7 @@ Updated: 2026-08-02
 - [x] Phase 9 — worker-backed loopback FastAPI and bilingual React/MapLibre/Three.js local Web application. Completed in 0.8.0 on 2026-08-02.
 - [x] Phase 9.1 — WebUI map and 3D presentation stabilization. Completed in 0.8.1 on 2026-08-02.
 - [x] Phase 10 — deterministic local processed-DEM maps and synchronized 2D/3D manufacturing assembly. Completed in 0.9.0 on 2026-08-02.
+- [ ] Phase 11 — bilingual local project lifecycle and automated GitHub Releases. Local 0.10.0 evidence is complete; remote Actions/Release closure is in progress.
 
 ## Completed Phase 9 — bilingual local Web application
 
@@ -227,3 +228,15 @@ The local API and Web plan is complete and visually stabilized in 0.8.1: typed d
 - The ambiguous `copernicus` provider descriptor was split into the no-key `copernicus-aws` route and authenticated `copernicus-cdse` route.
 - Direct loading of Bambu leaf preset JSON was replaced by deterministic inherits/include flattening after official Bambu Studio silently fell back to a generic 200 x 200 mm platform.
 - Replacing the interoperable Core model.3mf with a Bambu vendor project was rejected; both 3MF roles are preserved because lib3mf does not reopen the vendor project parts as the Core source package.
+
+## Phase 11 — local project lifecycle and GitHub release closure (0.10.0)
+
+1. [x] Reuse the Phase 6 maintenance core for Web storage, exact cleanup planning/application, deterministic backup, strict download verification, atomic restore, and restored-job registration.
+2. [x] Add typed loopback lifecycle API routes without duplicating workflow algorithms.
+3. [x] Add Chinese/English project maintenance UI with measured storage, backup/download, explicit cleanup confirmation, and restore.
+4. [x] Add real manager/API/Vitest/Playwright lifecycle tests and a retained evidence generator.
+5. [x] Replace hard-coded CI release versions with the project version.
+6. [x] Add target-tag GitHub Release automation with fixed-epoch double builds, isolated installation verification, SHA256SUMS, historical-tag bootstrap, and idempotent skip.
+7. [x] Synchronize 0.10.0 versions, build nine checksum-bound Web assets, run 210 Python tests, 18 Vitest tests, 2 applicable Playwright scenarios, reference definitions, and deterministic benchmarks.
+8. [x] Produce local lifecycle, release, benchmark, reference, screenshot, and summary evidence without real terrain download or rebuild.
+9. [ ] Commit/tag v0.10.0, independently verify patch/rollback, push main/tag, and require successful GitHub Actions plus v0.9.0/v0.10.0 Release assets.

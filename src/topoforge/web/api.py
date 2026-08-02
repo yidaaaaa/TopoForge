@@ -30,7 +30,17 @@ from topoforge.web.map_tiles import (
     MapTileStyle,
     WebVisualizationService,
 )
-from topoforge.web.models import FileListing, JobCreateRequest, JobRecord, WebAppConfig
+from topoforge.web.models import (
+    FileListing,
+    JobCreateRequest,
+    JobMaintenanceOverview,
+    JobRecord,
+    WebAppConfig,
+    WorkflowBackupRecord,
+    WorkflowCleanupRequest,
+    WorkflowRestoreRequest,
+)
+from topoforge.workflow import WorkflowCleanupResult
 
 
 def bundled_static_dir() -> Path:
@@ -236,6 +246,81 @@ def create_app(
             return jobs.cancel(job_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="job not found") from exc
+
+    @app.get(
+        "/api/v1/jobs/{job_id}/maintenance",
+        response_model=JobMaintenanceOverview,
+    )
+    def get_job_maintenance(job_id: str) -> JobMaintenanceOverview:
+        try:
+            return jobs.maintenance(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+
+    @app.post(
+        "/api/v1/jobs/{job_id}/backup",
+        response_model=WorkflowBackupRecord,
+        status_code=201,
+    )
+    def create_job_backup(job_id: str) -> WorkflowBackupRecord:
+        try:
+            return jobs.create_backup(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+
+    @app.post(
+        "/api/v1/jobs/{job_id}/cleanup",
+        response_model=WorkflowCleanupResult,
+    )
+    def cleanup_job(
+        job_id: str,
+        request: WorkflowCleanupRequest,
+    ) -> WorkflowCleanupResult:
+        try:
+            return jobs.cleanup(
+                job_id,
+                confirm_workflow_id=request.confirm_workflow_id,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+
+    @app.get("/api/v1/backups", response_model=tuple[WorkflowBackupRecord, ...])
+    def list_backups() -> tuple[WorkflowBackupRecord, ...]:
+        return jobs.list_backups()
+
+    @app.get("/api/v1/backups/{backup_id}")
+    def get_backup(backup_id: str) -> FileResponse:
+        try:
+            path, backup = jobs.backup_archive_path(backup_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="backup not found") from exc
+        return FileResponse(
+            path,
+            media_type="application/zip",
+            filename=(f"topoforge-{backup.workflow_id[:12]}-{backup.backup_id[:12]}.zip"),
+            headers={
+                "ETag": f'"{backup.archive_sha256}"',
+                "Cache-Control": "private, no-cache",
+                "X-TopoForge-Backup-SHA256": backup.archive_sha256,
+            },
+        )
+
+    @app.post(
+        "/api/v1/backups/{backup_id}/restore",
+        response_model=JobRecord,
+        status_code=201,
+    )
+    def restore_backup(
+        backup_id: str,
+        request: WorkflowRestoreRequest,
+    ) -> JobRecord:
+        try:
+            return jobs.restore_backup(
+                backup_id,
+                workspace_name=request.workspace_name,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="backup not found") from exc
 
     @app.get("/api/v1/jobs/{job_id}/events")
     async def stream_events(

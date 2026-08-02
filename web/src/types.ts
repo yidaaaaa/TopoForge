@@ -161,6 +161,65 @@ export interface JobRecord {
   artifacts: JobArtifact[];
 }
 
+export interface WorkflowStorageEstimate {
+  workspace: string;
+  estimate_basis:
+    | "configured_resource_ceilings"
+    | "completed_workflow_measurements";
+  current_workspace_bytes: number;
+  estimated_peak_workspace_bytes: number;
+  estimated_additional_bytes: number;
+  available_bytes: number;
+  estimated_headroom_bytes: number;
+  sufficient_for_estimate: boolean;
+  cleanup_reclaimable_bytes: number;
+  backup_input_bytes: number;
+}
+
+export interface WorkflowCleanupCandidate {
+  path: string;
+  kind: "directory" | "file" | "symlink";
+  size_bytes: number;
+  reason: string;
+}
+
+export interface WorkflowCleanupPlan {
+  workflow_id: string;
+  workspace: string;
+  current_workspace_bytes: number;
+  reclaimable_bytes: number;
+  candidates: WorkflowCleanupCandidate[];
+  required_checks_passed: boolean;
+}
+
+export interface WorkflowBackupRecord {
+  backup_id: string;
+  workflow_id: string;
+  original_workspace: string;
+  archive_size_bytes: number;
+  archive_sha256: string;
+  file_count: number;
+  download_url: string;
+  required_checks_passed: boolean;
+}
+
+export interface JobMaintenanceOverview {
+  job_id: string;
+  storage: WorkflowStorageEstimate;
+  cleanup: WorkflowCleanupPlan;
+  backups: WorkflowBackupRecord[];
+  required_checks_passed: boolean;
+}
+
+export interface WorkflowCleanupResult {
+  workflow_id: string;
+  workspace: string;
+  removed_paths: string[];
+  reclaimed_bytes: number;
+  remaining_workspace_bytes: number;
+  required_checks_passed: boolean;
+}
+
 export interface FileEntry {
   name: string;
   path: string;

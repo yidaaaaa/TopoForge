@@ -28,16 +28,27 @@ from topoforge.web.models import (
     JobCreateRequest,
     JobError,
     JobEvent,
+    JobMaintenanceOverview,
     JobRecord,
     JobState,
     WebAppConfig,
     WorkerResult,
+    WorkflowBackupRecord,
+    WorkflowRestoreRequest,
     utc_now,
 )
 from topoforge.workflow import (
     LocalWorkflowStatus,
+    WorkflowCleanupResult,
     WorkflowStage,
+    apply_workflow_cleanup,
+    create_workflow_backup,
+    estimate_workflow_storage,
     inspect_workflow_workspace,
+    plan_workflow_cleanup,
+    read_workflow_launch_config,
+    restore_workflow_backup,
+    verify_workflow_backup,
 )
 
 _SELECTABLE_SUFFIXES = {
@@ -133,12 +144,18 @@ class LocalJobManager:
         """Return the durable job record directory."""
         return self.config.state_dir / "jobs"
 
+    @property
+    def backups_dir(self) -> Path:
+        """Return the adapter-owned verified workflow backup directory."""
+        return self.config.state_dir / "backups"
+
     def start(self) -> None:
         """Create roots, reconcile retained records, and start background polling."""
         with self._lock:
             self.config.state_dir.mkdir(parents=True, exist_ok=True)
             self.config.workspace_root.mkdir(parents=True, exist_ok=True)
             self.jobs_dir.mkdir(parents=True, exist_ok=True)
+            self.backups_dir.mkdir(parents=True, exist_ok=True)
             self.refresh()
             if self._monitor is None or not self._monitor.is_alive():
                 self._stop.clear()
@@ -289,6 +306,172 @@ class LocalJobManager:
                 self._read_record(path.parent.name) for path in self.jobs_dir.glob("*/job.json")
             ]
             return tuple(sorted(records, key=lambda item: item.created_at, reverse=True))
+
+    def _completed_record(self, job_id: str) -> JobRecord:
+        record = self.get(job_id)
+        if record.state is not JobState.COMPLETED or record.summary is None:
+            raise ConfigurationError("workflow maintenance requires a completed job")
+        return record
+
+    @staticmethod
+    def _backup_record(path: Path) -> WorkflowBackupRecord:
+        manifest = verify_workflow_backup(path)
+        return WorkflowBackupRecord(
+            backup_id=manifest.backup_id,
+            workflow_id=manifest.workflow_id,
+            original_workspace=manifest.original_workspace,
+            archive_size_bytes=path.stat().st_size,
+            archive_sha256=sha256_file(path),
+            file_count=len(manifest.files),
+            download_url=f"/api/v1/backups/{manifest.backup_id}",
+            required_checks_passed=manifest.required_checks_passed,
+        )
+
+    def list_backups(self) -> tuple[WorkflowBackupRecord, ...]:
+        """Strictly reopen adapter-owned backups and return stable records."""
+        with self._lock:
+            if not self.backups_dir.exists():
+                return ()
+            records = [
+                self._backup_record(path)
+                for path in sorted(self.backups_dir.glob("*.zip"), key=lambda item: item.name)
+            ]
+            return tuple(records)
+
+    def create_backup(self, job_id: str) -> WorkflowBackupRecord:
+        """Create or reuse one deterministic verified backup for a completed job."""
+        with self._lock:
+            record = self._completed_record(job_id)
+            self.backups_dir.mkdir(parents=True, exist_ok=True)
+            temporary = self.backups_dir / f".{job_id}.creating.zip"
+            temporary.unlink(missing_ok=True)
+            try:
+                result = create_workflow_backup(record.workspace_dir, temporary)
+                destination = self.backups_dir / f"{result.manifest.backup_id}.zip"
+                if destination.exists():
+                    existing = self._backup_record(destination)
+                    if existing.archive_sha256 != result.archive_sha256:
+                        raise ConfigurationError(
+                            "workflow backup id collision has different archive bytes"
+                        )
+                    temporary.unlink(missing_ok=True)
+                    return existing
+                temporary.replace(destination)
+                return self._backup_record(destination)
+            except BaseException:
+                temporary.unlink(missing_ok=True)
+                raise
+
+    def backup_archive_path(
+        self,
+        backup_id: str,
+    ) -> tuple[Path, WorkflowBackupRecord]:
+        """Resolve and strictly verify one adapter-owned backup download."""
+        if len(backup_id) != 64 or any(
+            character not in "0123456789abcdef" for character in backup_id
+        ):
+            raise KeyError(backup_id)
+        path = (self.backups_dir / f"{backup_id}.zip").resolve()
+        if self.backups_dir.resolve() not in path.parents or not path.is_file():
+            raise KeyError(backup_id)
+        record = self._backup_record(path)
+        if record.backup_id != backup_id:
+            raise ConfigurationError("workflow backup filename does not match its identity")
+        return path, record
+
+    def maintenance(self, job_id: str) -> JobMaintenanceOverview:
+        """Return measured storage, cleanup, and backup state for one job."""
+        record = self._completed_record(job_id)
+        summary = record.summary
+        if summary is None:
+            raise ConfigurationError("completed job summary is missing")
+        launch = read_workflow_launch_config(record.workspace_dir / "workflow-launch.yaml")
+        storage = estimate_workflow_storage(launch, summary=summary)
+        cleanup = plan_workflow_cleanup(record.workspace_dir)
+        backups = tuple(
+            backup for backup in self.list_backups() if backup.workflow_id == summary.workflow_id
+        )
+        return JobMaintenanceOverview(
+            job_id=record.job_id,
+            storage=storage,
+            cleanup=cleanup,
+            backups=backups,
+            required_checks_passed=(
+                storage.sufficient_for_estimate
+                and cleanup.required_checks_passed
+                and all(item.required_checks_passed for item in backups)
+            ),
+        )
+
+    def cleanup(
+        self,
+        job_id: str,
+        *,
+        confirm_workflow_id: str,
+    ) -> WorkflowCleanupResult:
+        """Apply the core reviewed cleanup contract for one completed job."""
+        record = self._completed_record(job_id)
+        if record.summary is None or confirm_workflow_id != record.summary.workflow_id:
+            raise ConfigurationError(
+                "cleanup confirmation does not match the selected completed job"
+            )
+        return apply_workflow_cleanup(
+            record.workspace_dir,
+            confirm_workflow_id=confirm_workflow_id,
+        )
+
+    def restore_backup(
+        self,
+        backup_id: str,
+        *,
+        workspace_name: str | None = None,
+    ) -> JobRecord:
+        """Restore a verified backup below the workspace root and register it."""
+        with self._lock:
+            archive, backup = self.backup_archive_path(backup_id)
+            request = WorkflowRestoreRequest(workspace_name=workspace_name)
+            if request.workspace_name is None:
+                raw_name = f"{backup.original_workspace.name}-restored-{backup.backup_id[:8]}"
+                name = "".join(
+                    character if character.isalnum() or character in "._-" else "-"
+                    for character in raw_name
+                ).strip(".-")
+            else:
+                name = request.workspace_name
+            if not name:
+                raise ConfigurationError("restored workspace name is empty")
+            destination = (self.config.workspace_root / name).resolve()
+            if not _within(self.config.workspace_root, destination):
+                raise ConfigurationError("restored workspace escapes workspace root")
+            result = restore_workflow_backup(archive, destination)
+            if not result.required_checks_passed:
+                raise ConfigurationError("restored workflow did not pass strict checks")
+            launch = read_workflow_launch_config(destination / "workflow-launch.yaml")
+            create_request = JobCreateRequest(launch=launch)
+            summary = inspect_workflow_workspace(destination)
+            job_id = uuid4().hex
+            now = utc_now()
+            base_record = JobRecord(
+                job_id=job_id,
+                created_at=now,
+                updated_at=now,
+                state=JobState.COMPLETED,
+                workspace_dir=destination,
+                expected_stages=expected_workflow_stages(create_request),
+                progress_fraction=1.0,
+                current_stage=None,
+                ready_stages=summary.ready_stages,
+                pid=None,
+                exit_code=0,
+                summary=summary,
+            )
+            completed = base_record.model_copy(
+                update={"artifacts": self._artifacts(base_record, summary.artifacts)}
+            )
+            _atomic_write(self._request_path(job_id), create_request)
+            _atomic_write(self._record_path(job_id), completed)
+            self._append_event(completed, "job.restored")
+            return self._read_record(job_id)
 
     def _all_records(self) -> tuple[JobRecord, ...]:
         return tuple(

@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { mkdir, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 
 async function nonBlankCanvas(page: import("@playwright/test").Page, selector: string) {
   return page.locator(selector).evaluate((canvas: HTMLCanvasElement) => {
@@ -52,6 +54,68 @@ async function sampledPalette(page: import("@playwright/test").Page, selector: s
   });
 }
 
+
+interface CompletedJob {
+  job_id: string;
+  workspace_dir: string;
+  state: string;
+  summary: { workflow_id: string } | null;
+}
+
+async function createCompletedLifecycleJob(
+  page: import("@playwright/test").Page,
+): Promise<CompletedJob> {
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+  const workspace = `/tmp/topoforge-playwright-workspaces/phase11-${suffix}`;
+  const response = await page.request.post("/api/v1/jobs", {
+    data: {
+      launch: {
+        workspace_dir: workspace,
+        build: {
+          dem_path: "/tmp/topoforge-playwright-input-v0.10.0.tif",
+          output_dir: workspace,
+          model_width_mm: 64,
+          model_depth_mm: null,
+          base_thickness_mm: 3,
+          max_height_mm: 20,
+          sampling_mode: "source-preserving",
+          max_grid_cells: 10000,
+          max_estimated_triangles: 50000,
+          max_estimated_memory_mb: 1024,
+          resource_budget_mode: "strict",
+          output_formats: ["stl", "3mf", "glb"],
+        },
+        maximum_tile_width_mm: 32,
+        maximum_tile_depth_mm: 32,
+        overlap_cells: 1,
+        slicing_enabled: false,
+        slicer_name: "bambu-studio",
+        slicer_settings: [],
+        slicer_filaments: [],
+        slice_timeout_seconds: 1200,
+        project_evidence_enabled: false,
+        project_timeout_seconds: 1800,
+      },
+    },
+  });
+  expect(response.status()).toBe(201);
+  const created = (await response.json()) as CompletedJob;
+  await expect
+    .poll(
+      async () => {
+        const current = await page.request.get(`/api/v1/jobs/${created.job_id}`);
+        expect(current.ok()).toBe(true);
+        return ((await current.json()) as CompletedJob).state;
+      },
+      { timeout: 120_000 },
+    )
+    .toBe("completed");
+  const completedResponse = await page.request.get(
+    `/api/v1/jobs/${created.job_id}`,
+  );
+  return (await completedResponse.json()) as CompletedJob;
+}
+
 test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   page,
 }, testInfo) => {
@@ -81,12 +145,60 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
       ),
     });
   });
+  const completedJob = await createCompletedLifecycleJob(page);
+  expect(completedJob.summary).not.toBeNull();
+  const stale = join(
+    completedJob.workspace_dir,
+    "stages",
+    "99-unused",
+    "playwright-stale",
+  );
+  await mkdir(stale, { recursive: true });
+  await writeFile(join(stale, "payload.bin"), "playwright-unreferenced-stage");
   await page.addInitScript(() => {
     window.localStorage.setItem("topoforge-language", "zh-CN");
   });
   await page.goto("/");
   await expect(page.getByText("本地地形制造工作台")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: basename(completedJob.workspace_dir) }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "开始构建" })).toBeVisible();
+  const backupButton = page.getByRole("button", { name: "创建备份" });
+  const cleanupButton = page.getByRole("button", { name: "清理旧阶段" });
+  await expect(backupButton).toBeEnabled();
+  await expect(cleanupButton).toBeEnabled();
+  await backupButton.click();
+  await expect(page.getByText("备份已校验")).toBeVisible();
+  const backupsResponse = await page.request.get("/api/v1/backups");
+  expect(backupsResponse.ok()).toBe(true);
+  const backups = (await backupsResponse.json()) as Array<{
+    backup_id: string;
+    workflow_id: string;
+    archive_sha256: string;
+    download_url: string;
+  }>;
+  const backup = backups.find(
+    (candidate) => candidate.workflow_id === completedJob.summary!.workflow_id,
+  );
+  expect(backup).toBeDefined();
+  await expect(page.getByText(backup!.backup_id.slice(0, 12))).toBeVisible();
+  const download = await page.request.get(backup!.download_url);
+  expect(download.ok()).toBe(true);
+  expect(download.headers()["x-topoforge-backup-sha256"]).toBe(
+    backup!.archive_sha256,
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+  await cleanupButton.click();
+  await expect(page.getByText("旧阶段已清理")).toBeVisible();
+  await expect(cleanupButton).toBeDisabled();
+  await page.getByRole("button", { name: "恢复副本" }).click();
+  await expect(page.getByText("备份已恢复为新任务")).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: `${basename(completedJob.workspace_dir)}-restored-${backup!.backup_id.slice(0, 8)}`,
+    }),
+  ).toBeVisible();
   const mapCanvas = page.locator(".maplibregl-canvas");
   await expect(mapCanvas).toBeVisible();
   await expect.poll(async () => (await mapCanvas.boundingBox())?.width ?? 0).toBeGreaterThan(300);

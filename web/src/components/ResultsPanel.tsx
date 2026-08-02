@@ -1,10 +1,14 @@
 import {
   AlertTriangle,
+  Archive,
   CheckCircle2,
   Download,
   ExternalLink,
+  HardDrive,
   RefreshCw,
+  RotateCcw,
   Square,
+  Trash2,
 } from "lucide-react";
 import { useCallback } from "react";
 
@@ -15,16 +19,22 @@ import {
   translate,
   type TranslationKey,
 } from "../i18n";
-import type { JobRecord, Language } from "../types";
+import type { JobMaintenanceOverview, JobRecord, Language } from "../types";
 
 interface ResultsPanelProps {
   language: Language;
   jobs: JobRecord[];
   selectedJob: JobRecord | null;
+  maintenance: JobMaintenanceOverview | null;
   loading: boolean;
+  maintenanceLoading: boolean;
+  maintenanceBusy: "backup" | "cleanup" | "restore" | null;
   onRefresh: () => void;
   onSelect: (jobId: string) => void;
   onCancel: (jobId: string) => void;
+  onBackup: (jobId: string) => void;
+  onCleanup: (jobId: string, workflowId: string) => void;
+  onRestore: (backupId: string) => void;
 }
 
 function metricValue(value: unknown): string {
@@ -42,10 +52,16 @@ export function ResultsPanel({
   language,
   jobs,
   selectedJob,
+  maintenance,
   loading,
+  maintenanceLoading,
+  maintenanceBusy,
   onRefresh,
   onSelect,
   onCancel,
+  onBackup,
+  onCleanup,
+  onRestore,
 }: ResultsPanelProps) {
   const t = useCallback(
     (key: TranslationKey) => translate(language, key),
@@ -165,6 +181,99 @@ export function ResultsPanel({
                   </div>
                 ))}
               </dl>
+            </>
+          )}
+
+          {selectedJob.state === "completed" && (
+            <>
+              <div className="subheading">
+                <HardDrive size={16} />
+                <h3>{t("projectMaintenance")}</h3>
+              </div>
+              {maintenanceLoading && (
+                <div className="empty-state compact">{t("maintenanceLoading")}</div>
+              )}
+              {maintenance && (
+                <div className="maintenance-section">
+                  <dl className="summary-list maintenance-summary">
+                    <div>
+                      <dt>{t("storageUsage")}</dt>
+                      <dd>{formatBytes(maintenance.storage.current_workspace_bytes)}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("availableSpace")}</dt>
+                      <dd>{formatBytes(maintenance.storage.available_bytes)}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("reclaimableSpace")}</dt>
+                      <dd>{formatBytes(maintenance.cleanup.reclaimable_bytes)}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("backupCount")}</dt>
+                      <dd>{maintenance.backups.length}</dd>
+                    </div>
+                  </dl>
+                  <div className="maintenance-actions">
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={maintenanceBusy !== null}
+                      onClick={() => onBackup(selectedJob.job_id)}
+                    >
+                      <Archive size={14} />
+                      {t("createBackup")}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={
+                        maintenanceBusy !== null ||
+                        maintenance.cleanup.reclaimable_bytes === 0
+                      }
+                      onClick={() =>
+                        onCleanup(selectedJob.job_id, maintenance.cleanup.workflow_id)
+                      }
+                    >
+                      <Trash2 size={14} />
+                      {t("cleanupWorkspace")}
+                    </button>
+                  </div>
+                  <div className="backup-list">
+                    {maintenance.backups.length === 0 && (
+                      <div className="empty-state compact">{t("noBackups")}</div>
+                    )}
+                    {maintenance.backups.map((backup) => (
+                      <div className="backup-row" key={backup.backup_id}>
+                        <a
+                          href={backup.download_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={t("downloadBackup")}
+                        >
+                          <Download size={14} />
+                          <span>
+                            <strong>{backup.backup_id.slice(0, 12)}</strong>
+                            <small>
+                              {formatBytes(backup.archive_size_bytes)} · {backup.file_count}{" "}
+                              {t("backupFiles")}
+                            </small>
+                          </span>
+                        </a>
+                        <button
+                          type="button"
+                          className="icon-button"
+                          disabled={maintenanceBusy !== null}
+                          onClick={() => onRestore(backup.backup_id)}
+                          title={t("restoreBackup")}
+                          aria-label={t("restoreBackup")}
+                        >
+                          <RotateCcw size={15} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
 

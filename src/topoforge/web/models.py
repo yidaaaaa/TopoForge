@@ -9,7 +9,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from topoforge.workflow import WorkflowLaunchConfig, WorkflowRunSummary, WorkflowStage
+from topoforge.workflow import (
+    WorkflowCleanupPlan,
+    WorkflowLaunchConfig,
+    WorkflowRunSummary,
+    WorkflowStage,
+    WorkflowStorageEstimate,
+)
 
 _JOB_SCHEMA_VERSION = "topoforge-web-job-v1"
 _EVENT_SCHEMA_VERSION = "topoforge-web-job-event-v1"
@@ -102,6 +108,55 @@ class JobRecord(BaseModel):
     error: JobError | None = None
     summary: WorkflowRunSummary | None = None
     artifacts: tuple[JobArtifact, ...] = ()
+
+
+class WorkflowBackupRecord(BaseModel):
+    """Strictly reopened local workflow backup exposed by the Web adapter."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: str = "topoforge-web-backup-v1"
+    backup_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    workflow_id: str
+    original_workspace: Path
+    archive_size_bytes: int = Field(ge=0)
+    archive_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    file_count: int = Field(ge=1)
+    download_url: str
+    required_checks_passed: bool
+
+
+class JobMaintenanceOverview(BaseModel):
+    """Measured storage, cleanup, and backup state for one completed job."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    job_id: str
+    storage: WorkflowStorageEstimate
+    cleanup: WorkflowCleanupPlan
+    backups: tuple[WorkflowBackupRecord, ...] = ()
+    required_checks_passed: bool
+
+
+class WorkflowCleanupRequest(BaseModel):
+    """Exact workflow-id confirmation required before cleanup."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    confirm_workflow_id: str
+
+
+class WorkflowRestoreRequest(BaseModel):
+    """Optional safe workspace name for a restored backup."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    workspace_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$",
+    )
 
 
 class WebAppConfig(BaseModel):

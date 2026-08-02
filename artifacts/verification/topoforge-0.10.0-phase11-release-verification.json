@@ -1,0 +1,251 @@
+{
+  "installed_smoke": {
+    "build_required_checks_passed": true,
+    "commands": [
+      {
+        "command": [
+          "uv",
+          "venv",
+          "--python",
+          "3.12",
+          "/tmp/topoforge-release-bpxdr3an/venv"
+        ],
+        "cwd": "/tmp/topoforge-release-bpxdr3an",
+        "exit_code": 0,
+        "stderr": "Using CPython 3.12.3 interpreter at: /root/miniconda3/bin/python3.12\nCreating virtual environment at: venv\nActivate with: source venv/bin/activate\n",
+        "stdout": ""
+      },
+      {
+        "command": [
+          "uv",
+          "pip",
+          "install",
+          "--python",
+          "/tmp/topoforge-release-bpxdr3an/venv/bin/python",
+          "/root/autodl-tmp/bambu/TopoForge/dist/0.10.0-release-primary/topoforge-0.10.0-py3-none-any.whl"
+        ],
+        "cwd": "/tmp/topoforge-release-bpxdr3an",
+        "exit_code": 0,
+        "stderr": "Using Python 3.12.3 environment at: venv\nResolved 54 packages in 1.75s\nPrepared 1 package in 20ms\nInstalled 54 packages in 54ms\n + affine==2.4.0\n + annotated-doc==0.0.5\n + annotated-types==0.8.0\n + anyio==4.14.2\n + attrs==26.1.0\n + certifi==2026.7.22\n + charset-normalizer==3.4.9\n + click==8.4.2\n + cligj==0.7.2\n + colorlog==6.12.0\n + embreex==4.4.0\n + fastapi==0.141.1\n + h11==0.16.0\n + httpcore==1.0.9\n + httpx==0.28.1\n + idna==3.18\n + jsonschema==4.26.0\n + jsonschema-specifications==2025.9.1\n + lib3mf==2.5.0\n + lxml==6.1.1\n + manifold3d==3.5.2\n + mapbox-earcut==2.0.0\n + markdown-it-py==4.2.0\n + mdurl==0.1.2\n + networkx==3.6.1\n + numpy==2.4.6\n + pillow==11.3.0\n + pycollada==0.9.3\n + pydantic==2.13.4\n + pydantic-core==2.46.4\n + pygments==2.20.0\n + pyparsing==3.3.2\n + pyproj==3.7.2\n + python-dateutil==2.9.0.post0\n + pyyaml==6.0.3\n + rasterio==1.5.0\n + referencing==0.37.0\n + rich==15.0.0\n + rpds-py==2026.6.3\n + rtree==1.4.1\n + scipy==1.18.0\n + shapely==2.1.2\n + shellingham==1.5.4\n + six==1.17.0\n + starlette==1.3.1\n + svg-path==7.1\n + topoforge==0.10.0 (from file:///root/autodl-tmp/bambu/TopoForge/dist/0.10.0-release-primary/topoforge-0.10.0-py3-none-any.whl)\n + trimesh==4.12.2\n + typer==0.27.0\n + typing-extensions==4.16.0\n + typing-inspection==0.4.2\n + uvicorn==0.52.1\n + vhacdx==0.0.10\n + xxhash==3.8.1\n",
+        "stdout": ""
+      },
+      {
+        "command": [
+          "/tmp/topoforge-release-bpxdr3an/venv/bin/python",
+          "-c",
+          "import json, pathlib, topoforge; print(json.dumps({'version': topoforge.__version__, 'origin': str(pathlib.Path(topoforge.__file__).resolve())}))"
+        ],
+        "cwd": "/tmp/topoforge-release-bpxdr3an/work",
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "{\"version\": \"0.10.0\", \"origin\": \"/tmp/topoforge-release-bpxdr3an/venv/lib/python3.12/site-packages/topoforge/__init__.py\"}\n"
+      },
+      {
+        "command": [
+          "/tmp/topoforge-release-bpxdr3an/venv/bin/topoforge",
+          "doctor"
+        ],
+        "cwd": "/tmp/topoforge-release-bpxdr3an/work",
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "{\n  \"topoforge\": \"0.10.0\",\n  \"python\": \"3.12.3\",\n  \"platform\": \"Linux-5.15.0-78-generic-x86_64-with-glibc2.35\",\n  \"gdal\": \"3.12.1\",\n  \"proj\": \"9.7.1\",\n  \"slicers\": {\n    \"prusa-slicer\": \"/usr/bin/prusa-slicer\"\n  }\n}\n"
+      },
+      {
+        "command": [
+          "/tmp/topoforge-release-bpxdr3an/venv/bin/topoforge",
+          "web",
+          "--check",
+          "--state-dir",
+          "/tmp/topoforge-release-bpxdr3an/web-state",
+          "--workspace-root",
+          "/tmp/topoforge-release-bpxdr3an/web-workspaces",
+          "--input-root",
+          "/tmp/topoforge-release-bpxdr3an/work",
+          "--no-open"
+        ],
+        "cwd": "/tmp/topoforge-release-bpxdr3an/work",
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "{\n  \"status\": \"ok\",\n  \"loopback_only\": true,\n  \"state_dir\": \"/tmp/topoforge-release-bpxdr3an/web-state\",\n  \"workspace_root\": \"/tmp/topoforge-release-bpxdr3an/web-workspaces\",\n  \"input_roots\": [\n    \"/tmp/topoforge-release-bpxdr3an/work\"\n  ],\n  \"max_concurrent_jobs\": 1,\n  \"assets\": {\n    \"static_dir\": \"/tmp/topoforge-release-bpxdr3an/venv/lib/python3.12/site-packages/topoforge/web/static\",\n    \"asset_count\": 9,\n    \"languages\": [\n      \"zh-CN\",\n      \"en\"\n    ],\n    \"frameworks\": [\n      \"React\",\n      \"MapLibre\",\n      \"Three.js\"\n    ],\n    \"required_checks_passed\": true\n  },\n  \"required_checks_passed\": true\n}\n"
+      },
+      {
+        "command": [
+          "/tmp/topoforge-release-bpxdr3an/venv/bin/topoforge",
+          "synthetic",
+          "--output",
+          "/tmp/topoforge-release-bpxdr3an/work/smoke.tif",
+          "--rows",
+          "16",
+          "--columns",
+          "20"
+        ],
+        "cwd": "/tmp/topoforge-release-bpxdr3an/work",
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "{\n  \"path\": \"/tmp/topoforge-release-bpxdr3an/work/smoke.tif\",\n  \"terrain\": \"gaussian-hill\",\n  \"sha256\": \"03c13c335d19eaf4f7c2bc5eadd62f49041cb5e960e6ec70d7f289cac92315af\"\n}\n"
+      },
+      {
+        "command": [
+          "/tmp/topoforge-release-bpxdr3an/venv/bin/topoforge",
+          "build",
+          "--dem",
+          "/tmp/topoforge-release-bpxdr3an/work/smoke.tif",
+          "--output",
+          "/tmp/topoforge-release-bpxdr3an/work/bundle",
+          "--size-mm",
+          "40",
+          "0",
+          "--base-mm",
+          "2",
+          "--max-height-mm",
+          "20",
+          "--sampling-mode",
+          "source-preserving",
+          "--resource-budget-mode",
+          "strict",
+          "--max-grid-cells",
+          "10000",
+          "--max-estimated-triangles",
+          "50000"
+        ],
+        "cwd": "/tmp/topoforge-release-bpxdr3an/work",
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "{\n  \"status\": \"completed\",\n  \"output_dir\": \"/tmp/topoforge-release-bpxdr3an/work/bundle\",\n  \"vertical_exaggeration\": 0.14340054650452413,\n  \"dimensions_mm\": [\n    40.0,\n    32.0,\n    20.0\n  ],\n  \"sampling_mode\": \"source-preserving\",\n  \"source_horizontal_resolution_m\": 10.0,\n  \"processed_horizontal_resolution_m\": 10.0,\n  \"orientation\": {\n    \"east_axis\": \"+X = East\",\n    \"north_axis\": \"+Y = North\",\n    \"up_axis\": \"+Z = Up\",\n    \"north_edge\": \"y=model_depth_mm\",\n    \"orientation_transform\": \"mesh_heightfield=flipud(processed_dem); source row 0 north maps to y=model_depth_mm\",\n    \"expected_processed_peak_mm\": [\n      18.94736842105263,\n      17.066666666666666,\n      20.0\n    ],\n    \"reopened_format_peak_coordinates_mm\": {\n      \"in_memory\": [\n        18.94736842105263,\n        17.066666666666666,\n        20.0\n      ],\n      \"stl\": [\n        18.947368621826172,\n        17.066667556762695,\n        20.0\n      ],\n      \"glb\": [\n        18.947368621826172,\n        17.066667556762695,\n        20.0\n      ],\n      \"3mf\": [\n        18.947368,\n        17.066668,\n        20.0\n      ]\n    },\n    \"coordinate_correction_only\": true\n  },\n  \"watertight\": true,\n  \"manifold\": true,\n  \"required_checks_passed\": true,\n  \"artifacts\": {\n    \"processed_dem\": \"/tmp/topoforge-release-bpxdr3an/work/bundle/processed_dem.tif\",\n    \"original_nodata_mask\": \"/tmp/topoforge-release-bpxdr3an/work/bundle/original_nodata_mask.tif\",\n    \"manufacturing_preflight\": \"/tmp/topoforge-release-bpxdr3an/work/bundle/manufacturing_preflight.json\",\n    \"provenance\": \"/tmp/topoforge-release-bpxdr3an/work/bundle/provenance.json\",\n    \"validation_json\": \"/tmp/topoforge-release-bpxdr3an/work/bundle/validation.json\",\n    \"validation_html\": \"/tmp/topoforge-release-bpxdr3an/work/bundle/validation.html\",\n    \"resolved_config\": \"/tmp/topoforge-release-bpxdr3an/work/bundle/build_config.resolved.yaml\",\n    \"preview_png\": \"/tmp/topoforge-release-bpxdr3an/work/bundle/preview.png\",\n    \"manifest\": \"/tmp/topoforge-release-bpxdr3an/work/bundle/build_manifest.json\",\n    \"model_stl\": \"/tmp/topoforge-release-bpxdr3an/work/bundle/model.stl\",\n    \"model_3mf\": \"/tmp/topoforge-release-bpxdr3an/work/bundle/model.3mf\",\n    \"preview_glb\": \"/tmp/topoforge-release-bpxdr3an/work/bundle/preview.glb\"\n  }\n}\n"
+      },
+      {
+        "command": [
+          "/tmp/topoforge-release-bpxdr3an/venv/bin/topoforge",
+          "inspect",
+          "/tmp/topoforge-release-bpxdr3an/work/bundle/model.3mf"
+        ],
+        "cwd": "/tmp/topoforge-release-bpxdr3an/work",
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "{\n  \"unit\": \"millimeter\",\n  \"object_count\": 1,\n  \"build_item_count\": 1,\n  \"components_object_count\": 0,\n  \"component_count\": 0,\n  \"base_material_group_count\": 0,\n  \"material_assigned_object_count\": 0,\n  \"vertex_count\": 640,\n  \"triangle_count\": 1276,\n  \"dimensions_mm\": [\n    40.0,\n    32.0,\n    20.0\n  ],\n  \"bounds_mm\": [\n    [\n      0.0,\n      0.0,\n      0.0\n    ],\n    [\n      40.0,\n      32.0,\n      20.0\n    ]\n  ],\n  \"peak_coordinate_mm\": [\n    18.947368,\n    14.933333,\n    20.0\n  ],\n  \"peak_coordinates_mm\": [\n    [\n      18.947368,\n      14.933333,\n      20.0\n    ],\n    [\n      21.052632,\n      14.933333,\n      20.0\n    ],\n    [\n      18.947368,\n      17.066668,\n      20.0\n    ],\n    [\n      21.052632,\n      17.066668,\n      20.0\n    ]\n  ],\n  \"metadata\": {\n    \"Title\": \"TopoForge terrain\",\n    \"Application\": \"TopoForge\",\n    \"customXMLNS0:dataset_name\": \"smoke\",\n    \"customXMLNS0:dataset_type\": \"unknown\",\n    \"customXMLNS0:east_axis\": \"+X = East\",\n    \"customXMLNS0:horizontal_crs\": \"EPSG:32648\",\n    \"customXMLNS0:north_axis\": \"+Y = North\",\n    \"customXMLNS0:north_edge\": \"y=model_depth_mm\",\n    \"customXMLNS0:orientation_transform\": \"mesh_heightfield=flipud(processed_dem); source row 0 north maps to y=model_depth_mm\",\n    \"customXMLNS0:source_bounds\": \"{\\\"full_grid_shape\\\":[16,20],\\\"native\\\":[500000.0,3299840.0,500200.0,3300000.0],\\\"native_crs\\\":\\\"EPSG:32648\\\",\\\"wgs84\\\":[105.00000000000003,29.82902332890773,105.00207015338745,29.83046732018098]}\",\n    \"customXMLNS0:vertical_datum\": \"synthetic-local-zero\",\n    \"customXMLNS0:vertical_exaggeration\": \"0.143400547\"\n  },\n  \"object_names\": [\n    \"TopoForge terrain\"\n  ],\n  \"objects\": [\n    {\n      \"name\": \"TopoForge terrain\",\n      \"vertex_count\": 640,\n      \"triangle_count\": 1276,\n      \"bounds_mm\": [\n        [\n          0.0,\n          0.0,\n          0.0\n        ],\n        [\n          40.0,\n          32.0,\n          20.0\n        ]\n      ],\n      \"geometry_sha256\": \"dd9c0689077f669723c2028f7f47d2f932632b3199d300a0cf48d0a16cb5a4bc\"\n    }\n  ],\n  \"strict_warning_count\": 0,\n  \"lib3mf_version\": [\n    2,\n    5,\n    0\n  ]\n}\n"
+      }
+    ],
+    "doctor": {
+      "gdal": "3.12.1",
+      "platform": "Linux-5.15.0-78-generic-x86_64-with-glibc2.35",
+      "proj": "9.7.1",
+      "python": "3.12.3",
+      "slicers": {
+        "prusa-slicer": "/usr/bin/prusa-slicer"
+      },
+      "topoforge": "0.10.0"
+    },
+    "installed_origin": "/tmp/topoforge-release-bpxdr3an/venv/lib/python3.12/site-packages/topoforge/__init__.py",
+    "installed_version": "0.10.0",
+    "isolated_environment": true,
+    "repository_import_leakage": false,
+    "three_mf_warning_count": 0,
+    "web": {
+      "assets": {
+        "asset_count": 9,
+        "frameworks": [
+          "React",
+          "MapLibre",
+          "Three.js"
+        ],
+        "languages": [
+          "zh-CN",
+          "en"
+        ],
+        "required_checks_passed": true,
+        "static_dir": "/tmp/topoforge-release-bpxdr3an/venv/lib/python3.12/site-packages/topoforge/web/static"
+      },
+      "input_roots": [
+        "/tmp/topoforge-release-bpxdr3an/work"
+      ],
+      "loopback_only": true,
+      "max_concurrent_jobs": 1,
+      "required_checks_passed": true,
+      "state_dir": "/tmp/topoforge-release-bpxdr3an/web-state",
+      "status": "ok",
+      "workspace_root": "/tmp/topoforge-release-bpxdr3an/web-workspaces"
+    }
+  },
+  "reproducible_archives": {
+    "sdist": true,
+    "wheel": true
+  },
+  "required_checks_passed": true,
+  "schema_version": 1,
+  "sdist": {
+    "bytes": 1052859,
+    "forbidden_member_count": 0,
+    "member_count": 224,
+    "path": "/root/autodl-tmp/bambu/TopoForge/dist/0.10.0-release-primary/topoforge-0.10.0.tar.gz",
+    "required_files_present": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/release.yml",
+      "DATA_LICENSES.md",
+      "LICENSE",
+      "README.md",
+      "THIRD_PARTY_NOTICES.md",
+      "benchmarks/baseline.json",
+      "pyproject.toml",
+      "reference_regions/catalog.yaml",
+      "scripts/rollback-topoforge-0.10.0.sh",
+      "scripts/run_benchmarks.py",
+      "scripts/verify_phase11_lifecycle.py",
+      "scripts/verify_reference_regions.py",
+      "scripts/verify_release.py",
+      "src/topoforge/__init__.py",
+      "src/topoforge/web/static/asset-manifest.json",
+      "src/topoforge/web/static/index.html",
+      "tests/release/test_phase8_contracts.py",
+      "tests/web/test_api.py",
+      "tests/web/test_jobs.py",
+      "tests/web/test_map_tiles.py",
+      "uv.lock",
+      "web/package-lock.json",
+      "web/package.json",
+      "web/src/App.tsx",
+      "web/src/api.ts",
+      "web/src/components/AssemblyPanel.test.tsx",
+      "web/src/components/AssemblyPanel.tsx",
+      "web/src/components/MapPanel.test.ts",
+      "web/src/components/MapPanel.tsx",
+      "web/src/components/ResultsPanel.tsx",
+      "web/src/components/TerrainPreview.test.ts",
+      "web/src/components/TerrainPreview.tsx",
+      "web/src/types.ts",
+      "web/tests/workspace.spec.ts"
+    ],
+    "sha256": "0c205b920e6022adc71846104576e0cdad9d0b4ac7f7b3417a76f69cea01112f"
+  },
+  "topoforge_version": "0.10.0",
+  "wheel": {
+    "bytes": 833526,
+    "entry_point": "topoforge = topoforge.cli.app:app",
+    "license_files": [
+      "topoforge-0.10.0.dist-info/licenses/DATA_LICENSES.md",
+      "topoforge-0.10.0.dist-info/licenses/LICENSE",
+      "topoforge-0.10.0.dist-info/licenses/THIRD_PARTY_NOTICES.md"
+    ],
+    "member_count": 92,
+    "metadata": {
+      "License-Expression": "Apache-2.0",
+      "Name": "topoforge",
+      "Requires-Python": "<3.13,>=3.12",
+      "Version": "0.10.0"
+    },
+    "path": "/root/autodl-tmp/bambu/TopoForge/dist/0.10.0-release-primary/topoforge-0.10.0-py3-none-any.whl",
+    "sha256": "c0670dac934ee509cd8054291232ce154b36e3f53cd5998d2bd3760bb64942be",
+    "web": {
+      "asset_count": 9,
+      "frameworks": [
+        "React",
+        "MapLibre",
+        "Three.js"
+      ],
+      "languages": [
+        "zh-CN",
+        "en"
+      ],
+      "required_checks_passed": true
+    }
+  }
+}

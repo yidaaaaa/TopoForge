@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -177,3 +178,80 @@ def test_static_asset_tamper_is_rejected(web_static_dir: Path) -> None:
     )
     with pytest.raises(ConfigurationError, match="checksum changed"):
         verify_static_assets(web_static_dir)
+
+
+def test_completed_job_maintenance_routes_backup_restore_and_cleanup(
+    web_config: WebAppConfig,
+    web_static_dir: Path,
+) -> None:
+    app = create_app(web_config, static_dir=web_static_dir)
+    request = make_job_request(web_config, name="api-maintenance")
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/v1/jobs",
+            json=request.model_dump(mode="json"),
+        )
+        assert created.status_code == 201
+        job_id = created.json()["job_id"]
+        deadline = time.monotonic() + 90
+        completed: dict[str, object] | None = None
+        while time.monotonic() < deadline:
+            response = client.get(f"/api/v1/jobs/{job_id}")
+            assert response.status_code == 200
+            payload = response.json()
+            if payload["state"] in {"completed", "failed", "cancelled"}:
+                completed = payload
+                break
+            time.sleep(0.05)
+        assert completed is not None
+        assert completed["state"] == "completed"
+        workspace = Path(str(completed["workspace_dir"]))
+        stale = workspace / "stages" / "99-unused" / "api-stale"
+        stale.mkdir(parents=True)
+        (stale / "payload.bin").write_bytes(b"api-unreferenced-stage")
+
+        maintenance = client.get(f"/api/v1/jobs/{job_id}/maintenance")
+        assert maintenance.status_code == 200
+        overview = maintenance.json()
+        assert overview["required_checks_passed"] is True
+        assert overview["cleanup"]["reclaimable_bytes"] > 0
+        workflow_id = overview["cleanup"]["workflow_id"]
+
+        backup_response = client.post(f"/api/v1/jobs/{job_id}/backup")
+        assert backup_response.status_code == 201
+        backup = backup_response.json()
+        assert backup["required_checks_passed"] is True
+        backup_id = backup["backup_id"]
+
+        backups = client.get("/api/v1/backups")
+        assert backups.status_code == 200
+        assert backups.json()[0]["backup_id"] == backup_id
+
+        download = client.get(f"/api/v1/backups/{backup_id}")
+        assert download.status_code == 200
+        assert download.headers["x-topoforge-backup-sha256"] == backup["archive_sha256"]
+        assert len(download.content) == backup["archive_size_bytes"]
+
+        restored = client.post(
+            f"/api/v1/backups/{backup_id}/restore",
+            json={},
+        )
+        assert restored.status_code == 201
+        restored_payload = restored.json()
+        assert restored_payload["state"] == "completed"
+        assert restored_payload["summary"]["workflow_id"] == workflow_id
+        assert restored_payload["workspace_dir"] != str(workspace)
+
+        rejected = client.post(
+            f"/api/v1/jobs/{job_id}/cleanup",
+            json={"confirm_workflow_id": "wrong"},
+        )
+        assert rejected.status_code == 422
+
+        cleaned = client.post(
+            f"/api/v1/jobs/{job_id}/cleanup",
+            json={"confirm_workflow_id": workflow_id},
+        )
+        assert cleaned.status_code == 200
+        assert cleaned.json()["removed_paths"] == ["stages/99-unused/api-stale"]
+        assert not stale.exists()

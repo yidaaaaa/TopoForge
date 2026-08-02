@@ -1,6 +1,6 @@
 # Local Web application
 
-TopoForge 0.9.0 includes a single-user local Web application. It is an adapter over the
+TopoForge 0.10.0 includes a single-user local Web application. It is an adapter over the
 same `WorkflowLaunchConfig` and `execute_workflow_launch()` path used by the CLI. Raster,
 sampling, mesh, tiling, overlay, slicing, validation, and artifact logic remains in the
 Python core.
@@ -36,6 +36,7 @@ English. Both versions expose the same controls and results:
 - deterministic tile size, overlap, overlay YAML, slicing, and Bambu project settings;
 - persistent jobs, progress events, cancellation, structured failures, and corrective text;
 - measured workflow metrics and checksum-bound artifact downloads;
+- measured local-project storage, reclaimable old stages, deterministic backup creation and download, exact-identity cleanup, and atomic restore as a newly registered completed job;
 - 2D physical assembly with tile labels, connectors, and a North marker;
 - Three.js whole-model and per-tile assembly viewing with visibility, explosion, selection, and `+X East`, `+Y North`, and `+Z Up` labels.
 
@@ -53,6 +54,10 @@ child process.
   `--state-dir`.
 - Artifact downloads are resolved from completed workflow records, checked for workspace
   containment, and rehashed before serving.
+- Backup archives live below the adapter state directory, are strictly reopened before
+  listing or download, and expose their verified SHA-256 in response headers.
+- Restores reject path escapes and existing destinations, extract through the core atomic
+  restore contract, and are registered only after strict workspace reopen succeeds.
 - Assembly metadata is anchored to the published workflow manifest and validated CONNECT-stage
   manifest SHA, then cross-checks assembly validation, tile manifests, and per-tile GLBs.
 - Date-line processed rasters use split Web Mercator coverage and circular longitude centers.
@@ -97,8 +102,12 @@ npm --prefix web run test:ui
 
 The Vite production build writes directly to `src/topoforge/web/static/`, then
 `web/scripts/write-manifest.mjs` writes the strict asset manifest. Playwright starts a
-loopback server when one is not already available. Its desktop check requires a spatially varied local terrain map, exercises all three DEM styles and the OSM request under CSP, rejects browser errors, verifies whole-model and per-tile 3D framing, checks 2D/3D selection, visibility, maximum explosion, narrow-viewport reframing, reset, and Chinese/English switching. Its
-mobile check verifies the primary controls and rejects horizontal overflow.
+loopback server on an isolated test port. Its desktop check creates a real completed
+workflow, measures a cleanup candidate, creates and downloads a verified backup, accepts
+the exact cleanup confirmation, restores a registered completed copy, exercises all three
+DEM styles and the OSM request under CSP, rejects browser errors, verifies whole-model and
+per-tile 3D framing, and checks Chinese/English switching. Its mobile check verifies the
+primary controls and rejects horizontal overflow.
 
 Generated `web/node_modules/`, `web/test-results/`, and `web/playwright-report/` directories
 are excluded from source archives. The sdist retains frontend source and lock files; the
@@ -106,12 +115,12 @@ wheel retains only the compiled, checksum-bound application inside `topoforge.we
 
 ## Rollback
 
-Stop the 0.9.0 listener, start the retained 0.8.1 CLI environment, and keep existing
+Stop the 0.10.0 listener, start the retained 0.9.0 CLI environment, and keep existing
 workspaces and state directories unchanged:
 
 ```bash
-~/.venvs/topoforge-0.8.1/bin/topoforge doctor
-ln -sfn ~/.venvs/topoforge-0.8.1/bin/topoforge ~/.local/bin/topoforge
+~/.venvs/topoforge-0.9.0/bin/topoforge doctor
+ln -sfn ~/.venvs/topoforge-0.9.0/bin/topoforge ~/.local/bin/topoforge
 ```
 
-For a source checkout exactly at the 0.9.0 release tag, run `scripts/rollback-topoforge-0.9.0.sh --confirm-rollback`.
+For a source checkout exactly at the 0.10.0 release tag, run `scripts/rollback-topoforge-0.10.0.sh --confirm-rollback`.

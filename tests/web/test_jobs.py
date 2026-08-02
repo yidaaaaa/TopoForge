@@ -170,3 +170,63 @@ def test_running_and_queued_jobs_cancel_without_touching_other_records(
         assert manager.get(queued.job_id).state is JobState.CANCELLED
     finally:
         manager.close()
+
+
+def test_completed_job_maintenance_backup_cleanup_and_restore(
+    web_config: WebAppConfig,
+) -> None:
+    manager = LocalJobManager(web_config)
+    manager.start()
+    try:
+        submitted = manager.submit(make_job_request(web_config, name="maintained"))
+        completed = wait_for_terminal(manager, submitted.job_id)
+        assert completed.state is JobState.COMPLETED
+        assert completed.summary is not None
+
+        unused = completed.workspace_dir / "stages" / "99-unused" / "stale"
+        unused.mkdir(parents=True)
+        (unused / "payload.bin").write_bytes(b"unreferenced-stage")
+
+        overview = manager.maintenance(completed.job_id)
+        assert overview.required_checks_passed is True
+        assert overview.storage.current_workspace_bytes > 0
+        assert overview.storage.sufficient_for_estimate is True
+        assert overview.cleanup.reclaimable_bytes >= len(b"unreferenced-stage")
+        assert overview.cleanup.candidates[0].path == "stages/99-unused/stale"
+        assert overview.backups == ()
+
+        backup = manager.create_backup(completed.job_id)
+        archive, reopened = manager.backup_archive_path(backup.backup_id)
+        assert archive.is_file()
+        assert reopened == backup
+        assert backup.archive_size_bytes == archive.stat().st_size
+        assert manager.list_backups() == (backup,)
+
+        restored = manager.restore_backup(backup.backup_id)
+        assert restored.state is JobState.COMPLETED
+        assert restored.exit_code == 0
+        assert restored.workspace_dir != completed.workspace_dir
+        assert restored.workspace_dir.parent == web_config.workspace_root.resolve()
+        assert restored.summary is not None
+        assert restored.summary.workflow_id == completed.summary.workflow_id
+        original_model = next(
+            item for item in completed.artifacts if item.artifact_id == "model_3mf"
+        )
+        restored_model = next(
+            item for item in restored.artifacts if item.artifact_id == "model_3mf"
+        )
+        assert restored_model.sha256 == original_model.sha256
+        assert manager.read_events(restored.job_id)[-1].message_key == "job.restored"
+
+        with pytest.raises(ConfigurationError, match="confirmation"):
+            manager.cleanup(completed.job_id, confirm_workflow_id="wrong")
+        cleanup = manager.cleanup(
+            completed.job_id,
+            confirm_workflow_id=completed.summary.workflow_id,
+        )
+        assert cleanup.required_checks_passed is True
+        assert cleanup.removed_paths == ("stages/99-unused/stale",)
+        assert not unused.exists()
+        assert manager.maintenance(completed.job_id).cleanup.reclaimable_bytes == 0
+    finally:
+        manager.close()

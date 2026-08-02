@@ -66,13 +66,15 @@ jobs:
         working-directory: web
       - run: npm run build
         working-directory: web
+      - id: package-version
+        run: echo "version=$(uv version --short)" >> "$GITHUB_OUTPUT"
       - run: uv build --no-sources --out-dir dist/primary
       - run: uv build --no-sources --out-dir dist/repeat
       - run: >-
           uv run python scripts/verify_release.py
           --primary-dir dist/primary
           --repeat-dir dist/repeat
-          --version 0.8.0
+          --version ${{ steps.package-version.outputs.version }}
           --install
           --report artifacts/logs/ci-release-verification.json
       - run: >-

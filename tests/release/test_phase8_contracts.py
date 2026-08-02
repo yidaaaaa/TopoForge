@@ -8,16 +8,18 @@ import zipfile
 from pathlib import Path
 
 import pytest
+import yaml
 from scripts.run_benchmarks import terrain_triangle_count
 from scripts.verify_reference_regions import verify_reference_catalog
 from scripts.verify_release import inspect_sdist, inspect_wheel
 
-VERSION = "0.9.0"
+VERSION = "0.10.0"
 
 
 def _required_sdist_files() -> set[str]:
     return {
         ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
         "DATA_LICENSES.md",
         "LICENSE",
         "README.md",
@@ -25,20 +27,25 @@ def _required_sdist_files() -> set[str]:
         "benchmarks/baseline.json",
         "pyproject.toml",
         "reference_regions/catalog.yaml",
-        "scripts/rollback-topoforge-0.9.0.sh",
+        "scripts/rollback-topoforge-0.10.0.sh",
         "scripts/run_benchmarks.py",
         "scripts/verify_reference_regions.py",
+        "scripts/verify_phase11_lifecycle.py",
         "scripts/verify_release.py",
         "src/topoforge/__init__.py",
         "src/topoforge/web/static/asset-manifest.json",
         "src/topoforge/web/static/index.html",
         "tests/release/test_phase8_contracts.py",
         "tests/web/test_api.py",
+        "tests/web/test_jobs.py",
         "tests/web/test_map_tiles.py",
         "uv.lock",
         "web/package-lock.json",
         "web/package.json",
         "web/src/App.tsx",
+        "web/src/api.ts",
+        "web/src/types.ts",
+        "web/src/components/ResultsPanel.tsx",
         "web/src/components/AssemblyPanel.test.tsx",
         "web/src/components/AssemblyPanel.tsx",
         "web/src/components/MapPanel.tsx",
@@ -132,3 +139,36 @@ def test_reference_catalog_normalizes_without_retained_data() -> None:
 )
 def test_benchmark_triangle_contract(rows: int, columns: int, triangles: int) -> None:
     assert terrain_triangle_count(rows, columns) == triangles
+
+
+def test_ci_release_verification_uses_project_version() -> None:
+    root = Path(__file__).parents[2]
+    workflow = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "id: package-version" in workflow
+    assert "uv version --short" in workflow
+    assert "--version ${{ steps.package-version.outputs.version }}" in workflow
+    assert "--version 0.8.0" not in workflow
+
+
+def test_github_release_workflow_contract() -> None:
+    root = Path(__file__).parents[2]
+    path = root / ".github/workflows/release.yml"
+    workflow_text = path.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(workflow_text)
+
+    assert workflow["permissions"] == {"contents": "write"}
+    assert workflow[True]["push"]["branches"] == ["main"]
+    assert workflow[True]["push"]["tags"] == ["v*"]
+    assert "workflow_dispatch" in workflow[True]
+    assert "fetch-depth: 0" in workflow_text
+    assert "git tag --merged HEAD --list 'v*' --sort=-v:refname" in workflow_text
+    assert "gh release view" in workflow_text
+    assert workflow_text.count("publish=false") >= 2
+    assert "ref: ${{ steps.target.outputs.tag }}" in workflow_text
+    assert 'test "v$version" = "${{ steps.target.outputs.tag }}"' in workflow_text
+    assert workflow_text.count("uv build --no-sources") == 2
+    assert "--repeat-dir dist/repeat" in workflow_text
+    assert "--install" in workflow_text
+    assert "sha256sum --check SHA256SUMS" in workflow_text
+    assert 'gh release create "${{ steps.target.outputs.tag }}"' in workflow_text
+    assert "--verify-tag" in workflow_text

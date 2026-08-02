@@ -151,4 +151,4 @@ The interoperable 3MF path adds official lib3mf strict read with zero warnings, 
 
 ## Extension sequence
 
-The local/resolved-place AOI, provider/cache path, printer-aware manufacturing core, Phase 5 manufacturing tiling, Phase 6 single-workstation workflow, Phase 7 local overlays, Phase 8 release hardening, Phase 9 worker-backed bilingual local Web application, and Phase 10 deterministic local map/assembly visualization are complete. Physical connector calibration remains deferred and non-blocking. Future work may add public deployment contracts, but those must continue to call the same Python core.
+The local/resolved-place AOI, provider/cache path, printer-aware manufacturing core, Phase 5 manufacturing tiling, Phase 6 single-workstation workflow, Phase 7 local overlays, Phase 8 release hardening, Phase 9 worker-backed bilingual local Web application, and Phase 10 deterministic local map/assembly visualization, and Phase 11 local project lifecycle/release automation are complete. Physical connector calibration remains deferred and non-blocking. Future work may add public deployment contracts, but those must continue to call the same Python core.

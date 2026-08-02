@@ -296,3 +296,19 @@
 - **Decision:** Anchor assembly reads through the JobRecord artifact SHA, canonical workflow manifest, validated CONNECT-stage output/manifest paths and manifest SHA, assembly validation SHA, tile-manifest SHA, and per-tile GLB SHA. Never hard-code the visualization gate. Represent date-line coverage as two Web Mercator segments with a circular longitude center; record partial latitude clipping and reject fully out-of-range rasters. Compute camera frames from deterministic visible/exploded tile bounds after resize, display-state changes, and reset.
 - **Alternatives:** Trust mutable directory contents; hash only GLBs; clamp latitude endpoints independently; use a near-global Mercator envelope; keep a one-time camera frame; treat a nonblank canvas as complete coverage.
 - **Impact:** Tampering fails before map/assembly publication, date-line and high-latitude behavior is explicit, and multi-column exploded assemblies remain framed under narrow desktop layouts. Regression tests cover the exact audit reproductions.
+
+## ADR-039 — Web project lifecycle reuses the checksum-bound maintenance core
+
+- **Date:** 2026-08-02
+- **Context:** The loopback Web application could build and inspect jobs but could not measure storage, remove unreferenced content-addressed stages, create portable backups, or register restored projects. Reimplementing these operations in the API or browser would diverge from the Phase 6 CLI evidence.
+- **Decision:** Keep all storage, cleanup, backup, verification, and restore algorithms in topoforge.workflow. The Web adapter owns only its state/backups directory, strict typed records, path containment, exact workflow-id confirmation, response SHA headers, and completed-job registration after core atomic restore and strict reopen. The UI presents measured values and requires a user confirmation before cleanup.
+- **Alternatives:** Duplicate ZIP/cleanup logic in FastAPI; expose arbitrary filesystem deletion; trust backup filenames; restore directly into final destinations; keep maintenance CLI-only.
+- **Impact:** CLI and Web use one lifecycle truth. Repeated backups reuse identical verified bytes, downloads expose their SHA identity, cleanup cannot target current stages, and restored projects immediately participate in existing map/model/assembly views.
+
+## ADR-040 — Project version and target tags drive reproducible GitHub Releases
+
+- **Date:** 2026-08-02
+- **Context:** The first public v0.9.0 CI run failed because the workflow hard-coded 0.8.0, and pushing a Git tag did not create a GitHub Release page or assets.
+- **Decision:** CI reads the version from uv project metadata. A dedicated contents-write workflow selects the pushed tag or the newest reachable unpublished tag on main, checks out that target, requires tag/package identity, builds Web assets, creates two fixed-epoch package sets, runs isolated installed verification, writes and checks SHA256SUMS, and publishes the sdist, wheel, verification JSON, and checksum file. Existing releases cause a clean no-op.
+- **Alternatives:** Manually edit each workflow version; publish archives from main instead of the tag; upload unverified local files; overwrite existing Release assets; leave historical v0.9.0 without a Release page.
+- **Impact:** Release identity is no longer duplicated in YAML. The first Phase 11 main push can bootstrap v0.9.0, while v0.10.0 tag publication uses the same verified generic path.
