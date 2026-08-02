@@ -12,7 +12,12 @@ if [[ -n "$(git status --porcelain)" ]]; then
 fi
 
 git rev-parse --verify 'v0.7.0^{commit}' >/dev/null
-git rev-parse --verify 'v0.8.0^{commit}' >/dev/null
+release_commit="$(git rev-parse 'v0.8.0^{commit}')"
+current_commit="$(git rev-parse HEAD)"
+if [[ "$current_commit" != "$release_commit" ]]; then
+  echo "rollback requires HEAD to be exactly v0.8.0" >&2
+  exit 2
+fi
 
 git revert --no-edit v0.8.0
 

@@ -535,3 +535,21 @@ Result: version 0.8.0; job `60b2eda379a54935a27dce9080d7d5ff`; source/build/layo
 Command: run npm typecheck/test/build/test:ui; Ruff, format, Pyright, uv lock, Git whitespace, full Pytest; reference definitions; two-run benchmarks; fixed-epoch double sdist/wheel builds; and installed release verification.
 
 Result: Ruff clean; 160 files formatted; Pyright 0 errors; Pytest 204 passed in 79.85 s; Vitest 6 passed; Playwright 2 passed; seven reference definitions with zero network attempts; all three benchmark cases repeat six roles byte-for-byte. Final sdist and wheel repeat byte-for-byte at SHA-256 `06486fc724c1816469c3c8974cd267c690795ff1b6c8f471f4cbd38049be4cb9` and `b58fab195c18c22a191cd57ec4891ca1ad86e954a1887c1bd98712deb2f6430c`. Fresh install imports outside the checkout and passes doctor, `web --check`, build, and strict 3MF inspection.
+
+### Phase 9.1 WebUI stabilization and 0.8.1 release
+
+Command: assign an independent subagent to audit the clean v0.8.0 repository, release evidence, running service, MapLibre lifecycle/CSP, and Three.js output.
+
+Result: release/package/manufacturing evidence remained valid. The audit reproduced a single-color offline map, CSP-blocked OSM Fetch, duplicate AOI source errors, weak one-pixel tests, and a cropped but geometrically correct 40 x 32 x 20 mm GLB.
+
+Command: add World Atlas/TopoJSON offline countries and graticule, style-owned AOI data restoration, explicit OSM `connect-src`, bounding-sphere/FOV/aspect camera framing, bound-derived guides, tone mapping, and stronger Vitest/Playwright contracts.
+
+Result: TypeScript passes; Vitest reports 9 passed. Playwright requires map/3D palette diversity, an intercepted OSM request, zero page/console errors, bilingual switching, and mobile non-overlap; 2 applicable scenarios pass and 2 project-inapplicable scenarios skip.
+
+Command: reuse the retained Phase 9 smoke GeoTIFF through the 0.8.1 HTTP API in a new workspace, reopen 3MF, and capture final offline-map/real-GLB screenshots.
+
+Result: job `cfd31ad8517a4bdda25dbf1533f7316c` completed six stages with exit 0 and 22 artifacts. Strict 3MF is 1,276 triangles, 40 x 32 x 20 mm, zero warnings, and SHA-256 `6a237cfd4adfaf0f9eb44ed8c2ebb6b584a8ac2603d47d6c5c35527ba6064ce4`, identical to 0.8.0. Browser console/page errors are empty.
+
+Command: run Ruff, format, Pyright, full Pytest, npm typecheck/Vitest/build/Playwright, uv lock, Git whitespace, double fixed-epoch release builds, and installed wheel verification.
+
+Result: Ruff clean; 160 files formatted; Pyright 0 errors; Pytest 204 passed in 81.24 s; Vitest 9 passed; Playwright 2 passed; Web manifest has 8 verified assets. The final repeated sdist/wheel archives are byte-identical at SHA-256 `dd2d06203b6ce0cbe9cc4d5ccb1f864cb1e86a8aa7bbde0463a2bd3881228bfd` and `baf2b5adfcd563839cb7b3b230ee32d64996ac16dc62b363cb260f8822bfa74a`. A fresh external environment installed 54 packages and passed doctor, `web --check`, build, and strict 3MF inspection.

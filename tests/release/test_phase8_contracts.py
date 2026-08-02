@@ -12,7 +12,7 @@ from scripts.run_benchmarks import terrain_triangle_count
 from scripts.verify_reference_regions import verify_reference_catalog
 from scripts.verify_release import inspect_sdist, inspect_wheel
 
-VERSION = "0.8.0"
+VERSION = "0.8.1"
 
 
 def _required_sdist_files() -> set[str]:
@@ -25,7 +25,7 @@ def _required_sdist_files() -> set[str]:
         "benchmarks/baseline.json",
         "pyproject.toml",
         "reference_regions/catalog.yaml",
-        "scripts/rollback-topoforge-0.8.0.sh",
+        "scripts/rollback-topoforge-0.8.1.sh",
         "scripts/run_benchmarks.py",
         "scripts/verify_reference_regions.py",
         "scripts/verify_release.py",
@@ -38,6 +38,9 @@ def _required_sdist_files() -> set[str]:
         "web/package-lock.json",
         "web/package.json",
         "web/src/App.tsx",
+        "web/src/components/MapPanel.tsx",
+        "web/src/components/TerrainPreview.test.ts",
+        "web/src/components/TerrainPreview.tsx",
         "web/tests/workspace.spec.ts",
     }
 
