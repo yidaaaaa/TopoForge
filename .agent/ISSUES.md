@@ -412,3 +412,11 @@
 - **Reproduction:** Open the corrected model viewer on a desktop using approximately 150% display scaling. A 665 x 656 center container receives a 997 x 984 canvas because Three.js pixel ratio affects the drawing buffer while setSize(..., false) leaves CSS size unset. The model appears enlarged, shifted toward the lower-right, and clipped even though clicking reset may partially mask the problem.
 - **Expected behavior:** Canvas CSS dimensions match the visible container at every device pixel ratio, the high-resolution buffer remains proportional to DPR, the first real GLB frame is centered without manual input, and the assembly view follows the same contract.
 - **Resolution:** Enable CSS size updates in both Three.js renderers, settle initial framing across animation frames and a 250 ms layout window, run desktop Playwright at 1.5 DPR, assert client/container/buffer ratios, and require normalized colorful terrain center within 0.35 to 0.65 on both axes. The retained model finishes at center (0.4895, 0.4593) with zero browser errors and unchanged STL/3MF/GLB hashes.
+
+## TF-050 — Expanding slicing controls scrolled the desktop application out of view
+
+- **Severity:** High local usability
+- **Status:** Resolved locally after 0.10.0
+- **Reproduction:** At a 1365 x 758 CSS viewport and 1.5 device pixel ratio, scroll the left control panel to `Run software slicing` and enable it. The added slicer selector increases root document height, the browser changes window scrollY from 0 to 185 while panel scrollTop remains 287, the header moves to top -185, and a blank white region appears below the fixed-height application.
+- **Expected behavior:** Dynamic controls expand only inside the independently scrollable configuration panel; the desktop header and center workspace remain fixed in the viewport, while the mobile layout retains natural document scrolling.
+- **Resolution:** Fix the desktop body to the viewport and clip the root at widths above 940 px, retain the existing mobile overrides, and add a 1365 x 758 / 1.5 DPR Playwright regression that expands slicing, verifies the Bambu Studio selector, requires window scrollY/header/app top to remain 0, and preserves the panel scroll position. The live 8772 instance passes the same measurement.

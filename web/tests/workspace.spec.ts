@@ -250,6 +250,30 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
     page.getByRole("heading", { name: basename(completedJob.workspace_dir) }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "开始构建" })).toBeVisible();
+  await page.setViewportSize({ width: 1365, height: 758 });
+  const controlPanel = page.locator(".control-panel");
+  const slicingToggle = page.getByText("执行软件切片", { exact: true });
+  await slicingToggle.scrollIntoViewIfNeeded();
+  const panelScrollBeforeSlicing = await controlPanel.evaluate(
+    (element) => element.scrollTop,
+  );
+  await slicingToggle.click();
+  await expect(controlPanel.locator("select")).toHaveValue("bambu-studio");
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await expect
+    .poll(() =>
+      page.locator(".app-header").evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBe(0);
+  await expect
+    .poll(() =>
+      page.locator(".app-shell").evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBe(0);
+  expect(await controlPanel.evaluate((element) => element.scrollTop)).toBe(
+    panelScrollBeforeSlicing,
+  );
+  await slicingToggle.click();
   const backupButton = page.getByRole("button", { name: "创建备份" });
   const cleanupButton = page.getByRole("button", { name: "清理旧阶段" });
   await expect(backupButton).toBeEnabled();

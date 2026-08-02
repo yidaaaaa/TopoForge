@@ -337,3 +337,11 @@
 - **Decision:** Keep renderer pixel ratio capped for visual quality, but call setSize with CSS updates enabled for both the whole-model and assembly renderers. Reframe after the container size and loaded model settle, delay the loaded-model contract until the stable frame, run desktop Playwright at deviceScaleFactor 1.5, and assert canvas client size equals container size while buffer/client ratios equal device pixel ratio.
 - **Alternatives:** Disable high-DPI rendering; shrink the camera until an oversized canvas appears to fit; apply ad hoc CSS transforms; fix only the whole-model viewer; rely on a manual reset button.
 - **Impact:** The real 1.5-DPR view uses a 665 x 656 CSS canvas with a 997 x 984 buffer, normalized terrain center (0.4895, 0.4593), complete solid visibility, and zero browser errors. DPR 1 remains unchanged, assembly receives the same correction, and manufacturing artifacts remain byte-identical.
+
+## ADR-044 — Desktop application scrolling belongs to panels, not the root document
+
+- **Date:** 2026-08-03
+- **Context:** The desktop application is a fixed-height three-column work surface with independently scrollable control and result panels. Conditionally rendering slicer controls increased the root scrollable area, and the browser kept the focused checkbox visible by moving the entire fixed-height shell above the viewport.
+- **Decision:** At desktop widths above 940 px, fix the body to the viewport and clip the root; keep the application shell at 100dvh and preserve scrolling only inside the control and result panels. At tablet/mobile widths, retain the existing auto-height shell and natural document scrolling. Treat dynamic form expansion as an executable viewport contract.
+- **Alternatives:** Reset window.scrollY in React after each state change; remove conditional slicer settings; make the entire desktop page scroll; hide the overflow with an overlay; rely on users refreshing the page.
+- **Impact:** Slicer settings expand without moving the header, map, 3D view, or application shell. The focused control remains reachable through panel scrolling, mobile behavior is unchanged, and the contract is covered at the user-reproduced 1365 x 758 / 1.5 DPR geometry.

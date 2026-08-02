@@ -686,3 +686,13 @@ Result: the final high-DPI view has container/client 665 x 656, buffer 997 x 984
 Command: rebuild packaged Web assets; run TypeScript, 20 Vitest tests, 1.5-DPR desktop/mobile Playwright, Ruff, format, Pyright, uv lock, full Pytest, Git whitespace, and manufacturing artifact checksum verification.
 
 Result: TypeScript passes; Vitest reports 20 passed; Playwright reports 2 passed and 2 project-inapplicable skipped; Ruff passes; 163 Python files are formatted; Pyright reports 0 errors; uv lock passes; Pytest reports 214 passed in 93.80 s. Great Trango model.stl, model.3mf, and preview.glb remain byte-identical, and no DEM was downloaded or rebuilt.
+
+### Post-Phase 11 slicing-control desktop layout hotfix
+
+Command: reproduce the user report at 1365 x 758 CSS pixels and deviceScaleFactor 1.5, scroll the left panel to the slicing toggle, enable it, and record root/panel/header/application geometry before and after expansion.
+
+Result: before expansion window scrollY is 0, panel scrollTop is 287, and header/app top are 0. After expansion the panel remains at 287 but window scrollY becomes 185, header/app top become -185, document height becomes 1046, and the newly exposed lower area is white. Runtime testing proves that fixing the desktop body to the viewport keeps all four top/scroll measurements at 0 without changing the mobile breakpoint.
+
+Command: add the desktop viewport lock and Playwright regression, rebuild checksum-bound Web assets, verify the live 8772 instance, and run TypeScript, 20 Vitest tests, desktop/mobile Playwright, Ruff, format, Pyright, full Pytest, uv lock, Git whitespace, and strict Web asset checks.
+
+Result: the live instance reports scrollY 0, header top 0, app top 0, body position fixed, and a visible slicer selector after expansion. TypeScript passes; Vitest reports 20 passed; Playwright reports 2 passed and 2 project-inapplicable skipped; Ruff passes; 163 Python files are formatted; Pyright reports 0 errors; Pytest reports 214 passed in 104.01 s; uv lock, Git whitespace, and the nine-asset Web manifest pass. No DEM, terrain geometry, manufacturing artifact, provider cache, or completed workflow was modified.
