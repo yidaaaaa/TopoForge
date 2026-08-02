@@ -359,10 +359,10 @@
 ## TF-043 — Public v0.9.0 CI used the wrong release version and no Release page existed
 
 - **Severity:** High release operations
-- **Status:** Resolved in the 0.10.0 release candidate; remote verification pending
+- **Status:** Resolved in 0.10.0 and verified remotely
 - **Reproduction:** GitHub Actions run 30749563043 checks out v0.9.0 source but invokes verify_release.py with --version 0.8.0, so the release job fails. The public Releases API returns an empty list after the tag push.
 - **Expected behavior:** CI verifies the checked-out package version, and tagged versions publish verified downloadable assets.
-- **Resolution:** CI now uses uv version --short. The generic Release workflow builds and verifies the target tag, bootstraps the newest unpublished reachable tag from main, publishes four checksum-bound assets, and skips existing Release pages.
+- **Resolution:** CI now uses uv version --short. The generic Release workflow builds and verifies the target tag, bootstraps the newest non-current tag from main, publishes four checksum-bound assets, and skips existing Release pages. Runs 30752031951, 30752306723, and 30752306731 succeed; both v0.9.0 and v0.10.0 Release assets pass downloaded checksum verification.
 
 ## TF-044 — Completed Web jobs lacked project backup, cleanup, and restore controls
 
@@ -371,3 +371,11 @@
 - **Reproduction:** Open a completed 0.9.0 job. The WebUI shows manufacturing artifacts but no storage estimate, cleanup candidates, backup archive, or restore action even though the CLI maintenance core already exists.
 - **Expected behavior:** A local operator can manage completed projects in Chinese or English without losing checksum/path/atomicity guarantees.
 - **Resolution:** Added typed maintenance routes and UI over the existing workflow core, explicit cleanup confirmation, strict backup download identity, atomic restored-job registration, 24 focused backend/release tests, 18 Vitest tests, real Playwright lifecycle coverage, and retained HTTP evidence.
+
+## TF-045 — Concurrent main/tag Release runs raced and the bootstrap selector used system Python 3.10
+
+- **Severity:** High release operations
+- **Status:** Resolved on main after v0.10.0 publication
+- **Reproduction:** Push main and v0.10.0 close together. Per-ref concurrency allows both jobs to observe no Release; main can publish the current tag while the tag job fails on an existing Release. The first bootstrap correction then fails before setup-python because Ubuntu 22.04 system Python lacks tomllib.
+- **Expected behavior:** Main publishes only the prior missing tag, tag publication is serialized, and version parsing uses the declared Python 3.12 toolchain.
+- **Resolution:** Use one release-publication concurrency group, skip the current project tag during main bootstrap selection, stop after the newest non-current tag, and run setup-python before tomllib. Final bootstrap run 30752306731 succeeds and publishes v0.9.0; final main CI 30752306723 succeeds. The earlier failed runs remain visible as the reproduced evidence and have no unresolved effect.

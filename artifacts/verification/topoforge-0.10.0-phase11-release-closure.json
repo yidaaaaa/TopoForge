@@ -1,0 +1,102 @@
+{
+  "github_actions": [
+    {
+      "conclusion": "success",
+      "head": "29c71d12",
+      "id": 30752029648,
+      "name": "ci",
+      "ref": "main",
+      "url": "https://github.com/yidaaaaa/TopoForge/actions/runs/30752029648"
+    },
+    {
+      "conclusion": "success",
+      "head": "29c71d12",
+      "id": 30752031951,
+      "name": "ci",
+      "ref": "v0.10.0",
+      "url": "https://github.com/yidaaaaa/TopoForge/actions/runs/30752031951"
+    },
+    {
+      "conclusion": "success",
+      "head": "6ceecb04",
+      "id": 30752306723,
+      "name": "ci",
+      "ref": "main",
+      "url": "https://github.com/yidaaaaa/TopoForge/actions/runs/30752306723"
+    },
+    {
+      "conclusion": "success",
+      "id": 30752029634,
+      "name": "release",
+      "published_tag": "v0.10.0",
+      "ref": "main",
+      "url": "https://github.com/yidaaaaa/TopoForge/actions/runs/30752029634"
+    },
+    {
+      "conclusion": "success",
+      "id": 30752306731,
+      "name": "release",
+      "published_tag": "v0.9.0",
+      "ref": "main",
+      "url": "https://github.com/yidaaaaa/TopoForge/actions/runs/30752306731"
+    }
+  ],
+  "github_releases": [
+    {
+      "asset_count": 4,
+      "downloaded_sha256s_passed": true,
+      "sdist_sha256": "489a7bf48f692a5c77a135b2db24a5d2f4df64b1ecaff2a19902af5e002df4de",
+      "tag": "v0.9.0",
+      "url": "https://github.com/yidaaaaa/TopoForge/releases/tag/v0.9.0",
+      "wheel_sha256": "0518d22feed14fe3a124d69d5d913db22cd341c030e137b001b2d96f12428580"
+    },
+    {
+      "asset_count": 4,
+      "downloaded_sha256s_passed": true,
+      "sdist_sha256": "0c205b920e6022adc71846104576e0cdad9d0b4ac7f7b3417a76f69cea01112f",
+      "tag": "v0.10.0",
+      "url": "https://github.com/yidaaaaa/TopoForge/releases/tag/v0.10.0",
+      "wheel_sha256": "c0670dac934ee509cd8054291232ce154b36e3f53cd5998d2bd3760bb64942be"
+    }
+  ],
+  "main_release_automation_fix_head": "6ceecb04a7268816bffc19006af59031bd96dc1b",
+  "release_commit": "29c71d1222bce74912c265bcf5d359a3f83864b1",
+  "release_race_correction": {
+    "bootstrap_selects_latest_non_current_tag_only": true,
+    "causes": [
+      "main/tag workflows used separate concurrency groups",
+      "main bootstrap did not exclude the current project tag",
+      "tag selection used Python 3.10 before setup-python and lacked tomllib"
+    ],
+    "fix_commits": [
+      "b7436b6c3131cff9105d8cd167b7d71e99394fa1",
+      "6ceecb04a7268816bffc19006af59031bd96dc1b"
+    ],
+    "global_serialization": true,
+    "observed_failed_runs": [
+      30752031943,
+      30752177795
+    ],
+    "python_3_12_initialized_before_version_parse": true,
+    "unresolved": false
+  },
+  "release_tag": "v0.10.0",
+  "release_version": "0.10.0",
+  "required_checks_passed": true,
+  "rollback": {
+    "command": "scripts/rollback-topoforge-0.10.0.sh --confirm-rollback",
+    "exit_code": 0,
+    "independent_no_hardlink_clone": true,
+    "retained_data_deleted": false,
+    "tree_matches_v0.9.0": true,
+    "worktree_clean": true
+  },
+  "schema_version": "topoforge-phase11-release-closure-v1",
+  "source_patch": {
+    "baseline_restored_clean": true,
+    "forward_apply_check": true,
+    "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/patches/topoforge-0.10.0-source.patch",
+    "reverse_apply_check": true,
+    "sha256": "a4f4d674e49465a91548ff473974e1a611301eef8a6ad9ddb0376ddcba542731"
+  }
+}

@@ -17,7 +17,7 @@ Updated: 2026-08-02
 - [x] Phase 9 — worker-backed loopback FastAPI and bilingual React/MapLibre/Three.js local Web application. Completed in 0.8.0 on 2026-08-02.
 - [x] Phase 9.1 — WebUI map and 3D presentation stabilization. Completed in 0.8.1 on 2026-08-02.
 - [x] Phase 10 — deterministic local processed-DEM maps and synchronized 2D/3D manufacturing assembly. Completed in 0.9.0 on 2026-08-02.
-- [ ] Phase 11 — bilingual local project lifecycle and automated GitHub Releases. Local 0.10.0 evidence is complete; remote Actions/Release closure is in progress.
+- [x] Phase 11 — bilingual local project lifecycle and automated GitHub Releases. Completed in 0.10.0 on 2026-08-02.
 
 ## Completed Phase 9 — bilingual local Web application
 
@@ -239,4 +239,4 @@ The local API and Web plan is complete and visually stabilized in 0.8.1: typed d
 6. [x] Add target-tag GitHub Release automation with fixed-epoch double builds, isolated installation verification, SHA256SUMS, historical-tag bootstrap, and idempotent skip.
 7. [x] Synchronize 0.10.0 versions, build nine checksum-bound Web assets, run 210 Python tests, 18 Vitest tests, 2 applicable Playwright scenarios, reference definitions, and deterministic benchmarks.
 8. [x] Produce local lifecycle, release, benchmark, reference, screenshot, and summary evidence without real terrain download or rebuild.
-9. [ ] Commit/tag v0.10.0, independently verify patch/rollback, push main/tag, and require successful GitHub Actions plus v0.9.0/v0.10.0 Release assets.
+9. [x] Commit/tag v0.10.0, independently verify patch/rollback, push main/tag, and require successful GitHub Actions plus v0.9.0/v0.10.0 Release assets.

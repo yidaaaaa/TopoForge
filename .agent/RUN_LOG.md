@@ -627,3 +627,15 @@ Result: Ruff passes and 163 files are formatted; Pyright has 0 errors; Pytest re
 Command: build two fixed-epoch 0.10.0 sdist/wheel sets and run scripts/verify_release.py --version 0.10.0 --install outside the checkout.
 
 Result: the 1052859-byte sdist repeats byte-for-byte at SHA-256 0c205b920e6022adc71846104576e0cdad9d0b4ac7f7b3417a76f69cea01112f; the 833526-byte wheel repeats at SHA-256 c0670dac934ee509cd8054291232ce154b36e3f53cd5998d2bd3760bb64942be. A fresh Python 3.12 environment installs 54 packages, imports 0.10.0 outside the repository, passes doctor and web --check with nine assets, builds 40 x 32 x 20 mm terrain, and strict-reads 3MF with zero warnings. No real DEM was downloaded or rebuilt.
+
+Command: commit 29c71d1222bce74912c265bcf5d359a3f83864b1, create annotated v0.10.0, execute rollback and source-patch verification in independent no-hardlink clones, then push main and the tag over SSH.
+
+Result: push succeeds. The rollback script exits 0 and the revert tree matches v0.9.0 with a clean worktree; source patch forward/reverse application also restores a clean v0.9.0 baseline. No retained DEM, cache, output, backup, or Web workspace is deleted.
+
+Command: monitor the four initial GitHub runs and inspect the real Release race, then add global serialization/current-tag exclusion and initialize Python 3.12 before tomllib in commits b7436b6c3131cff9105d8cd167b7d71e99394fa1 and 6ceecb04a7268816bffc19006af59031bd96dc1b.
+
+Result: the race and Python 3.10 failure are reproduced rather than hidden. Final main CI 30752306723 succeeds, v0.10.0 tag CI 30752031951 succeeds, and bootstrap Release run 30752306731 succeeds. v0.9.0 and v0.10.0 each expose SHA256SUMS, wheel, sdist, and installed-verification JSON.
+
+Command: download all eight GitHub Release assets and run each published SHA256SUMS, then parse both verification JSON files.
+
+Result: every asset reports OK. v0.9.0 publishes the retained final 0.9.0 package hashes 489a7bf48f692a5c77a135b2db24a5d2f4df64b1ecaff2a19902af5e002df4de and 0518d22feed14fe3a124d69d5d913db22cd341c030e137b001b2d96f12428580. v0.10.0 publishes 0c205b920e6022adc71846104576e0cdad9d0b4ac7f7b3417a76f69cea01112f and c0670dac934ee509cd8054291232ce154b36e3f53cd5998d2bd3760bb64942be. Both reports have required_checks_passed=true and byte-reproducible archives.
