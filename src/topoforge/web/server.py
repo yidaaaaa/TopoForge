@@ -39,6 +39,22 @@ def verify_web_installation(
         "workspace_root": str(resolved.workspace_root),
         "input_roots": [str(path) for path in resolved.input_roots],
         "max_concurrent_jobs": resolved.max_concurrent_jobs,
+        "bambu_configuration": {
+            "executable": (
+                None
+                if resolved.bambu_studio_executable is None
+                else str(resolved.bambu_studio_executable)
+            ),
+            "machine_profile": None
+            if resolved.bambu_machine_profile is None
+            else str(resolved.bambu_machine_profile),
+            "process_profile": None
+            if resolved.bambu_process_profile is None
+            else str(resolved.bambu_process_profile),
+            "filament_profile": None
+            if resolved.bambu_filament_profile is None
+            else str(resolved.bambu_filament_profile),
+        },
         "assets": assets,
         "required_checks_passed": True,
     }

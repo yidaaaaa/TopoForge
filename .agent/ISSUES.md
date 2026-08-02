@@ -428,3 +428,11 @@
 - **Reproduction:** Open the local Web configuration. Maximum model height is available, but there is no control for the core vertical_scale_mode or vertical_exaggeration fields that are already supported by BuildConfig and the CLI.
 - **Expected behavior:** A local user can choose automatic perceptual scaling, natural scale, fit-to-height, or a custom exaggeration without bypassing the core maximum-height and validation contracts.
 - **Resolution:** Added typed Chinese/English mode selection, a conditional custom coefficient input, default/custom request serialization tests, language-switch tests, dynamic-layout Playwright coverage, a checksum-bound production build, and a live 8772 measurement at custom 2.5 with scrollY/header/app top all 0.
+
+## TF-052 — Web Bambu jobs could not resolve the retained Studio executable or P2S profiles
+
+- **Severity:** High local manufacturing workflow
+- **Status:** Resolved locally after 0.10.0
+- **Reproduction:** Start the loopback Web service without a Bambu-specific runtime option, select `Run software slicing` and `Generate Bambu project evidence`, then submit. The isolated worker reaches the slice stage and fails with `Bambu Studio probe did not resolve an executable path` even though the AppImage exists under `downloads/tools/bambu-studio`; after resolving only the binary, the request still lacks the three flattened official P2S profiles required by the production gate.
+- **Expected behavior:** The Web service either rejects the request before queueing with exact corrective startup options or injects one fully validated executable/profile configuration into the saved launch and worker. Direct API submission must not bypass this gate, and successful configuration must produce real official slice and project/reopen evidence.
+- **Resolution:** Added four typed `topoforge web` options and startup file checks, all-or-none profile validation, pre-queue slicer probing and profile injection for validate/submit, worker `TOPOFORGE_BAMBU_STUDIO` propagation, API/check reporting, and focused regressions. The corrected real job `3778ca822657498eb3a4acca6ce89e97` completed all nine stages with exit code 0; official slice reports 598 layers with no empty/floating/out-of-bed/support result, and the Bambu project passes export, archive, embedded-G-code, no-external-profile reopen, and reslice gates.

@@ -85,6 +85,86 @@ def test_aoi_normalization_and_launch_validation_reuse_core_contracts(
         assert validation.json()["expected_stages"][-1] == "connect"
 
 
+def test_bambu_validation_requires_and_reuses_server_tool_configuration(
+    web_config: WebAppConfig,
+    web_static_dir: Path,
+    tmp_path: Path,
+) -> None:
+    executable = tmp_path / "BambuStudio.AppImage"
+    executable.write_text(
+        "#!/bin/sh\nprintf 'BambuStudio-02.07.01.62:\\n'\n",
+        encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    machine = tmp_path / "machine.json"
+    process = tmp_path / "process.json"
+    filament = tmp_path / "filament.json"
+    for path in (machine, process, filament):
+        path.write_text("{}\n", encoding="utf-8")
+
+    base_request = make_job_request(web_config, name="bambu-validation")
+    explicit_profiles = base_request.model_copy(
+        update={
+            "launch": base_request.launch.model_copy(
+                update={
+                    "slicing_enabled": True,
+                    "slicer_name": "bambu-studio",
+                    "slicer_settings": (machine, process),
+                    "slicer_filaments": (filament,),
+                    "project_evidence_enabled": True,
+                }
+            )
+        }
+    )
+    missing_app = create_app(web_config, static_dir=web_static_dir)
+    with TestClient(missing_app) as client:
+        validation = client.post(
+            "/api/v1/jobs/validate",
+            json=explicit_profiles.model_dump(mode="json"),
+        )
+        assert validation.status_code == 422
+        assert "--bambu-studio-executable" in validation.json()["detail"]["message"]
+        submission = client.post(
+            "/api/v1/jobs",
+            json=explicit_profiles.model_dump(mode="json"),
+        )
+        assert submission.status_code == 422
+
+    configured = WebAppConfig.model_validate(
+        {
+            **web_config.model_dump(),
+            "bambu_studio_executable": executable,
+            "bambu_machine_profile": machine,
+            "bambu_process_profile": process,
+            "bambu_filament_profile": filament,
+        }
+    )
+    implicit_profiles = base_request.model_copy(
+        update={
+            "launch": base_request.launch.model_copy(
+                update={
+                    "slicing_enabled": True,
+                    "slicer_name": "bambu-studio",
+                    "project_evidence_enabled": True,
+                }
+            )
+        }
+    )
+    configured_app = create_app(configured, static_dir=web_static_dir)
+    with TestClient(configured_app) as client:
+        validation = client.post(
+            "/api/v1/jobs/validate",
+            json=implicit_profiles.model_dump(mode="json"),
+        )
+        assert validation.status_code == 200
+        slicer = validation.json()["slicer"]
+        assert slicer["name"] == "BambuStudio"
+        assert slicer["version"] == "02.07.01.62"
+        assert slicer["status"] == "available"
+        assert Path(slicer["executable"]) == executable.resolve()
+        assert validation.json()["expected_stages"][-1] == "project"
+
+
 def test_input_listing_and_traversal_rejection(
     web_config: WebAppConfig,
     web_static_dir: Path,

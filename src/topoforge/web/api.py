@@ -208,7 +208,8 @@ def create_app(
 
     @app.post("/api/v1/jobs/validate")
     def validate_job(request: JobCreateRequest) -> dict[str, Any]:
-        workspace = request.launch.workspace_dir.expanduser().resolve()
+        normalized, slicer = jobs.validate_request(request)
+        workspace = normalized.launch.workspace_dir
         if workspace == resolved.workspace_root or resolved.workspace_root not in workspace.parents:
             raise HTTPException(
                 status_code=422,
@@ -217,10 +218,11 @@ def create_app(
         return {
             "valid": True,
             "workspace": str(workspace),
-            "expected_stages": [stage.value for stage in expected_workflow_stages(request)],
+            "expected_stages": [stage.value for stage in expected_workflow_stages(normalized)],
+            "slicer": None if slicer is None else slicer.model_dump(mode="json"),
             "normalized_aoi": (
-                request.launch.global_source.normalized_aoi().model_dump(mode="json")
-                if request.launch.global_source is not None
+                normalized.launch.global_source.normalized_aoi().model_dump(mode="json")
+                if normalized.launch.global_source is not None
                 else None
             ),
         }

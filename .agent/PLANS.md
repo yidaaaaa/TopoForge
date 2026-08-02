@@ -23,6 +23,7 @@ Updated: 2026-08-03
 - [x] Post-Phase 11 high-DPI 3D framing hotfix — CSS-sized WebGL canvases, stable first frame, 1.5x DPR whole-model/assembly checks, and measured terrain centering. Completed on main 2026-08-03.
 - [x] Post-Phase 11 desktop dynamic-controls hotfix — viewport-fixed desktop shell, panel-local scrolling, slicing-control expansion regression, and unchanged mobile document scrolling. Completed locally 2026-08-03.
 - [x] Post-Phase 11 Web vertical-scaling control — expose natural, fit-height, auto-perceptual, and custom core modes with bilingual controls, request binding, and dynamic-layout regression. Completed locally 2026-08-03.
+- [x] Post-Phase 11 Web Bambu runtime configuration hotfix — validate and inject the official Bambu Studio executable plus complete P2S machine/process/filament profiles before queueing, propagate the executable to isolated workers, expose the resolved probe in API/check output, and complete a real slice/project/reopen workflow. Completed locally 2026-08-03.
 
 ## Completed Phase 9 — bilingual local Web application
 

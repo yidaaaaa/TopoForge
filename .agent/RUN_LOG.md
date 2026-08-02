@@ -710,3 +710,25 @@ Result: default requests carry auto-perceptual plus 1.0; custom requests preserv
 Command: rebuild checksum-bound Web assets and run npm typecheck, 22 Vitest tests, production build, desktop/mobile Playwright, Ruff, format, Pyright, full Pytest, uv lock, Git whitespace, and strict Web asset checks.
 
 Result: TypeScript passes; Vitest reports 22 passed; Playwright reports 2 passed and 2 project-inapplicable skipped; Ruff passes; 163 Python files are formatted; Pyright reports 0 errors; Pytest reports 214 passed in 91.13 s; uv lock, Git whitespace, and the nine-asset Web manifest pass. No DEM, terrain geometry, manufacturing artifact, provider cache, or completed workflow was modified.
+
+### Post-Phase 11 Web Bambu runtime hotfix
+
+Command: inspect the failed retained Web job, the configured loopback service, the retained Bambu Studio AppImage, slicer adapters, and the existing official P2S profile evidence.
+
+Result: the AppImage exists at `downloads/tools/bambu-studio/BambuStudio_ubuntu22.04-v02.07.01.62.AppImage`, has SHA-256 `2749917af560f3b9a2681429da9c43d00c65d096e1a1c479cc49466634174549`, and probes as BambuStudio 02.07.01.62 with `APPIMAGE_EXTRACT_AND_RUN=1`. The old Web service neither configured `TOPOFORGE_BAMBU_STUDIO` nor placed the AppImage on PATH. The request also omitted the machine, process, and filament profiles required for the official P2S project gate.
+
+Command: add validated WebAppConfig/CLI fields for the executable and complete profile set, reuse them in API validation/submission, probe before queueing, inject the profiles, propagate the executable to isolated workers, and add manager/API regressions.
+
+Result: focused Ruff and Pyright pass; 19 focused Web tests pass. `/api/v1/jobs/validate` now returns the actual BambuStudio name, version, executable, and available status; missing configuration fails before queueing with exact startup options, and direct `/api/v1/jobs` submission uses the same gate.
+
+Command: restart the retained 8772 loopback service with the AppImage and the three checksum-verified P2S profiles, revalidate the original saved request, submit it as job `3778ca822657498eb3a4acca6ce89e97`, and monitor all workflow stages.
+
+Result: all nine stages complete with worker exit code 0. The real 180 x 180.00035095 x 120 mm print-local model contains 813,600 triangles. Official Bambu Studio produces 598 layers, 139,304,660 bytes of G-code, 396.34 g estimated filament, and 16h 34m 42s estimated time. The official P2S parameter gate passes; empty-layer, floating-region, out-of-bed, and support results are false. Source/processed resolutions are 29.98154957 m and 44.73965157 m; peak loss is 2.31494141 m and peak shift is 9.55775011 m.
+
+Command: export the separate Bambu project with the same profiles, archive-test it, reopen it without external profiles, reslice it, recompute evidence hashes, and strict-read both interoperable Core 3MF roles.
+
+Result: the 54,978,232-byte project SHA-256 is `11adff28363ecfcf7e6e4fccbc3f3fb16af9260e233d299f035e5e3416c1c62a`. Export and reopen exit 0; dimensions and 813,600 triangles match; project ZIP and embedded G-code MD5 pass; both release gates pass; Core and print-local 3MF strict warning counts are 0. Raw Bambu `ZFiller`, `T65535`, missing extracted system-preset path, and headless display diagnostics remain retained under ADR-032.
+
+Command: run `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, `npm --prefix web run typecheck`, `npm --prefix web test -- --run`, `npm --prefix web run build`, `npm --prefix web run test:ui`, `uv lock --check`, and `uv run topoforge web --check` with the real AppImage and three P2S profiles.
+
+Result: Ruff `All checks passed!`; format `163 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `217 passed in 96.79s`; Vitest `22 passed`; production Web build publishes nine checksum-bound assets; Playwright `2 passed / 2 project-inapplicable skipped`; lock resolves 69 packages; `web --check` reports the four resolved Bambu paths and `required_checks_passed=true`.

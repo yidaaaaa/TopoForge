@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -168,6 +169,10 @@ class WebAppConfig(BaseModel):
     workspace_root: Path = Path("topoforge-workspaces")
     input_roots: tuple[Path, ...] = (Path.cwd(),)
     max_concurrent_jobs: int = Field(default=1, ge=1, le=4)
+    bambu_studio_executable: Path | None = None
+    bambu_machine_profile: Path | None = None
+    bambu_process_profile: Path | None = None
+    bambu_filament_profile: Path | None = None
     poll_interval_seconds: float = Field(default=0.25, ge=0.05, le=5)
 
     @model_validator(mode="after")
@@ -180,6 +185,29 @@ class WebAppConfig(BaseModel):
         workspace = resolved.workspace_root
         if state == workspace or state in workspace.parents or workspace in state.parents:
             raise ValueError("state_dir and workspace_root must not overlap")
+        profiles = (
+            resolved.bambu_machine_profile,
+            resolved.bambu_process_profile,
+            resolved.bambu_filament_profile,
+        )
+        if any(path is not None for path in profiles) and not all(
+            path is not None for path in profiles
+        ):
+            raise ValueError(
+                "bambu_machine_profile, bambu_process_profile, and "
+                "bambu_filament_profile must be configured together"
+            )
+        for label, path in (
+            ("bambu_studio_executable", resolved.bambu_studio_executable),
+            ("bambu_machine_profile", resolved.bambu_machine_profile),
+            ("bambu_process_profile", resolved.bambu_process_profile),
+            ("bambu_filament_profile", resolved.bambu_filament_profile),
+        ):
+            if path is not None and (
+                not path.is_file()
+                or (label.endswith("executable") and not os.access(path, os.X_OK))
+            ):
+                raise ValueError(f"{label} does not identify a usable file: {path}")
         return self
 
     def resolved(self) -> WebAppConfig:
@@ -190,6 +218,26 @@ class WebAppConfig(BaseModel):
                 "workspace_root": self.workspace_root.expanduser().resolve(),
                 "input_roots": tuple(
                     dict.fromkeys(path.expanduser().resolve() for path in self.input_roots)
+                ),
+                "bambu_studio_executable": (
+                    None
+                    if self.bambu_studio_executable is None
+                    else self.bambu_studio_executable.expanduser().resolve()
+                ),
+                "bambu_machine_profile": (
+                    None
+                    if self.bambu_machine_profile is None
+                    else self.bambu_machine_profile.expanduser().resolve()
+                ),
+                "bambu_process_profile": (
+                    None
+                    if self.bambu_process_profile is None
+                    else self.bambu_process_profile.expanduser().resolve()
+                ),
+                "bambu_filament_profile": (
+                    None
+                    if self.bambu_filament_profile is None
+                    else self.bambu_filament_profile.expanduser().resolve()
                 ),
             }
         )

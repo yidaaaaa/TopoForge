@@ -21,6 +21,15 @@ from pydantic import BaseModel
 
 from topoforge.exceptions import ConfigurationError
 from topoforge.util import sha256_file
+from topoforge.validation.slicers import (
+    BambuStudioAdapter,
+    OrcaSlicerAdapter,
+    PrusaSlicerAdapter,
+    SlicerAdapter,
+    SlicerAvailability,
+    SlicerInfo,
+    select_slicer,
+)
 from topoforge.web.models import (
     FileEntry,
     FileListing,
@@ -136,6 +145,7 @@ class LocalJobManager:
         self.config = config.resolved()
         self._lock = threading.RLock()
         self._processes: dict[str, subprocess.Popen[bytes]] = {}
+        self._slicer_probes: dict[str, SlicerInfo] = {}
         self._stop = threading.Event()
         self._monitor: threading.Thread | None = None
 
@@ -148,6 +158,87 @@ class LocalJobManager:
     def backups_dir(self) -> Path:
         """Return the adapter-owned verified workflow backup directory."""
         return self.config.state_dir / "backups"
+
+    def _slicer_adapter(self, name: str) -> SlicerAdapter:
+        if name == "bambu-studio":
+            return BambuStudioAdapter(self.config.bambu_studio_executable)
+        if name == "orca":
+            return OrcaSlicerAdapter()
+        if name == "prusa":
+            return PrusaSlicerAdapter()
+        if name == "auto":
+            return select_slicer(bambu_executable=self.config.bambu_studio_executable)
+        raise ConfigurationError(f"unsupported slicer name: {name}")
+
+    def probe_slicer(self, name: str, *, refresh: bool = False) -> SlicerInfo:
+        """Return one cached executable probe used by validation and workers."""
+        with self._lock:
+            if not refresh and name in self._slicer_probes:
+                return self._slicer_probes[name]
+            probe = self._slicer_adapter(name).probe(refresh=refresh)
+            self._slicer_probes[name] = probe
+            return probe
+
+    def validate_request(
+        self,
+        request: JobCreateRequest,
+    ) -> tuple[JobCreateRequest, SlicerInfo | None]:
+        """Normalize one launch and reject unavailable external slicers before queueing."""
+        workspace = request.launch.workspace_dir.expanduser().resolve()
+        if workspace == self.config.workspace_root or not _within(
+            self.config.workspace_root, workspace
+        ):
+            raise ConfigurationError(f"workspace must be a child of {self.config.workspace_root}")
+        launch = request.launch
+        if launch.slicing_enabled and launch.slicer_name == "bambu-studio":
+            settings = launch.slicer_settings
+            filaments = launch.slicer_filaments
+            configured_profiles = (
+                self.config.bambu_machine_profile,
+                self.config.bambu_process_profile,
+                self.config.bambu_filament_profile,
+            )
+            if not settings and all(path is not None for path in configured_profiles):
+                settings = (
+                    self.config.bambu_machine_profile,
+                    self.config.bambu_process_profile,
+                )
+                filaments = (self.config.bambu_filament_profile,)
+            if (
+                len(settings) != 2
+                or len(filaments) != 1
+                or any(path is None for path in (*settings, *filaments))
+            ):
+                raise ConfigurationError(
+                    "Bambu Studio slicing requires one machine, one process, and one "
+                    "filament profile. Restart topoforge web with "
+                    "--bambu-machine-profile, --bambu-process-profile, and "
+                    "--bambu-filament-profile."
+                )
+            launch = launch.model_copy(
+                update={
+                    "slicer_settings": settings,
+                    "slicer_filaments": filaments,
+                }
+            )
+        slicer: SlicerInfo | None = None
+        if launch.slicing_enabled:
+            slicer = self.probe_slicer(launch.slicer_name)
+            if slicer.status is not SlicerAvailability.AVAILABLE:
+                detail = slicer.detail or "the version probe did not succeed"
+                option = (
+                    " Restart topoforge web with --bambu-studio-executable PATH."
+                    if launch.slicer_name == "bambu-studio"
+                    else ""
+                )
+                raise ConfigurationError(f"{slicer.name} is not ready: {detail}.{option}")
+        normalized_launch = launch.model_copy(
+            update={
+                "workspace_dir": workspace,
+                "build": launch.build.model_copy(update={"output_dir": workspace}),
+            }
+        )
+        return JobCreateRequest(launch=normalized_launch), slicer
 
     def start(self) -> None:
         """Create roots, reconcile retained records, and start background polling."""
@@ -260,20 +351,8 @@ class LocalJobManager:
     def submit(self, request: JobCreateRequest) -> JobRecord:
         """Persist and enqueue one complete validated workflow launch."""
         with self._lock:
-            workspace = request.launch.workspace_dir.expanduser().resolve()
-            if workspace == self.config.workspace_root or not _within(
-                self.config.workspace_root, workspace
-            ):
-                raise ConfigurationError(
-                    f"workspace must be a child of {self.config.workspace_root}"
-                )
-            launch = request.launch.model_copy(
-                update={
-                    "workspace_dir": workspace,
-                    "build": request.launch.build.model_copy(update={"output_dir": workspace}),
-                }
-            )
-            normalized = JobCreateRequest(launch=launch)
+            normalized, _ = self.validate_request(request)
+            workspace = normalized.launch.workspace_dir
             job_id = uuid4().hex
             now = utc_now()
             record = JobRecord(
@@ -501,6 +580,8 @@ class LocalJobManager:
         stderr_path = job_dir / "stderr.log"
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        if self.config.bambu_studio_executable is not None:
+            env["TOPOFORGE_BAMBU_STUDIO"] = str(self.config.bambu_studio_executable)
         command = [
             sys.executable,
             "-m",

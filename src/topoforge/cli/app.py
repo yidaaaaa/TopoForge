@@ -1873,6 +1873,22 @@ def web_application(
         int,
         typer.Option(min=1, max=4, help="Bounded number of isolated workflow processes."),
     ] = 1,
+    bambu_studio_executable: Annotated[
+        Path | None,
+        typer.Option(help="Official Bambu Studio executable used by Web workers."),
+    ] = None,
+    bambu_machine_profile: Annotated[
+        Path | None,
+        typer.Option(help="Resolved official Bambu P2S machine profile JSON."),
+    ] = None,
+    bambu_process_profile: Annotated[
+        Path | None,
+        typer.Option(help="Resolved official Bambu P2S process profile JSON."),
+    ] = None,
+    bambu_filament_profile: Annotated[
+        Path | None,
+        typer.Option(help="Resolved official Bambu filament profile JSON."),
+    ] = None,
     open_browser: Annotated[
         bool,
         typer.Option("--open/--no-open", help="Open the local application in a browser."),
@@ -1891,6 +1907,10 @@ def web_application(
             workspace_root=workspace_root,
             input_roots=tuple(input_root or (Path.cwd(),)),
             max_concurrent_jobs=max_concurrent_jobs,
+            bambu_studio_executable=bambu_studio_executable,
+            bambu_machine_profile=bambu_machine_profile,
+            bambu_process_profile=bambu_process_profile,
+            bambu_filament_profile=bambu_filament_profile,
         )
         if check:
             _emit(verify_web_installation(config))

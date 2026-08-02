@@ -81,6 +81,18 @@ def test_web_config_rejects_overlapping_state_and_workspace(tmp_path: Path) -> N
         )
 
 
+def test_web_config_rejects_partial_bambu_profiles(tmp_path: Path) -> None:
+    machine = tmp_path / "machine.json"
+    machine.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="must be configured together"):
+        WebAppConfig(
+            state_dir=tmp_path / "state",
+            workspace_root=tmp_path / "workspaces",
+            input_roots=(tmp_path,),
+            bambu_machine_profile=machine,
+        )
+
+
 def test_input_browser_enforces_roots_and_filters_files(
     web_config: WebAppConfig,
     tmp_path: Path,
@@ -97,6 +109,49 @@ def test_input_browser_enforces_roots_and_filters_files(
     assert listing.entries[1].selectable is True
     with pytest.raises(ConfigurationError, match="outside configured input roots"):
         manager.list_files(tmp_path)
+
+
+def test_isolated_worker_inherits_configured_bambu_executable(
+    web_config: WebAppConfig,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executable = tmp_path / "BambuStudio.AppImage"
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o755)
+    configured = WebAppConfig.model_validate(
+        {
+            **web_config.model_dump(),
+            "bambu_studio_executable": executable,
+        }
+    )
+    captured_environments: list[dict[str, str]] = []
+
+    class FakeProcess:
+        pid = 43210
+
+        @staticmethod
+        def poll() -> None:
+            return None
+
+    def fake_popen(command: list[str], **kwargs: object) -> FakeProcess:
+        del command
+        environment = kwargs.get("env")
+        assert isinstance(environment, dict)
+        assert all(
+            isinstance(key, str) and isinstance(value, str) for key, value in environment.items()
+        )
+        captured_environments.append(environment)
+        return FakeProcess()
+
+    monkeypatch.setattr("topoforge.web.jobs.subprocess.Popen", fake_popen)
+    manager = LocalJobManager(configured)
+    manager.start()
+    try:
+        manager.submit(make_job_request(configured, name="worker-bambu-environment"))
+        assert captured_environments[0]["TOPOFORGE_BAMBU_STUDIO"] == str(executable.resolve())
+    finally:
+        manager.close()
 
 
 def test_isolated_worker_completes_and_publishes_checksum_artifacts(
