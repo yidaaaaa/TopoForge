@@ -16,6 +16,7 @@ Updated: 2026-08-02
 - [x] Phase 8 — local release hardening: packaging, CI, benchmarks, reference regions, and offline documentation. Completed in 0.7.0 on 2026-08-02.
 - [x] Phase 9 — worker-backed loopback FastAPI and bilingual React/MapLibre/Three.js local Web application. Completed in 0.8.0 on 2026-08-02.
 - [x] Phase 9.1 — WebUI map and 3D presentation stabilization. Completed in 0.8.1 on 2026-08-02.
+- [x] Phase 10 — deterministic local processed-DEM maps and synchronized 2D/3D manufacturing assembly. Completed in 0.9.0 on 2026-08-02.
 
 ## Completed Phase 9 — bilingual local Web application
 
@@ -43,6 +44,23 @@ Final evidence: 204 Python tests, 6 Vitest tests, 2 applicable Playwright scenar
 8. [x] Publish reproducible 0.8.1 archives, isolated installed smoke evidence, screenshots, rollback, commit, and tag.
 
 Final gates: Ruff clean; 160 files formatted; Pyright 0 errors; Pytest 204 passed in 81.24 s; Vitest 9 passed; Playwright 2 applicable passed / 2 project-inapplicable skipped; fixed-epoch sdist/wheel byte-identical; installed 0.8.1 wheel passed doctor, Web asset checks, build, and strict 3MF inspection. Manufacturing model SHA-256 remains `6a237cfd4adfaf0f9eb44ed8c2ebb6b584a8ac2603d47d6c5c35527ba6064ce4`.
+
+## Completed Phase 10 — deterministic local maps and assembly (0.9.0)
+
+1. [x] Generate deterministic 256 x 256 local XYZ PNG tiles from the completed `processed_dem.tif` in terrain, elevation, and hillshade styles.
+2. [x] Bind tile cache records to processed DEM SHA-256, generator version, coordinates, PNG SHA-256, byte size, and immutable HTTP cache headers.
+3. [x] Publish geographic manufacturing footprints and synchronize selection between MapLibre, 2D assembly, and 3D assembly.
+4. [x] Add a 2D physical assembly diagram with row/column labels, connector positions, North marker, and per-tile visibility.
+5. [x] Load checksum-verified per-tile global GLBs into a Three.js assembly with shared selection, visibility, explosion, reset, and `+X East`, `+Y North`, `+Z Up` labels.
+6. [x] Bind assembly reads through the JobRecord SHA, canonical workflow manifest, CONNECT stage manifest SHA, assembly validation SHA, tile manifest SHA, and per-tile GLB SHA.
+7. [x] Split antimeridian Web Mercator coverage, calculate circular longitude centers, record partial latitude clipping, and reject rasters fully outside the Web Mercator latitude limit.
+8. [x] Reframe the 3D assembly from deterministic visible/exploded bounds after resize, visibility/explosion changes, and reset; test four-column maximum explosion under a narrow aspect.
+9. [x] Complete an independent release audit, reproduce three blockers, add regressions, and close all findings before release.
+10. [x] Reuse the retained 2 x 2 HTTP workflow without source download or terrain rebuild; strictly reopen 3MF, whole-model GLB, four source tile GLBs, four connector tile GLBs, and the aggregate assembly preview.
+11. [x] Rehash seven reference AOIs and four retained real terrain evidence sets with `network_attempts=0`, including the unchanged Gongga source SHA-256.
+12. [x] Publish bilingual screenshots, reproducible archives, installed-wheel evidence, source patch, checksums, rollback, commit, and tag.
+
+Final gates: Ruff `All checks passed!`; format `162 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `206 passed in 85.64 s`; Vitest `17 passed`; Playwright `2 passed / 2 project-inapplicable skipped`; `uv lock --check` and `git diff --check` passed. Fixed-epoch sdist SHA-256 is `489a7bf48f692a5c77a135b2db24a5d2f4df64b1ecaff2a19902af5e002df4de`; wheel SHA-256 is `0518d22feed14fe3a124d69d5d913db22cd341c030e137b001b2d96f12428580`; primary/repeat archives are byte-identical and the installed wheel passed doctor, packaged Web checks, build, and strict 3MF inspection.
 
 ## Completed Milestone 01 gate
 

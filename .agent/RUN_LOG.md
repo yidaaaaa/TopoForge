@@ -563,3 +563,45 @@ Result: final sdist/wheel archives are byte-identical at SHA-256 `dd2d06203b6ce0
 Command correction: the first rollback invocation used the clone script path without changing the process working directory, so it created a rollback commit in the main repository. A standard revert restored the exact 0.8.1 tree. The corrected verification changed into the independent clone and set a repository-local test identity before running the script.
 
 Result: corrected rollback exit code 0; the independent clone tree matches `v0.8.0` exactly. No retained DEM, cache, output, or Web workspace was deleted.
+
+### Phase 10 deterministic local map and assembly completion
+
+Command: implement checksum-bound processed-DEM XYZ terrain/elevation/hillshade tiles, immutable cache records and HTTP headers, map manifests, geographic manufacturing footprints, 2D physical assembly, per-tile Three.js assembly, shared selection/visibility/explosion/reset, bilingual UI, and focused tests.
+
+Result: retained job `de091812ac294c258c12a16ed49e0803` completes six stages with exit 0, a 2 x 2 grid, four connectors, 64 x 51.20000076293945 x 20 mm bounds, 1,276 source triangles, 20 m source/processed resolution, 0.0 m peak loss/shift, and processed DEM SHA-256 `20ed81268cf46ad9c8270952722974db0a321e5eb7e4370ad3e531362bb42206`. Terrain/elevation/hillshade tile cache requests return matching ETag/SHA and immutable hits.
+
+Command: strict-read the retained model 3MF, whole-model GLB, four source tile GLBs, four connector tile GLBs, and aggregate connector assembly GLB; rerun the retained reference-region verifier.
+
+Result: 3MF is 1,276 triangles, 64 x 51.2 x 20 mm, zero strict warnings, and correct East/North/Up metadata. Whole-model and every individual tile GLB reopen with finite geometry; individual tile roles are watertight, manifold, and positive-volume. The aggregate preview is correctly classified as a multi-solid visualization scene. Seven AOIs and four real evidence sets pass with `network_attempts=0`; Gongga source SHA remains `00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc` without download or rebuild.
+
+Command: assign an independent subagent to audit Phase 10 source, tests, real service, and release readiness.
+
+Result: the audit reproduced three release blockers: mutable assembly-root metadata outside the workflow SHA chain, incorrect date-line/polar Web Mercator coverage, and stale 3D camera framing/reset after responsive or explosion changes. Release packages built before this audit were discarded as non-final.
+
+Command: bind visualization through JobRecord/workflow/CONNECT/validation/tile/GLB hashes; split antimeridian coverage; record/reject Web Mercator latitude cases; reframe from visible/exploded bounds on resize/state/reset; add exact tamper, polar/date-line, four-column narrow projection, and Playwright maximum-explosion/resize/reset regressions.
+
+Result: focused backend Web suite `14 passed`; frontend Vitest `17 passed`; TypeScript and Pyright pass. The canonical assembly tamper now returns 422 for assembly and map. The date-line test center is approximately -179.95 with two narrow coverage segments; partial polar coverage records clipping and the 86-degree case is rejected.
+
+Command: final `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, `uv lock --check`, `git diff --check`, `npm run typecheck`, `npm test -- --run`, `npm run build`, and Playwright against the retained 2 x 2 job on port 8769.
+
+Result: Ruff `All checks passed!`; format `162 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `206 passed in 85.64s`; Vitest `17 passed`; production build completed with 9 manifest-bound assets; Playwright `2 passed / 2 project-inapplicable skipped`; lock and whitespace checks passed.
+
+Command: build two fixed-epoch 0.9.0 sdist/wheel sets and run `scripts/verify_release.py --version 0.9.0 --install` outside the checkout.
+
+Result: primary/repeat sdist and wheel are byte-identical. This pre-document package set was superseded before release. Its sdist SHA-256 is `e039d14744f8c359064f753fb1892b78feecff579fff1f4aae215ae782446585`; wheel SHA-256 is `c6bc0f535b2283b31b0aa4e021826b29be1b9bc5679812c665c84f85fb657cf9`. The fresh Python 3.12 environment installed 54 packages, imported 0.9.0 outside the repository, passed doctor and `web --check` with 9 assets, built 40 x 32 x 20 mm terrain, and strict-read 3MF with zero warnings.
+
+Command: remove recursive final archive hashes from `docs/release.md`, rebuild two fresh fixed-epoch package sets under `dist/0.9.0-release-{primary,repeat}`, and rerun `scripts/verify_release.py --version 0.9.0 --install`.
+
+Result: final archives are byte-identical. The 1,040,245-byte sdist SHA-256 is `489a7bf48f692a5c77a135b2db24a5d2f4df64b1ecaff2a19902af5e002df4de`; the 829,852-byte wheel SHA-256 is `0518d22feed14fe3a124d69d5d913db22cd341c030e137b001b2d96f12428580`. A fresh Python 3.12 environment installed 54 packages; all eight recorded command exit codes are 0; version/import isolation, doctor, `web --check` with 9 assets, synthetic build, and zero-warning strict 3MF reread pass.
+
+Command: publish the final release report, Phase 10 summary verification JSON, source patch, and checksum manifest; then create the single release commit/tag and verify patch/rollback from independent no-hardlink clones.
+
+Result: release report SHA-256 is `908efa6eef0ed6f21711f72f06112d2b90833b811e591f43bb6dc67fc7e6c73c`; Phase 10 summary verification SHA-256 is `5a2e882d76b3cc8ab34b10df72954eb99a2d6095d16753efe8b0ba77995b1e80`; source patch SHA-256 is `547edc8af8fcc48268680e292df88207043b4f0c70a0ea91c7d1897a6657d186`. Commit/tag/rollback results are recorded after execution.
+
+Command: create the single Phase 10 release commit and annotated `v0.9.0` tag; verify the source patch and execute `scripts/rollback-topoforge-0.9.0.sh --confirm-rollback` in independent no-hardlink clones.
+
+Result: the source patch passes forward apply, whitespace, reverse apply, and exact baseline restoration. The rollback script exits 0, the resulting tree matches `v0.8.1`, and the rollback worktree is clean. Stable evidence is `artifacts/verification/topoforge-0.9.0-patch-rollback.txt`; the updated Phase 10 summary SHA-256 is `17debcc984d9b9f9e0538ca157ea6ab61559366fbb4d3e0149f561fa6074c56b`.
+
+Command: test GitHub publication credentials with `git push --dry-run origin main v0.9.0`.
+
+Result: exit 128 with literal error `fatal: could not read Username for 'https://github.com': No such device or address`. Local release closure remains complete; remote publication requires GitHub credentials.

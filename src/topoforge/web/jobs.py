@@ -560,6 +560,20 @@ class LocalJobManager:
             raise ConfigurationError("job artifact checksum changed after publication")
         return path, artifact
 
+    def directory_artifact_path(self, job_id: str, artifact_id: str) -> tuple[Path, JobArtifact]:
+        """Strictly resolve one published workspace-contained directory artifact."""
+        record = self.get(job_id)
+        artifact = next(
+            (item for item in record.artifacts if item.artifact_id == artifact_id),
+            None,
+        )
+        if artifact is None or artifact.kind != "directory":
+            raise KeyError(artifact_id)
+        path = (record.workspace_dir / artifact.relative_path).resolve()
+        if not _within(record.workspace_dir.resolve(), path) or not path.is_dir():
+            raise ConfigurationError("job directory artifact is missing or escapes its workspace")
+        return path, artifact
+
     def _resolve_input(self, raw_path: Path) -> Path:
         path = raw_path.expanduser().resolve()
         if not any(_within(root, path) for root in self.config.input_roots):

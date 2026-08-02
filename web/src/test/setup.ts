@@ -14,3 +14,13 @@ Object.defineProperty(globalThis, "ResizeObserver", {
   value: ResizeObserverMock,
   writable: true,
 });
+
+Object.defineProperty(URL, "createObjectURL", {
+  value: () => "blob:topoforge-test-worker",
+  writable: true,
+});
+
+Object.defineProperty(URL, "revokeObjectURL", {
+  value: () => undefined,
+  writable: true,
+});

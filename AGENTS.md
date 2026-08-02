@@ -17,6 +17,7 @@ The validated core includes local and no-key global AOI acquisition, printer-awa
 - `src/topoforge/rendering`: deterministic preview rendering.
 - `src/topoforge/providers`: provider protocol and provider implementations.
 - `src/topoforge/workflow`: resumable content-addressed local orchestration; no core algorithm duplication.
+- `src/topoforge/web`: typed loopback API, isolated local jobs, packaged static application, and visualization adapters.
 - `src/topoforge/overlays`: strict local overlay sources, terrain mapping, geometry, bundles, and verification.
 - `src/topoforge/cli`: thin Typer adapters calling the engine.
 - `tests`: unit, property, geometry, provider, slicer, integration, and golden evidence.

@@ -280,3 +280,19 @@
 - **Decision:** Bundle Natural Earth 110 m country geometry through World Atlas/TopoJSON and render it with a deterministic graticule by default. Keep AOI inside the style and restore only its data after `style.load`. Permit only the explicit OSM tile origin in `connect-src` and `img-src`. Frame models with a bounding sphere and limiting horizontal/vertical FOV, and derive the grid and direction arrows from reopened bounds. Browser tests reject page/console errors, require multiple sampled colors, and intercept a real OSM URL under CSP.
 - **Alternatives:** Keep a single-color background; require network tiles; suppress MapLibre errors; rotate manufacturing GLB data for Three.js; use a fixed camera/grid; retain one-pixel checks.
 - **Impact:** TopoForge 0.8.1 remains useful offline, optional OSM works under the declared CSP, actual GLB solids fit narrow and wide canvases without changing model coordinates, and future regressions fail executable tests.
+
+## ADR-037 — Local terrain maps are deterministic derivatives of completed workflow evidence
+
+- **Date:** 2026-08-02
+- **Context:** The stabilized Phase 9 map provided geographic context but did not show the actual processed terrain or manufacturing tile layout. Adding an unrelated remote map service or reprocessing DEMs in JavaScript would duplicate core logic and weaken provenance.
+- **Decision:** Derive same-origin 256 x 256 XYZ PNG tiles only from the checksum-published `processed_dem.tif`, with terrain, elevation, and hillshade styles. Bind each cache record to generator version, processed DEM SHA-256, XYZ/style identity, valid pixels, elevation range, PNG SHA-256, and byte size. Derive manufacturing footprints from the published global tile bounds and source raster transform. Keep OpenStreetMap optional and visually separate.
+- **Alternatives:** Require online terrain tiles; render the DEM entirely in the browser; create a second raster processing service; publish screenshots instead of interactive tiles; ignore manufacturing footprints.
+- **Impact:** Offline local use shows the exact processed terrain associated with the manufacturing artifacts. Repeated requests are deterministic cache hits, corruption regenerates identical bytes, and the map cannot claim source-resolution detail that the processed DEM does not contain.
+
+## ADR-038 — Visualization must inherit workflow trust, Web Mercator limits, and dynamic assembly bounds
+
+- **Date:** 2026-08-02
+- **Context:** Independent Phase 10 audit reproduced a canonical assembly-root tamper that still returned `required_checks_passed=true`, a Greenwich-centered antimeridian raster, inverted polar latitude bounds, and 3D assembly cropping after resize/explosion with an incomplete reset.
+- **Decision:** Anchor assembly reads through the JobRecord artifact SHA, canonical workflow manifest, validated CONNECT-stage output/manifest paths and manifest SHA, assembly validation SHA, tile-manifest SHA, and per-tile GLB SHA. Never hard-code the visualization gate. Represent date-line coverage as two Web Mercator segments with a circular longitude center; record partial latitude clipping and reject fully out-of-range rasters. Compute camera frames from deterministic visible/exploded tile bounds after resize, display-state changes, and reset.
+- **Alternatives:** Trust mutable directory contents; hash only GLBs; clamp latitude endpoints independently; use a near-global Mercator envelope; keep a one-time camera frame; treat a nonblank canvas as complete coverage.
+- **Impact:** Tampering fails before map/assembly publication, date-line and high-latitude behavior is explicit, and multi-column exploded assemblies remain framed under narrow desktop layouts. Regression tests cover the exact audit reproductions.

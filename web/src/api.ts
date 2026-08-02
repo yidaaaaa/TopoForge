@@ -2,7 +2,9 @@ import type {
   AoiInput,
   FileListing,
   Health,
+  JobAssemblyOverview,
   JobCreateRequest,
+  JobMapManifest,
   JobRecord,
   JsonObject,
   NormalizedAoi,
@@ -80,6 +82,14 @@ export function cancelJob(jobId: string): Promise<JobRecord> {
   return request<JobRecord>(`/api/v1/jobs/${jobId}/cancel`, {
     method: "POST",
   });
+}
+
+export function fetchJobMap(jobId: string): Promise<JobMapManifest> {
+  return request<JobMapManifest>(`/api/v1/jobs/${jobId}/map/manifest`);
+}
+
+export function fetchJobAssembly(jobId: string): Promise<JobAssemblyOverview> {
+  return request<JobAssemblyOverview>(`/api/v1/jobs/${jobId}/assembly`);
 }
 
 export function listFiles(path?: string): Promise<FileListing> {

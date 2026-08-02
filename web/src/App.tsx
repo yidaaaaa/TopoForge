@@ -1,6 +1,7 @@
 import {
   Box,
   Languages,
+  LayoutGrid,
   Map as MapIcon,
   Mountain,
   RefreshCw,
@@ -11,6 +12,8 @@ import {
   ApiError,
   cancelJob,
   createJob,
+  fetchJobAssembly,
+  fetchJobMap,
   fetchHealth,
   listJobs,
   loadLocalConfig,
@@ -30,6 +33,8 @@ import { translate, type TranslationKey } from "./i18n";
 import type {
   FormState,
   Health,
+  JobAssemblyOverview,
+  JobMapManifest,
   JobRecord,
   JsonObject,
   Language,
@@ -40,6 +45,12 @@ import type {
 const TerrainPreview = lazy(() =>
   import("./components/TerrainPreview").then((module) => ({
     default: module.TerrainPreview,
+  })),
+);
+
+const AssemblyPanel = lazy(() =>
+  import("./components/AssemblyPanel").then((module) => ({
+    default: module.AssemblyPanel,
   })),
 );
 
@@ -88,6 +99,11 @@ export default function App() {
   const [tab, setTab] = useState<WorkspaceTab>("map");
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [jobMap, setJobMap] = useState<JobMapManifest | null>(null);
+  const [jobAssembly, setJobAssembly] = useState<JobAssemblyOverview | null>(null);
+  const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
+  const [visualizationLoading, setVisualizationLoading] = useState(false);
+  const [visualizationError, setVisualizationError] = useState<string | null>(null);
   const [jobsLoading, setJobsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [validating, setValidating] = useState(false);
@@ -153,6 +169,52 @@ export default function App() {
     () => jobs.find((job) => job.job_id === selectedJobId) ?? null,
     [jobs, selectedJobId],
   );
+
+  useEffect(() => {
+    const jobId = selectedJob?.job_id;
+    if (!jobId || selectedJob.state !== "completed") {
+      setJobMap(null);
+      setJobAssembly(null);
+      setSelectedTileId(null);
+      setVisualizationError(null);
+      setVisualizationLoading(false);
+      return;
+    }
+    let active = true;
+    setVisualizationLoading(true);
+    setVisualizationError(null);
+    void Promise.all([fetchJobMap(jobId), fetchJobAssembly(jobId)])
+      .then(([mapManifest, assembly]) => {
+        if (!active) {
+          return;
+        }
+        setJobMap(mapManifest);
+        setJobAssembly(assembly);
+        setSelectedTileId((current) =>
+          current && assembly.tiles.some((tile) => tile.tile_id === current)
+            ? current
+            : (assembly.tiles[0]?.tile_id ?? null),
+        );
+      })
+      .catch((reason) => {
+        if (!active) {
+          return;
+        }
+        setJobMap(null);
+        setJobAssembly(null);
+        setSelectedTileId(null);
+        setVisualizationError(errorMessage(reason, language));
+      })
+      .finally(() => {
+        if (active) {
+          setVisualizationLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [language, selectedJob?.job_id, selectedJob?.state]);
+
   const modelUrl = useMemo(() => {
     if (!selectedJob) {
       return null;
@@ -318,6 +380,16 @@ export default function App() {
                 <Box size={16} />
                 {t("preview3d")}
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "assembly"}
+                className={tab === "assembly" ? "active" : ""}
+                onClick={() => setTab("assembly")}
+              >
+                <LayoutGrid size={16} />
+                {t("assembly")}
+              </button>
             </div>
             {tab === "map" && (
               <label className="toolbar-toggle">
@@ -345,6 +417,11 @@ export default function App() {
                 normalizedAoi={normalizedAoi}
                 basemapEnabled={basemapEnabled}
                 drawMode={drawMode}
+                manifest={jobMap}
+                selectedTileId={selectedTileId}
+                visualizationLoading={visualizationLoading}
+                visualizationError={visualizationError}
+                onSelectedTileChange={setSelectedTileId}
                 onBboxChange={(bbox) => {
                   updateForm({ ...form, bbox, sourceMode: "bbox" });
                   setDrawMode(null);
@@ -359,6 +436,20 @@ export default function App() {
               {tab === "preview" && (
                 <Suspense fallback={<div className="empty-state">{t("loading")}</div>}>
                   <TerrainPreview language={language} modelUrl={modelUrl} />
+                </Suspense>
+              )}
+            </div>
+            <div hidden={tab !== "assembly"} className="stage-view">
+              {tab === "assembly" && (
+                <Suspense fallback={<div className="empty-state">{t("loading")}</div>}>
+                  <AssemblyPanel
+                    language={language}
+                    assembly={jobAssembly}
+                    selectedTileId={selectedTileId}
+                    loading={visualizationLoading}
+                    error={visualizationError}
+                    onSelectedTileChange={setSelectedTileId}
+                  />
                 </Suspense>
               )}
             </div>

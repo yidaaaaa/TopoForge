@@ -61,6 +61,14 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   page.on("console", (message) => {
     if (message.type() === "error") browserErrors.push(`console: ${message.text()}`);
   });
+  let localTileRequests = 0;
+  let elevationTileRequests = 0;
+  page.on("request", (request) => {
+    if (request.url().includes("/map/tiles/")) localTileRequests += 1;
+    if (request.url().includes("/map/tiles/elevation/")) {
+      elevationTileRequests += 1;
+    }
+  });
   let osmTileRequests = 0;
   await page.route("https://tile.openstreetmap.org/**", async (route) => {
     osmTileRequests += 1;
@@ -90,7 +98,24 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
     "data-offline-reference",
     "natural-earth-countries-and-graticule",
   );
-  expect((await sampledPalette(page, ".maplibregl-canvas")).length).toBeGreaterThan(5);
+  await expect(page.getByTestId("map-panel")).toHaveAttribute(
+    "data-has-terrain",
+    "true",
+  );
+  await expect.poll(() => localTileRequests).toBeGreaterThan(0);
+  await expect
+    .poll(
+      async () => (await sampledPalette(page, ".maplibregl-canvas")).length,
+    )
+    .toBeGreaterThan(5);
+
+  await page.getByRole("button", { name: "高程", exact: true }).click();
+  await expect(page.getByTestId("map-panel")).toHaveAttribute(
+    "data-tile-style",
+    "elevation",
+  );
+  await expect.poll(() => elevationTileRequests).toBeGreaterThan(0);
+
   await page.locator(".toolbar-toggle").click();
   await expect.poll(() => osmTileRequests).toBeGreaterThan(0);
 
@@ -103,9 +128,58 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   expect(previewPixels.nonZero).toBeGreaterThan(0);
   expect((await sampledPalette(page, ".preview-canvas canvas")).length).toBeGreaterThan(8);
 
+  await page.getByRole("tab", { name: "拼装" }).click();
+  await expect(page.getByTestId("assembly-panel")).toBeVisible();
+  await expect(page.getByTestId("assembly-diagram")).toBeVisible();
+  await expect(page.getByText("4/4")).toBeVisible();
+
+  await page.getByText("tile-r0001-c0001", { exact: true }).click();
+  await expect(page.getByTestId("assembly-panel")).toHaveAttribute(
+    "data-selected-tile",
+    "tile-r0001-c0001",
+  );
+  const selectedTileRow = page.locator(".assembly-roster-row", {
+    hasText: "tile-r0001-c0001",
+  });
+  await selectedTileRow.getByTitle("隐藏分块").click();
+  await expect(selectedTileRow.getByRole("checkbox")).not.toBeChecked();
+  await expect(page.getByText("3/4")).toBeVisible();
+
+  await page.getByRole("button", { name: "三维拼装" }).click();
+  const assemblyCanvas = page.locator(".assembly-3d-canvas canvas");
+  await expect(assemblyCanvas).toBeVisible();
+  await page.getByRole("slider", { name: "爆炸距离" }).fill("1");
+  await expect(page.getByTestId("assembly-panel")).toHaveAttribute(
+    "data-explosion",
+    "1.00",
+  );
+  await page.setViewportSize({ width: 1180, height: 900 });
+  await expect.poll(async () => (await assemblyCanvas.boundingBox())?.width ?? 0).toBeGreaterThan(250);
+  const assemblyPixels = await nonBlankCanvas(
+    page,
+    ".assembly-3d-canvas canvas",
+  );
+  expect(assemblyPixels.nonZero).toBeGreaterThan(0);
+  await expect
+    .poll(
+      async () =>
+        (await sampledPalette(page, ".assembly-3d-canvas canvas")).length,
+    )
+    .toBeGreaterThan(8);
+
+  const resetToken = await page.getByTestId("assembly-panel").getAttribute("data-reset-token");
+  await page.getByRole("button", { name: "重置拼装视图" }).click();
+  await expect(page.getByTestId("assembly-panel")).toHaveAttribute("data-explosion", "0.00");
+  await expect(page.getByText("4/4")).toBeVisible();
+  await expect
+    .poll(async () => page.getByTestId("assembly-panel").getAttribute("data-reset-token"))
+    .not.toBe(resetToken);
+  expect((await sampledPalette(page, ".assembly-3d-canvas canvas")).length).toBeGreaterThan(8);
+
   await page.getByRole("button", { name: "EN" }).click();
   await expect(page.getByText("Local terrain manufacturing workspace")).toBeVisible();
   await expect(page.getByRole("button", { name: "Start build" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Assembly" })).toBeVisible();
   expect(browserErrors).toEqual([]);
 });
 

@@ -1,5 +1,5 @@
 import type { Feature, FeatureCollection, Geometry, LineString } from "geojson";
-import { Crosshair, MapPinned, SquareDashedMousePointer } from "lucide-react";
+import { Crosshair, Layers3, MapPinned, SquareDashedMousePointer } from "lucide-react";
 import maplibregl, {
   type GeoJSONSource,
   type MapMouseEvent,
@@ -11,7 +11,13 @@ import type { GeometryCollection, Topology } from "topojson-specification";
 import countriesTopologyJson from "world-atlas/countries-110m.json";
 
 import { translate } from "../i18n";
-import type { Language, NormalizedAoi, SourceMode } from "../types";
+import type {
+  JobMapManifest,
+  Language,
+  MapTileStyle,
+  NormalizedAoi,
+  SourceMode,
+} from "../types";
 
 interface MapPanelProps {
   language: Language;
@@ -19,6 +25,11 @@ interface MapPanelProps {
   normalizedAoi: NormalizedAoi | null;
   basemapEnabled: boolean;
   drawMode: "bbox" | "center" | null;
+  manifest: JobMapManifest | null;
+  selectedTileId: string | null;
+  visualizationLoading: boolean;
+  visualizationError: string | null;
+  onSelectedTileChange: (tileId: string) => void;
   onBboxChange: (bbox: [number, number, number, number]) => void;
   onCenterChange: (center: [number, number]) => void;
 }
@@ -61,7 +72,18 @@ function buildGraticule(): FeatureCollection<LineString> {
 
 export const offlineGraticule = buildGraticule();
 
-export function mapStyle(basemapEnabled: boolean): StyleSpecification {
+export function rasterSourceBounds(
+  bounds: [number, number, number, number],
+): [number, number, number, number] {
+  const [west, south, east, north] = bounds;
+  return west > east ? [west, south, east + 360, north] : bounds;
+}
+
+export function mapStyle(
+  basemapEnabled: boolean,
+  manifest: JobMapManifest | null = null,
+  terrainStyle: MapTileStyle = "terrain",
+): StyleSpecification {
   const sources: StyleSpecification["sources"] = {
     countries: { type: "geojson", data: offlineCountries },
     graticule: { type: "geojson", data: offlineGraticule },
@@ -74,6 +96,21 @@ export function mapStyle(basemapEnabled: boolean): StyleSpecification {
       tileSize: 256,
       attribution: "© OpenStreetMap contributors",
       maxzoom: 19,
+    };
+  }
+  if (manifest) {
+    sources["job-terrain"] = {
+      type: "raster",
+      tiles: [manifest.tile_url_template.replace("{style}", terrainStyle)],
+      tileSize: manifest.tile_size,
+      minzoom: manifest.minzoom,
+      maxzoom: manifest.maxzoom,
+      bounds: rasterSourceBounds(manifest.bounds_wgs84),
+      attribution: manifest.attribution,
+    };
+    sources["manufacturing-tiles"] = {
+      type: "geojson",
+      data: manifest.tile_footprints_geojson,
     };
   }
   const referenceLayers: StyleSpecification["layers"] = basemapEnabled
@@ -102,6 +139,39 @@ export function mapStyle(basemapEnabled: boolean): StyleSpecification {
           },
         },
       ];
+  const terrainLayers: StyleSpecification["layers"] = manifest
+    ? [
+        {
+          id: "job-terrain",
+          type: "raster",
+          source: "job-terrain",
+          paint: { "raster-opacity": 0.96 },
+        },
+        {
+          id: "manufacturing-tile-fill",
+          type: "fill",
+          source: "manufacturing-tiles",
+          paint: { "fill-color": "#0f766e", "fill-opacity": 0.08 },
+        },
+        {
+          id: "manufacturing-tile-line",
+          type: "line",
+          source: "manufacturing-tiles",
+          paint: { "line-color": "#174f4a", "line-width": 1.5 },
+        },
+        {
+          id: "manufacturing-tile-selected",
+          type: "fill",
+          source: "manufacturing-tiles",
+          filter: ["==", ["get", "tile_id"], ""],
+          paint: {
+            "fill-color": "#b85d2d",
+            "fill-opacity": 0.36,
+            "fill-outline-color": "#8e431f",
+          },
+        },
+      ]
+    : [];
   return {
     version: 8,
     sources,
@@ -112,6 +182,7 @@ export function mapStyle(basemapEnabled: boolean): StyleSpecification {
         paint: { "background-color": "#c9dde1" },
       },
       ...referenceLayers,
+      ...terrainLayers,
       {
         id: "aoi-fill",
         type: "fill",
@@ -138,14 +209,22 @@ export function MapPanel({
   normalizedAoi,
   basemapEnabled,
   drawMode,
+  manifest,
+  selectedTileId,
+  visualizationLoading,
+  visualizationError,
+  onSelectedTileChange,
   onBboxChange,
   onCenterChange,
 }: MapPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const basemapRef = useRef(basemapEnabled);
+  const styleIdentityRef = useRef("");
   const [cursor, setCursor] = useState<[number, number] | null>(null);
   const [draft, setDraft] = useState<Geometry | null>(null);
+  const [terrainStyle, setTerrainStyle] = useState<MapTileStyle>(
+    manifest?.default_style ?? "terrain",
+  );
   const activeGeometry = draft ?? normalizedAoi?.normalized_geometry_geojson ?? null;
 
   const collection = useMemo<FeatureCollection>(
@@ -169,11 +248,13 @@ export function MapPanel({
     if (!containerRef.current || mapRef.current) {
       return;
     }
+    styleIdentityRef.current =
+      `${basemapEnabled}:${manifest?.cache_key ?? "none"}:${terrainStyle}`;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: mapStyle(basemapEnabled),
-      center: [20, 25],
-      zoom: 1.4,
+      style: mapStyle(basemapEnabled, manifest, terrainStyle),
+      center: manifest?.center_wgs84 ?? [20, 25],
+      zoom: manifest ? manifest.minzoom : 1.4,
       attributionControl: false,
       renderWorldCopies: true,
       canvasContextAttributes: { preserveDrawingBuffer: true },
@@ -200,21 +281,50 @@ export function MapPanel({
   }, []);
 
   useEffect(() => {
+    setTerrainStyle(manifest?.default_style ?? "terrain");
+  }, [manifest?.job_id, manifest?.default_style]);
+
+  useEffect(() => {
     const map = mapRef.current;
-    if (!map || basemapRef.current === basemapEnabled) {
+    const identity = `${basemapEnabled}:${manifest?.cache_key ?? "none"}:${terrainStyle}`;
+    if (!map || styleIdentityRef.current === identity) {
       return;
     }
-    basemapRef.current = basemapEnabled;
-    map.setStyle(mapStyle(basemapEnabled));
+    styleIdentityRef.current = identity;
+    map.setStyle(mapStyle(basemapEnabled, manifest, terrainStyle));
     map.once("style.load", () =>
       (map.getSource("aoi") as GeoJSONSource | undefined)?.setData(collection),
     );
-  }, [basemapEnabled]);
+  }, [basemapEnabled, manifest, terrainStyle]);
 
   useEffect(() => {
     const source = mapRef.current?.getSource("aoi") as GeoJSONSource | undefined;
     source?.setData(collection);
   }, [collection]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+    const updateSelection = () => {
+      if (map.getLayer("manufacturing-tile-selected")) {
+        map.setFilter("manufacturing-tile-selected", [
+          "==",
+          ["get", "tile_id"],
+          selectedTileId ?? "",
+        ]);
+      }
+    };
+    if (map.isStyleLoaded()) {
+      updateSelection();
+      return;
+    }
+    map.once("style.load", updateSelection);
+    return () => {
+      map.off("style.load", updateSelection);
+    };
+  }, [selectedTileId, manifest?.cache_key, terrainStyle, basemapEnabled]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -231,6 +341,26 @@ export function MapPanel({
       { padding: 64, maxZoom: 11, duration: 500 },
     );
   }, [normalizedAoi]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !manifest) {
+      return;
+    }
+    const [west, south, east, north] = manifest.bounds_wgs84;
+    const adjustedEast = west > east ? east + 360 : east;
+    map.fitBounds(
+      [
+        [west, south],
+        [adjustedEast, north],
+      ],
+      {
+        padding: 54,
+        maxZoom: Math.min(manifest.maxzoom + 5, 20),
+        duration: 500,
+      },
+    );
+  }, [manifest?.cache_key]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -303,11 +433,36 @@ export function MapPanel({
     };
   }, [drawMode, onBboxChange, onCenterChange]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+    const selectTile = (event: MapMouseEvent) => {
+      if (drawMode || !map.getLayer("manufacturing-tile-fill")) {
+        return;
+      }
+      const hit = map.queryRenderedFeatures(event.point, {
+        layers: ["manufacturing-tile-fill"],
+      })[0];
+      const tileId = hit?.properties?.tile_id;
+      if (typeof tileId === "string") {
+        onSelectedTileChange(tileId);
+      }
+    };
+    map.on("click", selectTile);
+    return () => {
+      map.off("click", selectTile);
+    };
+  }, [drawMode, onSelectedTileChange]);
+
   return (
     <div
       className="map-shell"
       data-testid="map-panel"
       data-offline-reference="natural-earth-countries-and-graticule"
+      data-has-terrain={manifest ? "true" : "false"}
+      data-tile-style={terrainStyle}
     >
       <div ref={containerRef} className="map-canvas" />
       <div className="map-mode">
@@ -330,6 +485,46 @@ export function MapPanel({
           </>
         )}
       </div>
+      {manifest && (
+        <div className="map-layer-control" aria-label={translate(language, "mapLayers")}>
+          <span>
+            <Layers3 size={14} />
+            {translate(language, "mapLayers")}
+          </span>
+          <div className="segmented three">
+            {manifest.styles.map((style) => (
+              <button
+                type="button"
+                key={style}
+                className={terrainStyle === style ? "active" : ""}
+                onClick={() => setTerrainStyle(style)}
+              >
+                {translate(
+                  language,
+                  style === "terrain"
+                    ? "mapTerrain"
+                    : style === "elevation"
+                      ? "mapElevation"
+                      : "mapHillshade",
+                )}
+              </button>
+            ))}
+          </div>
+          <small>
+            {manifest.elevation_min_m.toFixed(1)}–{manifest.elevation_max_m.toFixed(1)} m
+          </small>
+        </div>
+      )}
+      {(visualizationLoading || visualizationError) && (
+        <div className={`map-data-status${visualizationError ? " error" : ""}`}>
+          {visualizationError ?? translate(language, "visualizationLoading")}
+        </div>
+      )}
+      {manifest && selectedTileId && (
+        <code className="map-selected-tile">
+          {translate(language, "selectedTile")}: {selectedTileId}
+        </code>
+      )}
       {cursor && (
         <code className="map-coordinate">
           {cursor[0].toFixed(5)}, {cursor[1].toFixed(5)}

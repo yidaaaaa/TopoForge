@@ -5,7 +5,9 @@ export type SourceMode = "local" | "bbox" | "center-radius";
 export type SamplingMode = "print-aware" | "source-preserving" | "custom";
 export type ResourceBudgetMode = "adapt" | "strict";
 export type TerrainMode = "best-available" | "dtm" | "dsm" | "bathymetry";
-export type WorkspaceTab = "map" | "preview";
+export type WorkspaceTab = "map" | "preview" | "assembly";
+export type MapTileStyle = "terrain" | "elevation" | "hillshade";
+export type AssemblyMode = "2d" | "3d";
 export type JobState =
   | "queued"
   | "running"
@@ -65,6 +67,79 @@ export interface WorkflowSummary {
   ready_stages: string[];
   metrics: Record<string, unknown>;
   artifacts: Record<string, string>;
+  required_checks_passed: boolean;
+}
+
+export interface JobMapManifest {
+  schema_version: string;
+  tilejson: string;
+  job_id: string;
+  source_sha256: string;
+  cache_key: string;
+  bounds_wgs84: [number, number, number, number];
+  center_wgs84: [number, number];
+  minzoom: number;
+  maxzoom: number;
+  tile_size: number;
+  tile_url_template: string;
+  styles: MapTileStyle[];
+  default_style: MapTileStyle;
+  elevation_min_m: number;
+  elevation_max_m: number;
+  layout_id: string;
+  tile_grid_shape: [number, number];
+  tile_count: number;
+  tile_footprints_geojson: GeoJSON.FeatureCollection;
+  attribution: string;
+  crosses_antimeridian: boolean;
+  web_mercator_latitude_clipped: boolean;
+  generator: string;
+  required_checks_passed: boolean;
+}
+
+export interface AssemblyTile {
+  tile_id: string;
+  row: number;
+  column: number;
+  physical_bounds_mm: [number, number, number, number];
+  global_bounds_mm: [number, number, number, number, number, number];
+  triangle_count: number;
+  volume_mm3: number;
+  male_connector_ids: string[];
+  female_connector_ids: string[];
+  glb_url: string;
+  glb_sha256: string;
+}
+
+export interface AssemblyConnector {
+  connector_id: string;
+  seam_id: string;
+  direction: string;
+  male_tile_id: string;
+  female_tile_id: string;
+  seam_coordinate_mm: number;
+  center_along_seam_mm: number;
+  insertion_axis: string;
+}
+
+export interface JobAssemblyOverview {
+  schema_version: string;
+  job_id: string;
+  layout_id: string;
+  model_size_mm: [number, number];
+  tile_grid_shape: [number, number];
+  tile_count: number;
+  seam_count: number;
+  connector_count: number;
+  row_origin: string;
+  column_origin: string;
+  east_axis: string;
+  north_axis: string;
+  up_axis: string;
+  aggregate_glb_url: string;
+  connector_map_url: string;
+  tiles: AssemblyTile[];
+  connectors: AssemblyConnector[];
   required_checks_passed: boolean;
 }
 

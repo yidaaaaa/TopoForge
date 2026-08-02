@@ -684,6 +684,334 @@ input:checked + .toggle::after {
   color: #0c675d;
 }
 
+.map-layer-control,
+.map-data-status,
+.map-selected-tile {
+  position: absolute;
+  z-index: 5;
+  color: #324449;
+  background: rgb(255 255 255 / 92%);
+  border: 1px solid #c3cfcc;
+  border-radius: 5px;
+  box-shadow: 0 2px 8px rgb(31 45 49 / 10%);
+  backdrop-filter: blur(5px);
+}
+
+.map-layer-control {
+  top: 52px;
+  left: 12px;
+  width: min(292px, calc(100% - 80px));
+  padding: 8px;
+}
+
+.map-layer-control > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #526166;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.map-layer-control .segmented {
+  margin: 6px 0 4px;
+}
+
+.map-layer-control small {
+  color: #6f7d81;
+  font: 9px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.map-data-status {
+  left: 12px;
+  bottom: 42px;
+  max-width: calc(100% - 24px);
+  padding: 6px 8px;
+  font-size: 10px;
+}
+
+.map-data-status.error {
+  color: #8e3030;
+  border-color: #d9a5a5;
+}
+
+.map-selected-tile {
+  left: 12px;
+  bottom: 12px;
+  max-width: calc(100% - 210px);
+  padding: 6px 8px;
+  overflow: hidden;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assembly-shell {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: 52px minmax(0, 1fr);
+  background: #e4eae8;
+}
+
+.assembly-toolbar {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: #f8faf9;
+  border-bottom: 1px solid var(--line);
+}
+
+.assembly-toolbar .segmented {
+  width: 230px;
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.assembly-toolbar .segmented button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.explosion-control {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #59676b;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.explosion-control input {
+  width: min(180px, 22vw);
+  accent-color: var(--accent);
+}
+
+.assembly-toolbar > .icon-button {
+  margin-left: auto;
+}
+
+.assembly-content {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 210px;
+}
+
+.assembly-viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.assembly-diagram,
+.assembly-3d-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.assembly-diagram {
+  display: block;
+  padding: 26px;
+  background: #e7ecea;
+}
+
+.assembly-bed {
+  fill: #f7faf9;
+  stroke: #72827e;
+  stroke-width: 0.45;
+}
+
+.assembly-diagram-tile {
+  cursor: pointer;
+  outline: none;
+}
+
+.assembly-diagram-tile rect {
+  fill-opacity: 0.8;
+  stroke: #f7faf9;
+  stroke-width: 0.65;
+  transition:
+    fill-opacity 120ms ease,
+    stroke-width 120ms ease;
+}
+
+.assembly-diagram-tile:hover rect,
+.assembly-diagram-tile:focus rect {
+  fill-opacity: 0.96;
+  stroke: #244d47;
+  stroke-width: 0.85;
+}
+
+.assembly-diagram-tile.selected rect {
+  fill-opacity: 1;
+  stroke: #8e431f;
+  stroke-width: 1.35;
+}
+
+.assembly-diagram-tile.hidden-tile {
+  opacity: 0.2;
+}
+
+.assembly-diagram-tile text {
+  fill: #ffffff;
+  font-size: 3.2px;
+  font-weight: 750;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.assembly-connector circle {
+  fill: #f3d76c;
+  stroke: #654f13;
+  stroke-width: 0.35;
+}
+
+.assembly-north line,
+.assembly-north path {
+  fill: #0f675e;
+  stroke: #0f675e;
+  stroke-width: 0.65;
+}
+
+.assembly-north text {
+  fill: #0f675e;
+  font-size: 4px;
+  font-weight: 800;
+  text-anchor: middle;
+}
+
+.assembly-status,
+.assembly-axis-legend {
+  position: absolute;
+  z-index: 4;
+  color: #324449;
+  background: rgb(255 255 255 / 92%);
+  border: 1px solid #c3cfcc;
+  border-radius: 5px;
+  box-shadow: 0 2px 8px rgb(31 45 49 / 10%);
+}
+
+.assembly-status {
+  top: 12px;
+  left: 12px;
+  max-width: calc(100% - 24px);
+  padding: 7px 9px;
+  font-size: 11px;
+}
+
+.assembly-status.error {
+  color: #8e3030;
+  border-color: #d9a5a5;
+}
+
+.assembly-axis-legend {
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 8px;
+  font: 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.assembly-roster {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 42px minmax(0, 1fr);
+  background: #ffffff;
+  border-left: 1px solid var(--line);
+}
+
+.assembly-roster-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 11px;
+  color: #4b5b60;
+  border-bottom: 1px solid #dce3e1;
+}
+
+.assembly-roster-heading strong {
+  font-size: 11px;
+}
+
+.assembly-roster-heading span {
+  font: 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.assembly-roster-list {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.assembly-roster-row {
+  min-width: 0;
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  border-bottom: 1px solid #e2e7e5;
+}
+
+.assembly-roster-row.selected {
+  background: #ebf5f2;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.assembly-roster-row > button {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 7px 8px 7px 12px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.assembly-roster-row strong,
+.assembly-roster-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assembly-roster-row strong {
+  color: #344247;
+  font-size: 10px;
+}
+
+.assembly-roster-row small {
+  color: #778589;
+  font: 8px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.visibility-toggle {
+  display: grid;
+  place-items: center;
+  color: #526b65;
+  cursor: pointer;
+}
+
+.visibility-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.visibility-toggle svg {
+  pointer-events: none;
+}
+
 .results-heading {
   position: sticky;
   z-index: 3;
@@ -1130,6 +1458,10 @@ input:checked + .toggle::after {
   .results-panel {
     min-height: 360px;
   }
+
+  .assembly-content {
+    grid-template-columns: minmax(0, 1fr) 180px;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1163,13 +1495,67 @@ input:checked + .toggle::after {
   }
 
   .view-tabs button {
-    min-width: 82px;
+    min-width: 76px;
     padding-inline: 7px;
     font-size: 12px;
   }
 
   .toolbar-toggle > span:last-child {
     display: none;
+  }
+
+  .map-layer-control {
+    width: min(260px, calc(100% - 72px));
+  }
+
+  .map-selected-tile {
+    max-width: calc(100% - 128px);
+  }
+
+  .assembly-shell {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .assembly-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .assembly-toolbar .segmented {
+    width: calc(100% - 42px);
+  }
+
+  .explosion-control {
+    width: 100%;
+    order: 2;
+  }
+
+  .explosion-control input {
+    width: auto;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .assembly-content {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(260px, 1fr) 118px;
+  }
+
+  .assembly-roster {
+    grid-template-rows: 34px minmax(0, 1fr);
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .assembly-roster-list {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .assembly-roster-row {
+    width: 184px;
+    flex: 0 0 184px;
+    border-right: 1px solid #e2e7e5;
   }
 
   .visual-workspace {

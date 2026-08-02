@@ -2,7 +2,7 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Implemented milestone (TopoForge 0.8.1):** the validated manufacturing core now ships with a worker-backed loopback FastAPI adapter and a Chinese/English React, MapLibre, and Three.js local Web application. The Web surface reuses the saved workflow contract and existing core algorithms, constrains inputs and workspaces to configured roots, persists job state, supports cancellation and artifact downloads, and packages checksum-verified production assets in the wheel.
+**Implemented milestone (TopoForge 0.9.0):** the validated manufacturing core now ships with a worker-backed loopback FastAPI adapter and a Chinese/English React, MapLibre, and Three.js local Web application. The Web surface reuses the saved workflow contract and existing core algorithms, constrains inputs and workspaces to configured roots, persists job state, supports cancellation and artifact downloads, serves deterministic local terrain XYZ tiles, synchronizes manufacturing footprints with 2D/3D tile assembly, and packages checksum-verified production assets in the wheel.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
 
@@ -21,7 +21,7 @@ uv run topoforge web \
 Open `http://127.0.0.1:8765/`. The header switches the complete interface between
 Chinese and English. The first screen is the working application: local DEM, bbox, or
 center-radius source selection; print-aware/source-preserving/custom sampling; resource
-budgets; tiling; optional overlays and slicing; MapLibre AOI interaction; isolated job
+budgets; tiling; optional overlays and slicing; MapLibre AOI plus processed DEM terrain/elevation/hillshade layers; synchronized 2D/3D tile assembly; isolated job
 progress/cancellation; Three.js GLB inspection; metrics; and checksum-bound artifacts.
 
 The server accepts only loopback hosts. Local file browsing is limited to explicit
@@ -477,8 +477,8 @@ SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/primary
 SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/repeat
 uv run python scripts/verify_release.py \
   --primary-dir dist/primary --repeat-dir dist/repeat \
-  --version 0.8.1 --install \
-  --report artifacts/logs/phase9-release-verification.json
+  --version 0.9.0 --install \
+  --report artifacts/logs/phase10-release-verification.json
 uv run python scripts/verify_reference_regions.py \
   --catalog reference_regions/catalog.yaml --definitions-only \
   --report artifacts/logs/reference-definitions.json
@@ -489,7 +489,10 @@ uv run python scripts/run_benchmarks.py \
 
 The suite covers terrain, CRS/AOI, sampling, orientation, exporters, workflows, Web API
 jobs, bilingual browser layout/WebGL, overlays, tiling/connectors, provider/cache behavior,
-slicers, release archives, reference regions, and benchmark contracts. Large DEM, mesh, cache, slicer, and benchmark output files
+slicers, release archives, reference regions, and benchmark contracts. Phase 10 closes with
+206 Python tests, 17 Vitest tests, 2 applicable Playwright scenarios, and byte-identical
+fixed-epoch archives; assembly tamper, antimeridian/polar coverage, maximum explosion,
+responsive reframing, and reset are executable regression contracts. Large DEM, mesh, cache, slicer, and benchmark output files
 remain outside Git.
 
 ## Documentation

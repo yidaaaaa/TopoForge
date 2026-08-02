@@ -1,0 +1,16 @@
+release_tag: v0.9.0
+baseline_tag: v0.8.1
+source_patch_command: git apply artifacts/patches/topoforge-0.9.0-source.patch
+source_patch_forward_apply: passed
+source_patch_whitespace_check: passed
+source_patch_reverse_apply: passed
+source_patch_baseline_restored: passed
+rollback_command: scripts/rollback-topoforge-0.9.0.sh --confirm-rollback
+rollback_execution_directory: independent no-hardlink clone checked out at v0.9.0
+rollback_script_exit_code: 0
+literal_output:
+TopoForge 0.9.0 source rollback completed.
+The worktree now matches v0.8.1; retained DEMs, caches, outputs, and Web workspaces were not deleted.
+tree_diff_vs_v0.8.1: clean
+worktree_after_rollback: clean
+required_checks_passed: true

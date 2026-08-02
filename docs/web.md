@@ -1,6 +1,6 @@
 # Local Web application
 
-TopoForge 0.8.1 includes a single-user local Web application. It is an adapter over the
+TopoForge 0.9.0 includes a single-user local Web application. It is an adapter over the
 same `WorkflowLaunchConfig` and `execute_workflow_launch()` path used by the CLI. Raster,
 sampling, mesh, tiling, overlay, slicing, validation, and artifact logic remains in the
 Python core.
@@ -29,12 +29,15 @@ English. Both versions expose the same controls and results:
 
 - local GeoTIFF, bbox, or center-radius sources;
 - MapLibre AOI drawing and normalization, with bundled Natural Earth country outlines and a graticule by default;
+- deterministic local terrain, elevation, and hillshade XYZ tiles derived from the completed processed DEM;
+- geographic manufacturing tile footprints with map selection synchronized to assembly;
 - optional OpenStreetMap raster tiles when the operator enables the online basemap;
 - model dimensions, sampling mode, mesh spacing, and adapt/strict resource budgets;
 - deterministic tile size, overlap, overlay YAML, slicing, and Bambu project settings;
 - persistent jobs, progress events, cancellation, structured failures, and corrective text;
 - measured workflow metrics and checksum-bound artifact downloads;
-- Three.js GLB viewing with `+X East`, `+Y North`, and `+Z Up` labels.
+- 2D physical assembly with tile labels, connectors, and a North marker;
+- Three.js whole-model and per-tile assembly viewing with visibility, explosion, selection, and `+X East`, `+Y North`, and `+Z Up` labels.
 
 The WebUI does not provide a separate terrain implementation. A submitted form is
 validated into the existing workflow launch model and executed by an isolated Python
@@ -50,6 +53,10 @@ child process.
   `--state-dir`.
 - Artifact downloads are resolved from completed workflow records, checked for workspace
   containment, and rehashed before serving.
+- Assembly metadata is anchored to the published workflow manifest and validated CONNECT-stage
+  manifest SHA, then cross-checks assembly validation, tile manifests, and per-tile GLBs.
+- Date-line processed rasters use split Web Mercator coverage and circular longitude centers.
+  Partial latitude clipping is reported; rasters fully outside Web Mercator are rejected.
 - Static assets are served only after the package manifest passes SHA-256 and size checks.
 - The content security policy permits same-origin application traffic and the explicit
   OpenStreetMap tile origin. OpenStreetMap is the sole external browser origin.
@@ -71,7 +78,7 @@ or earlier evidence.
 
 ## Offline operation
 
-The application shell, bundled offline reference map, local DEM processing, cached provider
+The application shell, bundled offline reference map, local DEM processing, deterministic local map-tile cache, per-tile assembly, cached provider
 replay, job state, previews, and artifacts work without browser network access. A global
 AOI still requires either provider network access or a complete retained provider cache.
 Enabling the OpenStreetMap switch explicitly requests public map tiles and does not alter
@@ -90,7 +97,7 @@ npm --prefix web run test:ui
 
 The Vite production build writes directly to `src/topoforge/web/static/`, then
 `web/scripts/write-manifest.mjs` writes the strict asset manifest. Playwright starts a
-loopback server when one is not already available. Its desktop check requires a spatially varied offline map, exercises the OSM request under CSP, rejects browser errors, verifies complete 3D framing across aspect ratios, and checks Chinese/English switching. Its
+loopback server when one is not already available. Its desktop check requires a spatially varied local terrain map, exercises all three DEM styles and the OSM request under CSP, rejects browser errors, verifies whole-model and per-tile 3D framing, checks 2D/3D selection, visibility, maximum explosion, narrow-viewport reframing, reset, and Chinese/English switching. Its
 mobile check verifies the primary controls and rejects horizontal overflow.
 
 Generated `web/node_modules/`, `web/test-results/`, and `web/playwright-report/` directories
@@ -99,12 +106,12 @@ wheel retains only the compiled, checksum-bound application inside `topoforge.we
 
 ## Rollback
 
-Stop the 0.8.1 listener, start the retained 0.8.0 CLI environment, and keep existing
+Stop the 0.9.0 listener, start the retained 0.8.1 CLI environment, and keep existing
 workspaces and state directories unchanged:
 
 ```bash
-~/.venvs/topoforge-0.8.0/bin/topoforge doctor
-ln -sfn ~/.venvs/topoforge-0.8.0/bin/topoforge ~/.local/bin/topoforge
+~/.venvs/topoforge-0.8.1/bin/topoforge doctor
+ln -sfn ~/.venvs/topoforge-0.8.1/bin/topoforge ~/.local/bin/topoforge
 ```
 
-For a source checkout exactly at the 0.8.1 release tag, run `scripts/rollback-topoforge-0.8.1.sh --confirm-rollback`.
+For a source checkout exactly at the 0.9.0 release tag, run `scripts/rollback-topoforge-0.9.0.sh --confirm-rollback`.

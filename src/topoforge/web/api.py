@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import FastAPI, HTTPException, Query, Request, status
+from fastapi import Path as PathParameter
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,6 +23,13 @@ from topoforge.raster import normalize_area_of_interest
 from topoforge.util import sha256_file
 from topoforge.web.configuration import LocalConfigLoadRequest, load_local_config
 from topoforge.web.jobs import LocalJobManager, expected_workflow_stages
+from topoforge.web.map_tiles import (
+    JobAssemblyOverview,
+    JobMapManifest,
+    MapTileNotFoundError,
+    MapTileStyle,
+    WebVisualizationService,
+)
 from topoforge.web.models import FileListing, JobCreateRequest, JobRecord, WebAppConfig
 
 
@@ -87,6 +95,8 @@ def create_app(
     assets = (static_dir or bundled_static_dir()).resolve()
     verify_static_assets(assets)
 
+    visualization = WebVisualizationService(jobs)
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         jobs.start()
@@ -105,6 +115,7 @@ def create_app(
     )
     app.state.job_manager = jobs
     app.state.web_config = resolved
+    app.state.visualization_service = visualization
     app.add_middleware(
         TrustedHostMiddleware,
         allowed_hosts=["127.0.0.1", "localhost", "[::1]", "::1", "testserver"],
@@ -165,8 +176,17 @@ def create_app(
             "terrain_modes": ["best-available", "dtm", "dsm", "bathymetry"],
             "slicers": ["bambu-studio", "orca", "prusa", "auto"],
             "maximum_parallel_jobs": resolved.max_concurrent_jobs,
-            "map": {"library": "MapLibre", "offline_background": True},
-            "preview": {"library": "Three.js", "formats": ["glb"]},
+            "map": {
+                "library": "MapLibre",
+                "offline_background": True,
+                "local_xyz_tiles": True,
+                "styles": [style.value for style in MapTileStyle],
+            },
+            "preview": {
+                "library": "Three.js",
+                "formats": ["glb"],
+                "assembly_tiles": True,
+            },
         }
 
     @app.post("/api/v1/aoi/normalize", response_model=AreaOfInterest)
@@ -252,6 +272,59 @@ def create_app(
             path,
             media_type=artifact.media_type,
             filename=artifact.filename,
+        )
+
+    @app.get("/api/v1/jobs/{job_id}/map/manifest", response_model=JobMapManifest)
+    def get_map_manifest(job_id: str) -> JobMapManifest:
+        try:
+            return visualization.manifest(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job map source not found") from exc
+
+    @app.get("/api/v1/jobs/{job_id}/map/tiles/{style}/{z}/{x}/{y}.png")
+    def get_map_tile(
+        job_id: str,
+        style: MapTileStyle,
+        z: Annotated[int, PathParameter(ge=0, le=22)],
+        x: Annotated[int, PathParameter(ge=0)],
+        y: Annotated[int, PathParameter(ge=0)],
+    ) -> FileResponse:
+        try:
+            tile_path, record, cache_state = visualization.tile(job_id, style, z, x, y)
+        except (KeyError, MapTileNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail="map tile not found") from exc
+        return FileResponse(
+            tile_path,
+            media_type="image/png",
+            headers={
+                "ETag": f'"{record.png_sha256}"',
+                "Cache-Control": "private, max-age=31536000, immutable",
+                "X-TopoForge-Cache": cache_state,
+                "X-TopoForge-Tile-SHA256": record.png_sha256,
+            },
+        )
+
+    @app.get("/api/v1/jobs/{job_id}/assembly", response_model=JobAssemblyOverview)
+    def get_assembly(job_id: str) -> JobAssemblyOverview:
+        try:
+            return visualization.assembly(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job assembly not found") from exc
+
+    @app.get("/api/v1/jobs/{job_id}/assembly/tiles/{tile_id}.glb")
+    def get_assembly_tile(job_id: str, tile_id: str) -> FileResponse:
+        try:
+            tile_path, expected_sha256 = visualization.assembly_tile_path(job_id, tile_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="assembly tile not found") from exc
+        return FileResponse(
+            tile_path,
+            media_type="model/gltf-binary",
+            filename=tile_path.name,
+            headers={
+                "ETag": f'"{expected_sha256}"',
+                "Cache-Control": "private, max-age=31536000, immutable",
+            },
         )
 
     @app.post("/api/v1/config/load")

@@ -1,0 +1,236 @@
+{
+  "baseline_commit": "d152fa3",
+  "baseline_tag": "v0.8.1",
+  "format_validation": {
+    "aggregate_assembly_glb_role": "multi-solid visualization scene",
+    "connector_tile_glbs_reopened": 4,
+    "individual_tile_glbs_manifold": true,
+    "individual_tile_glbs_positive_volume": true,
+    "individual_tile_glbs_watertight": true,
+    "required_checks_passed": true,
+    "source_tile_glbs_reopened": 4,
+    "three_mf": {
+      "dimensions_mm": [
+        64.0,
+        51.2,
+        20.0
+      ],
+      "orientation": [
+        "+X East",
+        "+Y North",
+        "+Z Up"
+      ],
+      "strict_warning_count": 0,
+      "triangle_count": 1276
+    },
+    "whole_model_glb_reopened": true
+  },
+  "implementation": {
+    "antimeridian_coverage_split": true,
+    "assembly_manifest_chain_verified": true,
+    "bilingual_languages": [
+      "zh-CN",
+      "en"
+    ],
+    "camera_reset_verified": true,
+    "deterministic_local_xyz_tiles": true,
+    "immutable_http_cache": true,
+    "outside_web_mercator_rejected": true,
+    "processed_dem_sha_bound_cache": true,
+    "responsive_3d_bounds_framing": true,
+    "synchronized_map_2d_3d_selection": true,
+    "tile_styles": [
+      "terrain",
+      "elevation",
+      "hillshade"
+    ],
+    "web_mercator_polar_clipping_recorded": true
+  },
+  "independent_audit": {
+    "agent": "phase10_release_audit",
+    "blockers_remaining": 0,
+    "closed": 3,
+    "closed_findings": [
+      "assembly metadata is bound through the JobRecord, workflow manifest, CONNECT stage, validation manifest, tile manifests, and GLB hashes",
+      "antimeridian and polar Web Mercator coverage use circular longitude handling, split segments, explicit clipping, and explicit rejection",
+      "3D assembly framing follows visible exploded bounds across resize, visibility, explosion, and reset"
+    ],
+    "findings": 3,
+    "regressions_added": true
+  },
+  "known_limitations": [
+    "physical connector calibration remains deferred",
+    "exhaustive self-intersection remains not_fully_checked",
+    "network overlay acquisition and arbitrary font shaping are not implemented",
+    "offline installation requires a same-platform dependency wheelhouse",
+    "public multi-user API deployment remains deferred"
+  ],
+  "patch_and_rollback": {
+    "required_checks_passed": true,
+    "rollback_script_exit_code": 0,
+    "rollback_tree_matches_v0.8.1": true,
+    "rollback_worktree_clean": true,
+    "source_patch_baseline_restored": true,
+    "source_patch_forward_apply": true,
+    "source_patch_reverse_apply": true
+  },
+  "phase": 10,
+  "quality": {
+    "git_diff_check": "passed",
+    "playwright": "2 passed, 2 project-inapplicable skipped",
+    "production_vite_build": "passed; 9 manifest-bound assets",
+    "pyright": "0 errors, 0 warnings, 0 informations",
+    "pytest": "206 passed in 85.64s",
+    "ruff_check": "All checks passed!",
+    "ruff_format": "162 files already formatted",
+    "uv_lock_check": "passed",
+    "vitest": "17 passed"
+  },
+  "real_http_job": {
+    "connector_count": 4,
+    "dimensions_mm": [
+      64.0,
+      51.20000076293945,
+      20.0
+    ],
+    "exit_code": 0,
+    "grid_shape": [
+      2,
+      2
+    ],
+    "job_id": "de091812ac294c258c12a16ed49e0803",
+    "network_attempts": 0,
+    "peak_elevation_loss_m": 0.0,
+    "peak_horizontal_shift_m": 0.0,
+    "processed_dem_sha256": "20ed81268cf46ad9c8270952722974db0a321e5eb7e4370ad3e531362bb42206",
+    "processed_horizontal_resolution_m": 20.0,
+    "required_checks_passed": true,
+    "source_horizontal_resolution_m": 20.0,
+    "tile_count": 4,
+    "triangle_count": 1276,
+    "workspace": "/tmp/topoforge-0.8.1-final-workspaces/phase10-ui-2x2-v3"
+  },
+  "release": {
+    "installed_smoke": {
+      "build_required_checks_passed": true,
+      "command_exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "installed_version": "0.9.0",
+      "isolated_environment": true,
+      "repository_import_leakage": false,
+      "three_mf_warning_count": 0,
+      "web_required_checks_passed": true
+    },
+    "reproducible_archives": {
+      "sdist": true,
+      "wheel": true
+    },
+    "required_checks_passed": true,
+    "sdist": {
+      "bytes": 1040245,
+      "forbidden_member_count": 0,
+      "member_count": 221,
+      "path": "/root/autodl-tmp/bambu/TopoForge/dist/0.9.0-release-primary/topoforge-0.9.0.tar.gz",
+      "sha256": "489a7bf48f692a5c77a135b2db24a5d2f4df64b1ecaff2a19902af5e002df4de"
+    },
+    "wheel": {
+      "asset_count": 9,
+      "bytes": 829852,
+      "member_count": 92,
+      "path": "/root/autodl-tmp/bambu/TopoForge/dist/0.9.0-release-primary/topoforge-0.9.0-py3-none-any.whl",
+      "sha256": "0518d22feed14fe3a124d69d5d913db22cd341c030e137b001b2d96f12428580"
+    }
+  },
+  "required_checks_passed": true,
+  "retained_real_data": {
+    "gongga": {
+      "peak_elevation_loss_m": 5.041504,
+      "peak_horizontal_shift_m": 24.516276,
+      "processed_grid_shape": [
+        439,
+        451
+      ],
+      "processed_horizontal_resolution_m": 68.958882,
+      "rebuilt_for_phase10": false,
+      "redownloaded": false,
+      "source_grid_shape": [
+        1008,
+        1181
+      ],
+      "source_horizontal_resolution_m": 28.850814,
+      "source_sha256": "00664a26192dea531606e60978f902bccbd3d93499c10c2ba89f9d37f4d7bbbc",
+      "terrain_adjusted": false
+    },
+    "network_attempts": 0,
+    "reference_region_count": 7,
+    "required_checks_passed": true,
+    "retained_evidence_count": 4
+  },
+  "roles": {
+    "assembly_2d_screenshot_zh": {
+      "bytes": 149372,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/previews/topoforge-0.9.0-phase10-assembly-2d-zh.png",
+      "sha256": "13d05c2a582da55e4fad1b57a20adb7ca2d3a6e3444d1e458c7fd33d963c8f3e"
+    },
+    "assembly_3d_screenshot_zh": {
+      "bytes": 171076,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/previews/topoforge-0.9.0-phase10-assembly-3d-zh.png",
+      "sha256": "194a692e1af009027cfca26cffbc183f44448d91c7d01682fe3f15a5966915a9"
+    },
+    "map_screenshot_zh": {
+      "bytes": 351810,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/previews/topoforge-0.9.0-phase10-map-zh.png",
+      "sha256": "95a6c6ff3dde6d2a32ca65365f4f16019299e43671732b05339d2db395a1d149"
+    },
+    "patch_rollback_verification": {
+      "bytes": 699,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.9.0-patch-rollback.txt",
+      "sha256": "f26beee9ca781aa6be7ac9afdb75b5813f3f09483226d1b3ea3d942051568419"
+    },
+    "reference_regions": {
+      "bytes": 6563,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.9.0-phase10-reference-regions.json",
+      "sha256": "f54fa164728ebde16fe43f43207a8ac2b1b5aabc33bb7276392f7b93118f202a"
+    },
+    "release_verification": {
+      "bytes": 14727,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/verification/topoforge-0.9.0-phase10-release-verification.json",
+      "sha256": "908efa6eef0ed6f21711f72f06112d2b90833b811e591f43bb6dc67fc7e6c73c"
+    },
+    "rollback_script": {
+      "bytes": 815,
+      "path": "/root/autodl-tmp/bambu/TopoForge/scripts/rollback-topoforge-0.9.0.sh",
+      "sha256": "f906956a85339413140cfb1c565c854160d605e001ace9504f49799c055e1e47"
+    },
+    "source_patch": {
+      "bytes": 1460877,
+      "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/patches/topoforge-0.9.0-source.patch",
+      "sha256": "547edc8af8fcc48268680e292df88207043b4f0c70a0ea91c7d1897a6657d186"
+    },
+    "static_asset_manifest": {
+      "bytes": 1788,
+      "path": "/root/autodl-tmp/bambu/TopoForge/src/topoforge/web/static/asset-manifest.json",
+      "sha256": "036eaecdf4fe4049da8c8de606a799cf9baad4c61c02f3598c113b0181266a69"
+    },
+    "static_index": {
+      "bytes": 785,
+      "path": "/root/autodl-tmp/bambu/TopoForge/src/topoforge/web/static/index.html",
+      "sha256": "bb32e1b6f5b7c7122d6d39d3ce5d4864c48861aef625f7bacd43caf8acd3c884"
+    }
+  },
+  "schema_version": 1,
+  "slicer_evidence": {
+    "phase10_new_slice_run": false,
+    "reason": "Phase 10 changes local visualization and assembly reads; retained source/manufacturing artifacts were checksum-reopened without terrain rebuild or redownload.",
+    "retained_validated_manufacturing_evidence_reused": true
+  },
+  "topoforge_version": "0.9.0"
+}

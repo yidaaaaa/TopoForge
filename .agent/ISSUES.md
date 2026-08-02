@@ -323,3 +323,36 @@
 - **Reproduction:** Open the retained 40 x 32 x 20 mm HTTP smoke GLB in the 0.8.0 narrow center pane. The fixed extent-offset camera crops most of the solid and fixed 18-unit guides hide the direction arrows.
 - **Expected behavior:** Reopened manufacturing bounds fit the current canvas while +X East, +Y North, +Z Up remain unchanged and visible.
 - **Resolution:** Added bounding-sphere/FOV/aspect camera framing with unit coverage tests, responsive reframing, bound-derived grid/arrow size and placement, deterministic tone mapping, final real-GLB screenshots, and browser error/palette checks. The strict 3MF hash remains byte-identical to 0.8.0.
+
+## TF-039 — Completed jobs lacked local processed-terrain maps and assembly interaction
+
+- **Severity:** High
+- **Status:** Resolved in 0.9.0
+- **Reproduction:** Open 0.8.1 after a tiled workflow completes. The map shows reference geography and AOI but not the processed DEM, manufacturing footprints, connector layout, or per-tile assembly.
+- **Expected behavior:** Offline local use displays checksum-bound terrain/elevation/hillshade tiles, synchronized manufacturing footprints, a North-marked 2D layout, and an inspectable per-tile 3D assembly without changing terrain data.
+- **Resolution:** Added deterministic local XYZ generation/cache, map manifest/routes, footprint selection, 2D/3D assembly, bilingual controls, real 2 x 2 HTTP evidence, strict format rereads, screenshots, and browser tests.
+
+## TF-040 — Visualization trusted a mutable assembly root outside the workflow SHA chain
+
+- **Severity:** High
+- **Status:** Resolved in 0.9.0 before release
+- **Reproduction:** Canonically edit `print-tile-assembly-manifest.json` after job completion, changing `east_axis` or a tile bound without changing the workflow manifest. The pre-fix `/assembly` and `/map/manifest` returned 200 and `required_checks_passed=true`.
+- **Expected behavior:** Visualization rejects any assembly metadata or role that is no longer bound to the published completed workflow evidence.
+- **Resolution:** Bind JobRecord `workflow_manifest` SHA to the canonical workflow, require the validated CONNECT stage, require exact output/manifest paths and stage manifest SHA, verify assembly validation and tile-manifest hashes, use the measured validation gate, and retain the tamper regression. Both map and assembly now return structured 422 errors on the reproduced mutation.
+
+## TF-041 — Date-line/polar map coverage and exploded assembly framing had untested edge failures
+
+- **Severity:** High
+- **Status:** Resolved in 0.9.0 before release
+- **Reproduction:** A date-line raster centered near -179.95 degrees produced center longitude 0.05 and near-global Mercator bounds; an 86-degree raster produced south greater than north; a loaded assembly retained its old camera after resize/explosion/reset.
+- **Expected behavior:** Date-line coverage remains local, Web Mercator latitude limits are explicit, and every visible exploded tile remains inside the 3D frame after responsive changes and reset.
+- **Resolution:** Add circular longitude centers, two Mercator coverage segments, explicit partial-clipping metadata, full-outside rejection, unwrapped raster source bounds, deterministic visible/exploded assembly bounds, resize/state/reset reframing, a four-column narrow-aspect corner projection test, and real Playwright maximum-explosion/resize/reset checks.
+
+## TF-042 — GitHub publication credentials are unavailable on this host
+
+- **Severity:** Release operations
+- **Status:** External blocker; local 0.9.0 release complete
+- **Reproduction:** Run `git push --dry-run origin main v0.9.0` against `https://github.com/yidaaaaa/TopoForge.git`.
+- **Expected behavior:** Publish the verified `main` release commit and annotated `v0.9.0` tag.
+- **Actual behavior:** Git exits 128 with `fatal: could not read Username for 'https://github.com': No such device or address`. No `gh`, SSH key, `GH_TOKEN`, `GITHUB_TOKEN`, or HTTPS credential helper is configured.
+- **Resolution path:** Configure a GitHub credential for this repository and run `git push origin main` followed by `git push origin v0.9.0`; no source rebuild is required.
