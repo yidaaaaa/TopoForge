@@ -1,0 +1,67 @@
+clone=/tmp/topoforge-0.8.0-rollback-final.BvAEEz/repo
+release_commit=297ac62804bcabacea9e79297baeb24861a47ef0
+[detached HEAD 59feeff] Revert "feat: complete bilingual local web application"
+ Date: Sun Aug 2 08:40:11 2026 +0800
+ 75 files changed, 73 insertions(+), 31230 deletions(-)
+ rewrite .agent/STATE.md (66%)
+ rewrite THIRD_PARTY_NOTICES.md (84%)
+ delete mode 100644 artifacts/patches/topoforge-0.8.0-source.patch
+ delete mode 100644 artifacts/previews/topoforge-0.8.0-web-desktop-zh.png
+ delete mode 100644 artifacts/previews/topoforge-0.8.0-web-mobile-en.png
+ delete mode 100644 artifacts/verification/topoforge-0.8.0-phase9-benchmarks.json
+ delete mode 100644 artifacts/verification/topoforge-0.8.0-phase9-checksums.sha256
+ delete mode 100644 artifacts/verification/topoforge-0.8.0-phase9-http-smoke.json
+ delete mode 100644 artifacts/verification/topoforge-0.8.0-phase9-reference-definitions.json
+ delete mode 100644 artifacts/verification/topoforge-0.8.0-phase9-release-verification-final.json
+ delete mode 100644 artifacts/verification/topoforge-0.8.0-phase9-release-verification.json
+ delete mode 100644 artifacts/verification/topoforge-0.8.0-phase9-verification.json
+ delete mode 100644 docs/web.md
+ delete mode 100755 scripts/rollback-topoforge-0.8.0.sh
+ delete mode 100644 src/topoforge/web/__init__.py
+ delete mode 100644 src/topoforge/web/api.py
+ delete mode 100644 src/topoforge/web/configuration.py
+ delete mode 100644 src/topoforge/web/jobs.py
+ delete mode 100644 src/topoforge/web/models.py
+ delete mode 100644 src/topoforge/web/server.py
+ delete mode 100644 src/topoforge/web/static/asset-manifest.json
+ delete mode 100644 src/topoforge/web/static/assets/TerrainPreview-CjN2ZZae.js
+ delete mode 100644 src/topoforge/web/static/assets/index-BHi5RJX7.js
+ delete mode 100644 src/topoforge/web/static/assets/index-D28f-Xev.css
+ delete mode 100644 src/topoforge/web/static/assets/maplibre-CIJcTNu8.js
+ delete mode 100644 src/topoforge/web/static/assets/maplibre-DNVN2dqC.css
+ delete mode 100644 src/topoforge/web/static/assets/react-a9urCwlR.js
+ delete mode 100644 src/topoforge/web/static/assets/three-DEpewF6T.js
+ delete mode 100644 src/topoforge/web/static/index.html
+ delete mode 100644 src/topoforge/web/worker.py
+ delete mode 100644 tests/web/__init__.py
+ delete mode 100644 tests/web/conftest.py
+ delete mode 100644 tests/web/test_api.py
+ delete mode 100644 tests/web/test_jobs.py
+ delete mode 100644 web/index.html
+ delete mode 100644 web/package-lock.json
+ delete mode 100644 web/package.json
+ delete mode 100644 web/playwright.config.ts
+ delete mode 100644 web/scripts/write-manifest.mjs
+ delete mode 100644 web/src/App.test.tsx
+ delete mode 100644 web/src/App.tsx
+ delete mode 100644 web/src/api.ts
+ delete mode 100644 web/src/components/BuildPanel.tsx
+ delete mode 100644 web/src/components/FileBrowser.tsx
+ delete mode 100644 web/src/components/MapPanel.tsx
+ delete mode 100644 web/src/components/ResultsPanel.tsx
+ delete mode 100644 web/src/components/TerrainPreview.tsx
+ delete mode 100644 web/src/config.test.ts
+ delete mode 100644 web/src/config.ts
+ delete mode 100644 web/src/i18n.ts
+ delete mode 100644 web/src/main.tsx
+ delete mode 100644 web/src/styles.css
+ delete mode 100644 web/src/test/setup.ts
+ delete mode 100644 web/src/types.ts
+ delete mode 100644 web/tests/workspace.spec.ts
+ delete mode 100644 web/tsconfig.json
+ delete mode 100644 web/vite.config.ts
+TopoForge 0.8.0 source rollback completed.
+The worktree now matches v0.7.0; retained DEMs, caches, outputs, and Web workspaces were not deleted.
+rollback_commit=59feeffa13062350435ff3073f8729bcfb9f8794
+## HEAD (no branch)
+tree_diff_vs_v0.7.0=clean

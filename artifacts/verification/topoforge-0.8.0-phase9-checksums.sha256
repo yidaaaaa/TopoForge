@@ -1,0 +1,14 @@
+06486fc724c1816469c3c8974cd267c690795ff1b6c8f471f4cbd38049be4cb9  dist/0.8.0-final-primary/topoforge-0.8.0.tar.gz
+b58fab195c18c22a191cd57ec4891ca1ad86e954a1887c1bd98712deb2f6430c  dist/0.8.0-final-primary/topoforge-0.8.0-py3-none-any.whl
+b1e433284451e04e4bb174a3f677785a6b1e14a6078905066faf56580e45ae80  artifacts/verification/topoforge-0.8.0-phase9-release-verification-final.json
+2cbf605f56cc79c4750a3eddbc808ec50921b09eb22f8799318214b8c45e13f9  artifacts/verification/topoforge-0.8.0-phase9-http-smoke.json
+67c8c0b08eb621d4e62e72a79ddc5783a34e5aebb29f3788b7ba246250a54ffb  artifacts/verification/topoforge-0.8.0-phase9-benchmarks.json
+17811f882b2e111bf9d892285b5e0f759ec197bfc61257f422e01a8dc22250bd  artifacts/verification/topoforge-0.8.0-phase9-reference-definitions.json
+8031166b88928290c608c59add03f5d65d22ab712643e3d239b5926dd92ce703  artifacts/verification/topoforge-0.8.0-phase9-verification.json
+8f7b3e4d119a303344d237d6d0376ad3a4115f6e3c1e4e6fd0314d41ea0fc596  artifacts/verification/topoforge-0.8.0-patch-rollback.txt
+1fb823338a0c372124f83b9122523a753aa43fe01bb0888c0a79fe7414c308cb  artifacts/previews/topoforge-0.8.0-web-desktop-zh.png
+0074a46cbac0e25b33f6d351435a6ea271aadb32d4e1e90a8f0771256a6db800  artifacts/previews/topoforge-0.8.0-web-mobile-en.png
+6a237cfd4adfaf0f9eb44ed8c2ebb6b584a8ac2603d47d6c5c35527ba6064ce4  artifacts/phase9/topoforge-web-http-smoke-model.3mf
+6c9e09889187bd48e0573e7cef0c615ba6e2ff072cfd4c0ef8d9bcd6534dd4b1  artifacts/patches/topoforge-0.8.0-source.patch
+361e1812ac048b2227f478cf8dc5652fa21e8b41996216e2bd306d0d9998ca20  scripts/rollback-topoforge-0.8.0.sh
+883a4e5f2137ee62d41d2155a92a09b930edfc241082f83347478c69c3989cba  src/topoforge/web/static/asset-manifest.json

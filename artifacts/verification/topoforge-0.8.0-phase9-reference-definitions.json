@@ -1,0 +1,117 @@
+{
+  "catalog_path": "/root/autodl-tmp/bambu/TopoForge/reference_regions/catalog.yaml",
+  "catalog_sha256": "99b77f823913c4a24048929f496f731ac90ceefdbbb37dfe6fd33b7889d1cd62",
+  "definitions_only": true,
+  "network_attempts": 0,
+  "region_count": 7,
+  "regions": [
+    {
+      "area_m2": 4916525.719334841,
+      "bounds_wgs84": [
+        -60.02,
+        -3.13,
+        -60.0,
+        -3.11
+      ],
+      "crosses_antimeridian": false,
+      "id": "amazon-low-relief",
+      "kind": "bbox",
+      "normalized_sha256": "862ab46990e2b971f44b99d407acd51e53c2f835c4d206154fabe47755b0a524",
+      "retained_evidence": null,
+      "target_local_crs": "+proj=aeqd +lat_0=-3.1200000000 +lon_0=-60.0100000000 +datum=WGS84 +units=m +no_defs +type=crs"
+    },
+    {
+      "area_m2": 986413695.8991852,
+      "bounds_wgs84": [
+        101.66986111111112,
+        29.450138888888887,
+        101.99791666666667,
+        29.730138888888888
+      ],
+      "crosses_antimeridian": false,
+      "id": "gongga-high-relief",
+      "kind": "bbox",
+      "normalized_sha256": "960bae3688fac60ab38dbde501cd6763c00e583938f3efe1df7c2d4af00d2d6c",
+      "retained_evidence": null,
+      "target_local_crs": "EPSG:32647"
+    },
+    {
+      "area_m2": 168999938.5105896,
+      "bounds_wgs84": [
+        76.12960792255495,
+        35.698889947963785,
+        76.27335127744504,
+        35.816055080289075
+      ],
+      "crosses_antimeridian": false,
+      "id": "great-trango-center-radius",
+      "kind": "center-radius",
+      "normalized_sha256": "7f0f360f0cc79bd5c4164a80b376b079891d1f544ad7879fc7a75f492aadf48e",
+      "retained_evidence": null,
+      "target_local_crs": "EPSG:32643"
+    },
+    {
+      "area_m2": 168999102.62332153,
+      "bounds_wgs84": [
+        -65.4665538596351,
+        66.47974157953497,
+        -65.1740655403649,
+        66.5963175830641
+      ],
+      "crosses_antimeridian": false,
+      "id": "mount-thor-high-latitude",
+      "kind": "center-radius",
+      "normalized_sha256": "625c92dfe532b98ed6ab5d5f19b791483107c4ce644de1274e0dde9501d1e579",
+      "retained_evidence": null,
+      "target_local_crs": "EPSG:32620"
+    },
+    {
+      "area_m2": 2964651486.1714783,
+      "bounds_wgs84": [
+        179.8,
+        -16.0,
+        -179.7,
+        -15.5
+      ],
+      "crosses_antimeridian": true,
+      "id": "antimeridian-bbox",
+      "kind": "bbox",
+      "normalized_sha256": "f0ed4a22c24b9c582323bf6ac327d91b2afd4f07f2a9e881a20c9cf5a2bfdd40",
+      "retained_evidence": null,
+      "target_local_crs": "+proj=aeqd +lat_0=-15.7500000000 +lon_0=-179.9500000000 +datum=WGS84 +units=m +no_defs +type=crs"
+    },
+    {
+      "area_m2": 2495247326.1567383,
+      "bounds_wgs84": [
+        17.433303011172256,
+        84.77615618231249,
+        22.566696988827744,
+        85.22384228261419
+      ],
+      "crosses_antimeridian": false,
+      "id": "polar-center-radius",
+      "kind": "center-radius",
+      "normalized_sha256": "6adb6ac00b731df087d1b0112f03ba253f1e2e58bc93452ba93cdf6e069f7ff5",
+      "retained_evidence": null,
+      "target_local_crs": "+proj=aeqd +lat_0=84.9999992325 +lon_0=20.0000000000 +datum=WGS84 +units=m +no_defs +type=crs"
+    },
+    {
+      "area_m2": 349891135.71325684,
+      "bounds_wgs84": [
+        5.9,
+        45.0,
+        6.1,
+        45.2
+      ],
+      "crosses_antimeridian": false,
+      "id": "cross-zone-bbox",
+      "kind": "bbox",
+      "normalized_sha256": "1c9e123509aea1c651a593a1a2855f04ac6a92c0226c9b2240d05ae8263b2acd",
+      "retained_evidence": null,
+      "target_local_crs": "+proj=aeqd +lat_0=45.1000000000 +lon_0=6.0000000000 +datum=WGS84 +units=m +no_defs +type=crs"
+    }
+  ],
+  "required_checks_passed": true,
+  "retained_evidence_count": 0,
+  "schema_version": 1
+}

@@ -2,9 +2,40 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Implemented milestone (TopoForge 0.7.0):** the validated local/no-key terrain core, deterministic tiling, resumable single-workstation workflow, and provenance-aware local overlays now ship with Phase 8 release hardening: bounded sdist/wheel contents, SPDX and dataset notices, byte-reproducible archives, isolated installed-CLI verification, CI, deterministic full-build benchmarks, reference-region contracts, and offline install/upgrade/rollback documentation. API/Web remains saved as deferred Phase 9.
+**Implemented milestone (TopoForge 0.8.0):** the validated manufacturing core now ships with a worker-backed loopback FastAPI adapter and a Chinese/English React, MapLibre, and Three.js local Web application. The Web surface reuses the saved workflow contract and existing core algorithms, constrains inputs and workspaces to configured roots, persists job state, supports cancellation and artifact downloads, and packages checksum-verified production assets in the wheel.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
+
+## Local bilingual Web application
+
+Launch the packaged local application from the repository or an installed wheel:
+
+```bash
+uv run topoforge web \
+  --host 127.0.0.1 \
+  --port 8765 \
+  --workspace-root topoforge-workspaces \
+  --input-root .
+```
+
+Open `http://127.0.0.1:8765/`. The header switches the complete interface between
+Chinese and English. The first screen is the working application: local DEM, bbox, or
+center-radius source selection; print-aware/source-preserving/custom sampling; resource
+budgets; tiling; optional overlays and slicing; MapLibre AOI interaction; isolated job
+progress/cancellation; Three.js GLB inspection; metrics; and checksum-bound artifacts.
+
+The server accepts only loopback hosts. Local file browsing is limited to explicit
+`--input-root` directories, Web-created workflows must be children of
+`--workspace-root`, and job/artifact records remain below `--state-dir`. The default map
+is offline; the optional OpenStreetMap layer is the only browser network request. Verify
+an installed application without starting a listener:
+
+```bash
+topoforge web --check --workspace-root topoforge-workspaces --input-root . --no-open
+```
+
+See [`docs/web.md`](docs/web.md) for operation, recovery, frontend development, browser
+validation, and local security boundaries.
 
 ## Verified output
 
@@ -394,6 +425,7 @@ topoforge run         resumable local/global acquire/build/tile/connect/slice wo
 topoforge wizard      reviewed local/global launch configuration and optional execution
 topoforge resume      execute or resume a saved workflow-launch.yaml
 topoforge browse      strict no-server artifact index and static HTML report
+topoforge web         bilingual loopback WebUI with isolated workflow workers
 topoforge build-global no-key Copernicus AWS AOI to complete artifact bundle
 topoforge preflight   printer fit, sampling, triangles, memory, and vertical-scale report
 topoforge tile-plan   deterministic tile IDs, overlap windows, and physical bounds
@@ -432,6 +464,12 @@ topoforge doctor      Python/GDAL/PROJ/slicer versions
 ## Quality gates
 
 ```bash
+npm --prefix web ci
+npm --prefix web run typecheck
+npm --prefix web run test
+npm --prefix web run build
+npm --prefix web run test:ui
+
 uv run ruff check .
 uv run ruff format --check .
 uv run pyright
@@ -440,19 +478,19 @@ SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/primary
 SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/repeat
 uv run python scripts/verify_release.py \
   --primary-dir dist/primary --repeat-dir dist/repeat \
-  --version 0.7.0 --install \
-  --report artifacts/logs/phase8-release-verification.json
+  --version 0.8.0 --install \
+  --report artifacts/logs/phase9-release-verification.json
 uv run python scripts/verify_reference_regions.py \
   --catalog reference_regions/catalog.yaml --definitions-only \
   --report artifacts/logs/reference-definitions.json
 uv run python scripts/run_benchmarks.py \
   --baseline benchmarks/baseline.json --repeat 2 \
-  --report artifacts/logs/phase8-benchmarks.json
+  --report artifacts/logs/phase9-benchmarks.json
 ```
 
-The suite covers terrain, CRS/AOI, sampling, orientation, exporters, workflows, overlays,
-tiling/connectors, provider/cache behavior, slicers, release archives, reference regions,
-and benchmark contracts. Large DEM, mesh, cache, slicer, and benchmark output files
+The suite covers terrain, CRS/AOI, sampling, orientation, exporters, workflows, Web API
+jobs, bilingual browser layout/WebGL, overlays, tiling/connectors, provider/cache behavior,
+slicers, release archives, reference regions, and benchmark contracts. Large DEM, mesh, cache, slicer, and benchmark output files
 remain outside Git.
 
 ## Documentation
@@ -467,6 +505,7 @@ remain outside Git.
 - `docs/provider-development.md`
 - `docs/overlays.md`
 - `docs/offline-workflow.md`
+- `docs/web.md`
 - `docs/release.md`
 - `docs/benchmarks.md`
 - `docs/reference-regions.md`

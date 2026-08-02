@@ -14,7 +14,21 @@ Updated: 2026-08-02
 - [x] Phase 6 — local software completion: resumable one-command workflow, local UX, recovery, and core hardening. Completed in 0.5.0 on 2026-08-02.
 - [x] Phase 7 — local provenance-aware GPX/road/river/contour/label/coast overlays. Completed in 0.6.0 on 2026-08-02.
 - [x] Phase 8 — local release hardening: packaging, CI, benchmarks, reference regions, and offline documentation. Completed in 0.7.0 on 2026-08-02.
-- [ ] Phase 9 (deferred) — worker-backed FastAPI and React/MapLibre/Three.js Web application, only after local-use completion.
+- [x] Phase 9 — worker-backed loopback FastAPI and bilingual React/MapLibre/Three.js local Web application. Completed in 0.8.0 on 2026-08-02.
+
+## Completed Phase 9 — bilingual local Web application
+
+1. [x] Define typed job, progress, cancellation, error, and artifact contracts.
+2. [x] Execute workflows in isolated recoverable child processes without duplicating core logic.
+3. [x] Add a loopback-only FastAPI adapter with constrained input/workspace paths.
+4. [x] Add `topoforge web` health checks and one-command local launch.
+5. [x] Build a Chinese/English React interface for local DEM and bbox/center-radius AOIs.
+6. [x] Add MapLibre AOI interaction and Three.js GLB inspection.
+7. [x] Expose sampling, dimensions, tiling, slicing, progress, cancellation, and artifacts.
+8. [x] Verify desktop/mobile layout, maps, WebGL canvas, API jobs, packaging, and offline launch.
+9. [x] Publish Phase 9 release evidence, checksums, rollback, commit, and tag.
+
+Final evidence: 204 Python tests, 6 Vitest tests, 2 applicable Playwright scenarios, 8 checksum-verified production Web assets, one real HTTP workflow with six ready stages and 22 artifacts, byte-reproducible sdist/wheel archives, and isolated installed `topoforge web --check`. Release verification: `artifacts/verification/topoforge-0.8.0-phase9-release-verification-final.json`.
 
 ## Completed Milestone 01 gate
 
@@ -160,11 +174,11 @@ Final package evidence: sdist SHA-256 `067f63e50ada269970ca6aace2d64c635e09b5eab
 - [ ] Print coupons/tiles and record insertion force, play, dimensional error, material, humidity, orientation, and failure mode.
 - [ ] Promote material/nozzle/layer connector presets only after measured evidence.
 
-These items are intentionally skipped for now and do not block Phases 6-8 or the later saved API/Web phase. The current `0.2 mm` connector remains software-validated, not physically calibrated.
+These items are intentionally skipped for now and do not block Phases 6-9. The current `0.2 mm` connector remains software-validated, not physically calibrated.
 
-## Saved deferred Phase 9 — API and Web
+## Completed Phase 9 — API and Web
 
-The API plan is retained, not cancelled. After Phases 6-8 complete local use, define typed job/progress/error/artifact/cache/provenance schemas; implement bounded isolated workers and FastAPI submission/status/cancellation/download endpoints; stabilize those contracts; then build React/MapLibre/Three.js. Until then no API service, database, queue, authentication, or Web deployment work is required for single-user local operation.
+The local API and Web plan is complete in 0.8.0: typed durable jobs, bounded isolated workers, loopback FastAPI routes, strict path and artifact checks, saved configuration loading, Chinese/English React controls, MapLibre AOI interaction, Three.js GLB inspection, desktop/mobile browser evidence, packaged assets, CI, release verification, and rollback. Public deployment, authentication, and a remote multi-user contract remain intentionally outside this local release.
 
 ## Milestone 02 acceptance — passed in 0.3.0
 

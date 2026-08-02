@@ -517,3 +517,21 @@ Result: all 20 files report `OK`; official Bambu slice evidence remains exit 0, 
 Command: final `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run pytest`, `uv lock --check`, `git diff --check`, and Phase 8 checksum verification.
 
 Result: Ruff `All checks passed!`; format `148 files already formatted`; Pyright `0 errors, 0 warnings, 0 informations`; Pytest `192 passed in 73.32s`; lock and whitespace pass; all 15 Phase 8 checksum entries report `OK`.
+
+### Phase 9 bilingual local Web application and release closure
+
+Command: add typed job/progress/error/artifact models, persistent `LocalJobManager`, isolated worker execution, loopback FastAPI routes, strict local configuration loading, path-contained file browsing, checksum-verified artifact serving, `topoforge web`, and packaged static verification.
+
+Result: backend Web tests cover health/capabilities, AOI normalization, launch validation, file roots, overlay/launch YAML loading, static tamper rejection, isolated completion/failure, cancellation, and stage contracts. Final `tests/web` result is 12 passed.
+
+Command: build the Chinese/English React/TypeScript work surface with MapLibre AOI interaction, Three.js GLB viewing, sampling/resource/tiling/slicing/overlay controls, persistent job progress/cancellation, metrics, artifacts, and responsive layouts; build strict production assets and install Chromium for Playwright.
+
+Result: TypeScript passes, Vitest reports 6 passed, Vite builds 8 manifest-bound assets, and Playwright reports 2 applicable passed / 2 project-inapplicable skipped. Desktop MapLibre and Three.js canvas pixels are nonzero. Mobile has no horizontal overflow and the primary action is in normal flow without control overlap. Reviewed screenshots are under `artifacts/previews/`.
+
+Command: submit `artifacts/phase9/topoforge-web-http-smoke-input.tif` through `http://127.0.0.1:8765/api/v1/jobs`, poll to completion, download `model_3mf`, compare SHA-256, and strict-read it.
+
+Result: version 0.8.0; job `60b2eda379a54935a27dce9080d7d5ff`; source/build/layout/extract/mesh/connect ready; exit 0; progress 1.0; 22 artifacts; 7 events. Downloaded 3MF is 16,443 bytes, SHA-256 `6a237cfd4adfaf0f9eb44ed8c2ebb6b584a8ac2603d47d6c5c35527ba6064ce4`, 1,276 triangles, 40 x 32 x 20 mm, and zero strict warnings.
+
+Command: run npm typecheck/test/build/test:ui; Ruff, format, Pyright, uv lock, Git whitespace, full Pytest; reference definitions; two-run benchmarks; fixed-epoch double sdist/wheel builds; and installed release verification.
+
+Result: Ruff clean; 160 files formatted; Pyright 0 errors; Pytest 204 passed in 79.85 s; Vitest 6 passed; Playwright 2 passed; seven reference definitions with zero network attempts; all three benchmark cases repeat six roles byte-for-byte. Final sdist and wheel repeat byte-for-byte at SHA-256 `06486fc724c1816469c3c8974cd267c690795ff1b6c8f471f4cbd38049be4cb9` and `b58fab195c18c22a191cd57ec4891ca1ad86e954a1887c1bd98712deb2f6430c`. Fresh install imports outside the checkout and passes doctor, `web --check`, build, and strict 3MF inspection.

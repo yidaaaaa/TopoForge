@@ -1850,6 +1850,61 @@ def build_global(
         _fail(exc)
 
 
+@app.command("web")
+def web_application(
+    host: Annotated[
+        str,
+        typer.Option(help="Loopback bind address; public interfaces are rejected."),
+    ] = "127.0.0.1",
+    port: Annotated[int, typer.Option(min=1, max=65535)] = 8765,
+    workspace_root: Annotated[
+        Path,
+        typer.Option(help="Parent directory for Web-created workflow workspaces."),
+    ] = Path("topoforge-workspaces"),
+    state_dir: Annotated[
+        Path,
+        typer.Option(help="Durable local job records and worker logs."),
+    ] = Path("~/.topoforge/web"),
+    input_root: Annotated[
+        list[Path] | None,
+        typer.Option(help="Repeat to expose explicit local input directories."),
+    ] = None,
+    max_concurrent_jobs: Annotated[
+        int,
+        typer.Option(min=1, max=4, help="Bounded number of isolated workflow processes."),
+    ] = 1,
+    open_browser: Annotated[
+        bool,
+        typer.Option("--open/--no-open", help="Open the local application in a browser."),
+    ] = True,
+    check: Annotated[
+        bool,
+        typer.Option("--check", help="Verify the installed Web application without serving."),
+    ] = False,
+) -> None:
+    """Launch the bilingual local terrain application."""
+    try:
+        from topoforge.web import WebAppConfig, run_web_server, verify_web_installation
+
+        config = WebAppConfig(
+            state_dir=state_dir,
+            workspace_root=workspace_root,
+            input_roots=tuple(input_root or (Path.cwd(),)),
+            max_concurrent_jobs=max_concurrent_jobs,
+        )
+        if check:
+            _emit(verify_web_installation(config))
+            return
+        run_web_server(
+            config,
+            host=host,
+            port=port,
+            open_browser=open_browser,
+        )
+    except (ImportError, TopoForgeError, ValueError, OSError) as exc:
+        _fail(exc)
+
+
 @app.command()
 def doctor() -> None:
     """Report the exact local runtime and external manufacturing tools."""

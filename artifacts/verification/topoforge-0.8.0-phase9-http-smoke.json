@@ -1,0 +1,48 @@
+{
+  "artifact_count": 22,
+  "base_url": "http://127.0.0.1:8765",
+  "download": {
+    "artifact_id": "model_3mf",
+    "bytes": 16443,
+    "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/phase9/topoforge-web-http-smoke-model.3mf",
+    "record_sha256": "6a237cfd4adfaf0f9eb44ed8c2ebb6b584a8ac2603d47d6c5c35527ba6064ce4",
+    "sha256": "6a237cfd4adfaf0f9eb44ed8c2ebb6b584a8ac2603d47d6c5c35527ba6064ce4"
+  },
+  "event_count": 7,
+  "exit_code": 0,
+  "job_id": "60b2eda379a54935a27dce9080d7d5ff",
+  "observed_states": [
+    "running",
+    "completed"
+  ],
+  "progress_fraction": 1.0,
+  "ready_stages": [
+    "source",
+    "build",
+    "layout",
+    "extract",
+    "mesh",
+    "connect"
+  ],
+  "required_checks_passed": true,
+  "schema_version": "topoforge-phase9-http-smoke-v1",
+  "source": {
+    "path": "/root/autodl-tmp/bambu/TopoForge/artifacts/phase9/topoforge-web-http-smoke-input.tif",
+    "sha256": "28a148c5704f3fe48ce1bc37c2672cd6c3b704a9da97fdc956d47f527b89a7b8"
+  },
+  "terminal_state": "completed",
+  "topoforge_version": "0.8.0",
+  "validation": {
+    "expected_stages": [
+      "source",
+      "build",
+      "layout",
+      "extract",
+      "mesh",
+      "connect"
+    ],
+    "normalized_aoi": null,
+    "valid": true,
+    "workspace": "/tmp/topoforge-phase9-ui-workspaces/http-smoke-0.8.0-v1"
+  }
+}

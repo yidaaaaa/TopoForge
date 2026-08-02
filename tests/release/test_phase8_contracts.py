@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import io
+import json
 import tarfile
 import zipfile
 from pathlib import Path
@@ -10,7 +12,7 @@ from scripts.run_benchmarks import terrain_triangle_count
 from scripts.verify_reference_regions import verify_reference_catalog
 from scripts.verify_release import inspect_sdist, inspect_wheel
 
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 
 
 def _required_sdist_files() -> set[str]:
@@ -23,12 +25,20 @@ def _required_sdist_files() -> set[str]:
         "benchmarks/baseline.json",
         "pyproject.toml",
         "reference_regions/catalog.yaml",
+        "scripts/rollback-topoforge-0.8.0.sh",
         "scripts/run_benchmarks.py",
         "scripts/verify_reference_regions.py",
         "scripts/verify_release.py",
         "src/topoforge/__init__.py",
+        "src/topoforge/web/static/asset-manifest.json",
+        "src/topoforge/web/static/index.html",
         "tests/release/test_phase8_contracts.py",
+        "tests/web/test_api.py",
         "uv.lock",
+        "web/package-lock.json",
+        "web/package.json",
+        "web/src/App.tsx",
+        "web/tests/workspace.spec.ts",
     }
 
 
@@ -60,6 +70,20 @@ def _write_wheel(path: Path) -> None:
         archive.writestr(f"{dist_info}/licenses/LICENSE", "Apache-2.0")
         archive.writestr(f"{dist_info}/licenses/DATA_LICENSES.md", "dataset terms")
         archive.writestr(f"{dist_info}/licenses/THIRD_PARTY_NOTICES.md", "notices")
+        index = b"<!doctype html><title>TopoForge</title>\n"
+        manifest = {
+            "schema_version": "topoforge-web-assets-v1",
+            "assets": ["index.html"],
+            "languages": ["zh-CN", "en"],
+            "frameworks": ["React", "MapLibre", "Three.js"],
+            "sha256": {"index.html": hashlib.sha256(index).hexdigest()},
+            "sizes": {"index.html": len(index)},
+        }
+        archive.writestr("topoforge/web/static/index.html", index)
+        archive.writestr(
+            "topoforge/web/static/asset-manifest.json",
+            json.dumps(manifest, sort_keys=True) + "\n",
+        )
 
 
 def test_release_archive_contracts_reject_private_generated_content(tmp_path: Path) -> None:
@@ -79,6 +103,7 @@ def test_wheel_metadata_and_license_contract(tmp_path: Path) -> None:
     report = inspect_wheel(wheel, VERSION)
     assert report["metadata"]["License-Expression"] == "Apache-2.0"
     assert len(report["license_files"]) == 3
+    assert report["web"]["languages"] == ["zh-CN", "en"]
 
 
 def test_reference_catalog_normalizes_without_retained_data() -> None:

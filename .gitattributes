@@ -1,1 +1,3 @@
 artifacts/patches/*.patch -whitespace
+src/topoforge/web/static/assets/*.css -whitespace
+src/topoforge/web/static/assets/*.js -whitespace

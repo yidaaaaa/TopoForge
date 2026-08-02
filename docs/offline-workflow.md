@@ -1,6 +1,6 @@
 # Offline Local Workflow
 
-TopoForge 0.6.0 can configure, run, inspect, back up, restore, resume, and add checksum-bound local overlays without an API or Web server. A new global AOI still needs either network access or every required provider request already present in the content-addressed cache.
+TopoForge 0.8.0 CLI can configure, run, inspect, back up, restore, resume, and add checksum-bound local overlays without starting the optional Web server. A new global AOI still needs either network access or every required provider request already present in the content-addressed cache.
 
 ## Prepare the locked environment
 
@@ -84,4 +84,4 @@ Restore rejects an existing destination, verifies paths/CRCs/sizes/SHA-256 value
 
 - Physical connector calibration and real printing are deferred and do not block local software use.
 - `self_intersection_status` remains `not_fully_checked`; Phase 6 did not promote a backend with unsuitable accuracy, licensing, or resource behavior.
-- API/Web is deferred Phase 9. Local commands call the Python core directly and do not need a service, queue, database, authentication layer, or listener.
+- The optional Phase 9 WebUI packages its assets locally and binds only to loopback. CLI workflows still call the Python core directly and do not need the Web service. Uncached global AOIs and the optional OpenStreetMap layer remain the only network-dependent paths.

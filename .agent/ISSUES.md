@@ -299,3 +299,11 @@
 - **Reproduction:** Install only `topoforge-0.7.0-py3-none-any.whl` with `uv pip install --offline` in an empty environment; lib3mf and other platform wheels are unavailable.
 - **Expected behavior:** Offline instructions distinguish the project wheel from a complete same-platform dependency wheelhouse.
 - **Resolution:** `docs/release.md` provides connected wheelhouse creation, SHA-256 verification, `--no-index --find-links` installation, platform matching, upgrade, and rollback. The verified platform is Linux x86_64 / CPython 3.12; other targets require separate release evidence.
+
+## TF-036 — Local use lacked a complete bilingual graphical workflow surface
+
+- **Severity:** Medium
+- **Status:** Resolved in 0.8.0
+- **Reproduction:** Before Phase 9, use `topoforge wizard`, `run`, and `browse`; configuration and reports work locally, but there is no live AOI map, persistent job queue, cancellation UI, GLB canvas, or unified artifact panel.
+- **Expected behavior:** A one-command, loopback-only Chinese/English application validates the same workflow contract, runs isolated recoverable jobs, exposes measured progress/errors/artifacts, and does not duplicate or weaken the manufacturing core.
+- **Resolution:** Added typed durable Web contracts, isolated subprocess workers, constrained FastAPI routes, strict configuration/static/artifact checks, React controls, MapLibre AOI interaction, Three.js orientation-aware preview, responsive desktop/mobile layouts, browser pixel/overlap tests, real HTTP completion/download evidence, packaged assets, CI, reproducible archives, installed smoke, and rollback.

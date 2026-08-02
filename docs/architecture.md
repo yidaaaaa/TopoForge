@@ -2,7 +2,7 @@
 
 ## Boundary and units
 
-TopoForge has one Python core used by CLI and future API/worker/Web adapters. Geospatial coordinates and elevation values use metres with an explicit CRS. Manufacturing vertices use millimetres. Interfaces select configuration; they do not duplicate raster, scaling, mesh, export, or validation logic.
+TopoForge has one Python core used by the CLI, isolated workers, loopback API, and Web application. Geospatial coordinates and elevation values use metres with an explicit CRS. Manufacturing vertices use millimetres. Interfaces select configuration; they do not duplicate raster, scaling, mesh, export, or validation logic.
 
 ## Phase 1/2 build pipeline
 
@@ -98,6 +98,28 @@ verified build bundle + local OverlayConfig
 
 The overlay stage identity includes the source build manifest, complete overlay settings, and every local source SHA-256. Workflow backup/restore includes referenced external overlay files. Strict reuse reopens all STL, 3MF, GLB, PNG, JSON, YAML, source hashes, terrain hashes, assembly counts, and material assignments.
 
+Phase 9 adds a local Web adapter over the same saved launch and workflow execution path:
+
+```text
+Chinese/English React form + MapLibre AOI + Three.js GLB viewer
+  -> typed FastAPI request and AOI/job validation
+  -> workspace/input-root containment
+  -> durable request.json + job.json + monotonic events.jsonl
+  -> bounded LocalJobManager queue
+  -> isolated `python -m topoforge.web.worker` child process
+  -> existing execute_workflow_launch() and content-addressed core stages
+  -> strict workflow workspace reopen
+  -> checksum-bound artifact inventory and downloads
+  -> persistent completed/failed/cancelled state and recovery after server restart
+```
+
+The listener accepts only loopback addresses and trusted local host headers. Static
+production assets are bundled below `topoforge.web`, verified against a SHA-256/size
+manifest before application creation, and served with a restrictive content security
+policy. The default map is offline; enabling the OpenStreetMap layer affects only visual
+context. Browser choices do not modify terrain semantics, source resolution, orientation,
+or manufacturing geometry.
+
 ## Package responsibilities
 
 - `models` and `config`: external validation, units, semantics, printer profiles, resolved YAML.
@@ -114,6 +136,7 @@ The overlay stage identity includes the source build manifest, complete overlay 
 - `providers`: normalized-AOI provider contracts, explainable deterministic selection/fetch fallback, Copernicus AWS catalog/tile/ancillary-mask planning, content-addressed objects/request indexes, bounded HTTP transport, source-footprint reprojection, and capability registry.
 - `geocoding`: cached Nominatim-compatible candidate search and explicit ambiguity resolution; selected candidates become ordinary recorded AOIs before provider selection.
 - `tiling`: versioned deterministic layout/extraction, numerical and mesh seam measurement, global-frame assembly, printer-derived connectors, reversible print-local placement, actual per-tile slicer evidence, deterministic maps/previews, complete SHA-256 binding, canonical JSON, and atomic publication. Overlap halos remain evidence rather than duplicate solids; terrain tops remain unchanged by base-only connector booleans.
+- `web`: typed loopback API, strict local path boundaries, persistent isolated job workers, cancellation/recovery, checksum-verified artifact serving, packaged React assets, and no manufacturing-algorithm duplication.
 - `overlays`: strict local GPX/GeoJSON and DEM-contour sources, CRS transformation, exact terrain-triangle surface mapping, NoData/minimum-feature/resource gates, deterministic label geometry, independent watertight meshes, components-assembly 3MF, colored preview artifacts, provenance, validation, and strict reuse.
 
 ## Geometry topology
@@ -128,4 +151,4 @@ The interoperable 3MF path adds official lib3mf strict read with zero warnings, 
 
 ## Extension sequence
 
-The local/resolved-place AOI, provider/cache path, printer-aware manufacturing core, Phase 5 manufacturing tiling, Phase 6 single-workstation workflow, and Phase 7 local overlay contracts are complete. Physical connector calibration is retained as deferred, non-blocking evidence. Phase 8 now covers packaging, CI, benchmarks, reference regions, and offline release hardening. Worker-backed FastAPI and Web/MapLibre/Three.js remain deferred Phase 9 and must still call the same Python core when implemented.
+The local/resolved-place AOI, provider/cache path, printer-aware manufacturing core, Phase 5 manufacturing tiling, Phase 6 single-workstation workflow, Phase 7 local overlays, Phase 8 release hardening, and Phase 9 worker-backed bilingual local Web application are complete. Physical connector calibration remains deferred and non-blocking. Future work may add optional map-tile/assembly visualization or remote deployment contracts, but those must continue to call the same Python core.

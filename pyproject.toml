@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "topoforge"
-version = "0.7.0"
+version = "0.8.0"
 description = "Reproducible, provenance-aware terrain models for additive manufacturing"
 readme = "README.md"
 license = "Apache-2.0"
@@ -20,6 +20,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: GIS",
 ]
 dependencies = [
+  "fastapi>=0.116,<1",
   "lib3mf==2.5.0",
   "numpy>=2.1,<2.5",
   "pillow>=11,<12",
@@ -31,11 +32,13 @@ dependencies = [
   "shapely>=2.0,<3",
   "trimesh[easy]>=4.6,<5",
   "typer>=0.15,<1",
+  "uvicorn>=0.35,<1",
 ]
 
 [dependency-groups]
 dev = [
   "hypothesis>=6.125,<7",
+  "httpx2>=2,<3",
   "pyright>=1.1.395,<2",
   "pytest>=8.3,<9",
   "pytest-cov>=6,<7",
@@ -59,6 +62,7 @@ include = [
   "/scripts",
   "/src",
   "/tests",
+  "/web",
   "/CITATION.cff",
   "/CODE_OF_CONDUCT.md",
   "/CONTRIBUTING.md",
@@ -73,6 +77,9 @@ include = [
 exclude = [
   "**/__pycache__",
   "**/*.pyc",
+  "/web/node_modules",
+  "/web/playwright-report",
+  "/web/test-results",
 ]
 
 [tool.pytest.ini_options]
