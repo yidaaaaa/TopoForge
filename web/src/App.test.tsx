@@ -341,6 +341,58 @@ describe("TopoForge bilingual workspace", () => {
     );
   });
 
+  it("searches and filters retained jobs with bilingual result counts", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.endsWith("/api/v1/health")) {
+          return response(health);
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10/maintenance")) {
+          return response(maintenanceOverview);
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10/map/manifest")) {
+          return response(mapManifest);
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10/assembly")) {
+          return response(assembly);
+        }
+        if (path.endsWith("/api/v1/jobs")) {
+          return response([completedJob, cancelledJob, failedJob]);
+        }
+        return response({});
+      }),
+    );
+
+    render(<App />);
+    expect(await screen.findByLabelText("可见任务数")).toHaveTextContent("3/3");
+
+    const search = screen.getByRole("searchbox", { name: "搜索任务" });
+    fireEvent.change(search, { target: { value: "failed-project" } });
+    expect(screen.getByLabelText("可见任务数")).toHaveTextContent("1/3");
+    expect(screen.getByText("failed-project")).toBeInTheDocument();
+    expect(screen.queryByText("cancelled-project")).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: "no-such-job" } });
+    expect(screen.getByText("没有匹配的任务")).toBeInTheDocument();
+    expect(screen.getByLabelText("可见任务数")).toHaveTextContent("0/3");
+
+    fireEvent.change(search, { target: { value: "" } });
+    const filter = screen.getByRole("combobox", { name: "筛选任务状态" });
+    fireEvent.change(filter, { target: { value: "cancelled" } });
+    expect(screen.getByLabelText("可见任务数")).toHaveTextContent("1/3");
+    expect(screen.getByText("cancelled-project")).toBeInTheDocument();
+    expect(screen.queryByText("failed-project")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    expect(screen.getByRole("searchbox", { name: "Search jobs" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Filter job status" }),
+    ).toHaveValue("cancelled");
+    expect(screen.getByLabelText("Visible jobs")).toHaveTextContent("1/3");
+  });
+
   it("removes terminal job records and optionally deletes project files", async () => {
     let jobs = [cancelledJob, failedJob];
     const deletionBodies: unknown[] = [];

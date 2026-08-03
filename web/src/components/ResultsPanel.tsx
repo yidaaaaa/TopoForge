@@ -8,10 +8,11 @@ import {
   ListX,
   RefreshCw,
   RotateCcw,
+  Search,
   Square,
   Trash2,
 } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { formatBytes } from "../config";
 import {
@@ -56,6 +57,19 @@ function artifactLabel(role: string): string {
   return role.replaceAll("_", " ");
 }
 
+
+type JobStatusFilter = "all" | "active" | "completed" | "failed" | "cancelled";
+
+function matchesStatus(job: JobRecord, filter: JobStatusFilter): boolean {
+  if (filter === "all") {
+    return true;
+  }
+  if (filter === "active") {
+    return ["queued", "running", "cancelling"].includes(job.state);
+  }
+  return job.state === filter;
+}
+
 export function ResultsPanel({
   language,
   jobs,
@@ -80,6 +94,21 @@ export function ResultsPanel({
     dateStyle: "medium",
     timeStyle: "short",
   });
+  const [jobQuery, setJobQuery] = useState("");
+  const [jobStatusFilter, setJobStatusFilter] = useState<JobStatusFilter>("all");
+  const filteredJobs = useMemo(() => {
+    const query = jobQuery.trim().toLocaleLowerCase(language);
+    return jobs.filter((job) => {
+      if (!matchesStatus(job, jobStatusFilter)) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      const workspaceName = job.workspace_dir.split("/").at(-1) ?? job.workspace_dir;
+      return `${workspaceName} ${job.job_id}`.toLocaleLowerCase(language).includes(query);
+    });
+  }, [jobQuery, jobStatusFilter, jobs, language]);
 
   return (
     <aside className="results-panel" aria-label={t("tabResults")}>
@@ -96,9 +125,43 @@ export function ResultsPanel({
         </button>
       </div>
 
+      <div className="job-tools">
+        <label className="job-search">
+          <Search size={14} aria-hidden="true" />
+          <input
+            type="search"
+            value={jobQuery}
+            onChange={(event) => setJobQuery(event.target.value)}
+            aria-label={t("searchJobs")}
+            placeholder={t("searchJobs")}
+          />
+        </label>
+        <select
+          value={jobStatusFilter}
+          onChange={(event) => setJobStatusFilter(event.target.value as JobStatusFilter)}
+          aria-label={t("filterJobs")}
+        >
+          <option value="all">{t("filterAll")}</option>
+          <option value="active">{t("filterActive")}</option>
+          <option value="completed">{t("filterCompleted")}</option>
+          <option value="failed">{t("filterFailed")}</option>
+          <option value="cancelled">{t("filterCancelled")}</option>
+        </select>
+        <span
+          className="job-count"
+          aria-label={t("visibleJobs")}
+          title={t("visibleJobs")}
+        >
+          {filteredJobs.length}/{jobs.length}
+        </span>
+      </div>
+
       <div className="job-list">
         {jobs.length === 0 && <div className="empty-state">{t("noJobs")}</div>}
-        {jobs.map((job) => {
+        {jobs.length > 0 && filteredJobs.length === 0 && (
+          <div className="empty-state compact">{t("noMatchingJobs")}</div>
+        )}
+        {filteredJobs.map((job) => {
           const stageTranslation = stageKey(job.current_stage);
           return (
             <button

@@ -22,7 +22,7 @@ Open `http://127.0.0.1:8765/`. The header switches the complete interface betwee
 Chinese and English. The first screen is the working application: local DEM, bbox, or
 center-radius source selection; print-aware/source-preserving/custom sampling; resource
 budgets; tiling; optional overlays and slicing; MapLibre AOI plus processed DEM terrain/elevation/hillshade layers; synchronized 2D/3D tile assembly; isolated job
-progress/cancellation; Three.js GLB inspection; metrics; and checksum-bound artifacts.
+progress/cancellation; bilingual job search and status filtering with visible-result counts; Three.js GLB inspection; metrics; and checksum-bound artifacts.
 
 The server accepts only loopback hosts. Local file browsing is limited to explicit
 `--input-root` directories, Web-created workflows must be children of

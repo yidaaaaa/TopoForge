@@ -1056,6 +1056,72 @@ input:checked + .toggle::after {
   border-bottom: 1px solid var(--line);
 }
 
+.job-tools {
+  position: sticky;
+  z-index: 2;
+  top: 44px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px 36px;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #f8faf9;
+  border-bottom: 1px solid var(--line);
+}
+
+.job-search {
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.job-search svg {
+  position: absolute;
+  left: 9px;
+  color: #71817d;
+  pointer-events: none;
+}
+
+.job-search input,
+.job-tools select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  color: #263638;
+  background: #ffffff;
+  border: 1px solid #cbd6d3;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 11px;
+}
+
+.job-search input {
+  padding: 0 8px 0 29px;
+}
+
+.job-tools select {
+  padding: 0 24px 0 7px;
+}
+
+.job-search input:focus,
+.job-tools select:focus {
+  outline: 2px solid rgb(15 118 110 / 22%);
+  border-color: var(--accent);
+}
+
+.job-count {
+  min-width: 36px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: #536661;
+  background: #eef3f1;
+  border: 1px solid #d2ddda;
+  border-radius: 4px;
+  font: 700 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
 .job-list {
   border-bottom: 1px solid var(--line);
 }

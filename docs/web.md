@@ -46,7 +46,7 @@ English. Both versions expose the same controls and results:
 - optional OpenStreetMap raster tiles when the operator enables the online basemap;
 - model dimensions, sampling mode, mesh spacing, and adapt/strict resource budgets;
 - deterministic tile size, overlap, overlay YAML, slicing, and Bambu project settings;
-- persistent jobs, progress events, cancellation, structured failures, and corrective text;
+- persistent jobs, progress events, cancellation, bilingual workspace/id search, all/active/completed/failed/cancelled filters, visible-result counts, structured failures, and corrective text;
 - measured workflow metrics and checksum-bound artifact downloads;
 - measured local-project storage, reclaimable old stages, deterministic backup creation and download, exact-identity cleanup, and atomic restore as a newly registered completed job;
 - 2D physical assembly with tile labels, connectors, and a North marker;

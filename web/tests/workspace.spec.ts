@@ -250,6 +250,19 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
     page.getByRole("heading", { name: basename(completedJob.workspace_dir) }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "开始构建" })).toBeVisible();
+  const jobSearch = page.getByRole("searchbox", { name: "搜索任务" });
+  const jobFilter = page.getByRole("combobox", { name: "筛选任务状态" });
+  const visibleJobs = page.getByLabel("可见任务数");
+  await expect(jobSearch).toBeVisible();
+  await expect(jobFilter).toHaveValue("all");
+  await jobSearch.fill(basename(completedJob.workspace_dir));
+  await expect(visibleJobs).toHaveText(/1\/\d+/);
+  await expect(
+    page.getByRole("button", {
+      name: new RegExp(basename(completedJob.workspace_dir)),
+    }),
+  ).toBeVisible();
+  await jobSearch.fill("");
   await page.setViewportSize({ width: 1365, height: 758 });
   const controlPanel = page.locator(".control-panel");
   const verticalScale = page.getByRole("combobox", { name: "垂直缩放" });

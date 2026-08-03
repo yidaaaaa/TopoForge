@@ -10,10 +10,10 @@
     "Three.js"
   ],
   "assets": [
-    "assets/AssemblyPanel-DglG29yd.js",
-    "assets/TerrainPreview-DtCJM5jI.js",
-    "assets/index-D5n9ilMB.css",
-    "assets/index-DtW9qQot.js",
+    "assets/AssemblyPanel-DhIKSw4P.js",
+    "assets/TerrainPreview-DwC8UKGN.js",
+    "assets/index-B7f22n6Z.js",
+    "assets/index-BNxvrjyx.css",
     "assets/maplibre-CIJcTNu8.js",
     "assets/maplibre-DNVN2dqC.css",
     "assets/react-a9urCwlR.js",
@@ -21,21 +21,21 @@
     "index.html"
   ],
   "sha256": {
-    "assets/AssemblyPanel-DglG29yd.js": "9cf7dba85f5f8ba42bf00d60f8d8f270454debea86b47f76be82bcac22fb17e6",
-    "assets/TerrainPreview-DtCJM5jI.js": "02af120c6cd134db1f8c1f15e526f3ae7f2ed4f5cffadfc07efcf399723ad188",
-    "assets/index-D5n9ilMB.css": "65c65a1bcd886f40c71a0ffa7d69b6a614c07fdf93b58e0c8f81b8f39608ea5e",
-    "assets/index-DtW9qQot.js": "6aa64bce90605f9f3881d1f50b2eb03ed17e0a16afbd672e887a5686b9527a7d",
+    "assets/AssemblyPanel-DhIKSw4P.js": "0c8c07a0d89aae73df8d3b1984187561ec13048b6ffce856b631e9dcfc9defbf",
+    "assets/TerrainPreview-DwC8UKGN.js": "692283eb0968c8c61de34e4f31790d102f55c765e980d3ebbd54e3d4ea1327db",
+    "assets/index-B7f22n6Z.js": "9786af054038b9ef5736f776fb6d7c941ea90a92830645e19d9017c848983f75",
+    "assets/index-BNxvrjyx.css": "c1c367c7d7142e04f019691ceec35c0943a3310aa54d5702f7b8ea0a8148c16c",
     "assets/maplibre-CIJcTNu8.js": "872eb16b4f54fbbc07a4e1eda9670bad675d25e8bd90375e8facb236ee30911c",
     "assets/maplibre-DNVN2dqC.css": "768b9ff0c135536afbbee9f20232ac261e8b2b89ce60a29f838024be9dd172e3",
     "assets/react-a9urCwlR.js": "6dddba3e7a8f8ef0627f8cb4d147697f443d68adb9fb502f4f7c6fba90047f8a",
     "assets/three-BiQEg9UT.js": "4f4aab1a86efe8b9e1a63776e33a84cba434e21dbaacfc125edd0409fd06e0e5",
-    "index.html": "7a51094d91f239f9a4c6aecbcd2d12d82b585afddb2009aabce917cc56b28405"
+    "index.html": "3d873b83ea3e0c0df374b3bc891bcf5812133b22b1f2ee4f8eb9e468d36343ae"
   },
   "sizes": {
-    "assets/AssemblyPanel-DglG29yd.js": 11181,
-    "assets/TerrainPreview-DtCJM5jI.js": 6685,
-    "assets/index-D5n9ilMB.css": 21592,
-    "assets/index-DtW9qQot.js": 165736,
+    "assets/AssemblyPanel-DhIKSw4P.js": 11181,
+    "assets/TerrainPreview-DwC8UKGN.js": 6685,
+    "assets/index-B7f22n6Z.js": 167594,
+    "assets/index-BNxvrjyx.css": 22512,
     "assets/maplibre-CIJcTNu8.js": 1052931,
     "assets/maplibre-DNVN2dqC.css": 69918,
     "assets/react-a9urCwlR.js": 192456,
