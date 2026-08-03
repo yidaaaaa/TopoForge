@@ -50,7 +50,13 @@ The delivered reference uses real Copernicus DEM GLO-30 terrain for Mount Gongga
 - Independent reopen: no external settings or filament files; `return_code=0`, `Success.`, empty structured warning
 - Full record: `outputs/gongga-copernicus-glo30-bambu-p2s/bambu_studio_validation.json`
 
-The 3MF ZIP test, embedded G-code MD5, embedded-versus-external G-code bytes, embedded resolved settings, P2S firmware scripts, build-volume placement, and both structured slicing results are checked. This evidence is a software validation record, not a completed physical print or vendor certification.
+The 3MF ZIP test, embedded G-code MD5, embedded-versus-external G-code bytes, embedded resolved settings, P2S firmware scripts, build-volume placement, and both structured slicing results are checked. This specific evidence remains a software validation record.
+
+## Real-world print status
+
+The project operator has physically printed several TopoForge terrain models on a Bambu Lab P2S and reported very good results for all of them. This is qualitative end-to-end printability evidence.
+
+Exact print settings, model identities, photos, dimensional measurements, and connector-fit measurements were not published. Connector tolerances therefore remain software-validated rather than quantitatively calibrated, and the report is not vendor certification.
 
 ## Artifact roles
 

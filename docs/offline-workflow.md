@@ -82,6 +82,6 @@ Restore rejects an existing destination, verifies paths/CRCs/sizes/SHA-256 value
 
 ## Boundaries
 
-- Physical connector calibration and real printing are deferred and do not block local software use.
+- Several TopoForge terrain models have been physically printed on a Bambu Lab P2S with very good operator-reported results; quantitative connector calibration remains pending and does not block local software use.
 - `self_intersection_status` remains `not_fully_checked`; Phase 6 did not promote a backend with unsuitable accuracy, licensing, or resource behavior.
 - The optional Phase 11 WebUI packages its assets locally and binds only to loopback. Local DEM XYZ tiles and assembly views remain same-origin and deterministic. CLI workflows still call the Python core directly and do not need the Web service. Uncached global AOIs and the optional OpenStreetMap layer remain the only network-dependent paths.

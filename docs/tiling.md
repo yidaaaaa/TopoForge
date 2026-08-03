@@ -176,4 +176,4 @@ The completed Gongga connector set has eight bottom dovetails over four seams, `
 
 ## Next contracts
 
-Phase 5 layout, extraction, seams, connectors, print-local transforms, actual per-tile slicing, and Bambu project roles are complete and frozen at TopoForge 0.4.0. Phase 6 now focuses on an easier resumable local software workflow. Physical calibration is retained but skipped for now. The Phase 9 local WebUI is complete, while manufacturing tiles remain distinct from future Web XYZ map tiles.
+Phase 5 layout, extraction, seams, connectors, print-local transforms, actual per-tile slicing, and Bambu project roles are complete and frozen at TopoForge 0.4.0. Several whole terrain models have since been physically printed on a Bambu Lab P2S with very good operator-reported results. Quantitative connector calibration remains pending. The Phase 9 local WebUI is complete, while manufacturing tiles remain distinct from Web XYZ map tiles.
