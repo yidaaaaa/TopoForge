@@ -158,7 +158,7 @@ async function createCompletedLifecycleJob(
       launch: {
         workspace_dir: workspace,
         build: {
-          dem_path: "/tmp/topoforge-playwright-input-v0.10.0.tif",
+          dem_path: "/tmp/topoforge-playwright-input-v0.10.1.tif",
           output_dir: workspace,
           model_width_mm: 64,
           model_depth_mm: null,

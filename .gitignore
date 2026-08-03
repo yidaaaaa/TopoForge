@@ -1,4 +1,8 @@
 /.venv/
+/.agent/
+/.agents/
+/.codex/
+/AGENTS.md
 /.ruff_cache/
 /.pytest_cache/
 /.mypy_cache/
@@ -29,3 +33,4 @@ artifacts/logs/*
 !tests/**/fixtures/*.tif
 !examples/synthetic/*.tif
 /result.json
+/artifacts/verification/topoforge-main-*.json

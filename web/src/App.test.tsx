@@ -27,7 +27,7 @@ import App from "./App";
 
 const health = {
   status: "ok",
-  version: "0.10.0",
+  version: "0.10.1",
   loopback_only: true,
   languages: ["zh-CN", "en"],
   workspace_root: "/tmp/workspaces",
@@ -244,7 +244,7 @@ describe("TopoForge bilingual workspace", () => {
     render(<App />);
     expect(screen.getByText("本地地形制造工作台")).toBeInTheDocument();
     expect(screen.getByTestId("map-panel")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("v0.10.0")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("v0.10.1")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "开始构建" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "EN" }));

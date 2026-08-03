@@ -13,7 +13,7 @@ from scripts.run_benchmarks import terrain_triangle_count
 from scripts.verify_reference_regions import verify_reference_catalog
 from scripts.verify_release import inspect_sdist, inspect_wheel
 
-VERSION = "0.10.0"
+VERSION = "0.10.1"
 
 
 def _required_sdist_files() -> set[str]:
@@ -27,8 +27,9 @@ def _required_sdist_files() -> set[str]:
         "benchmarks/baseline.json",
         "pyproject.toml",
         "reference_regions/catalog.yaml",
-        "scripts/rollback-topoforge-0.10.0.sh",
+        "scripts/rollback-topoforge-0.10.1.sh",
         "scripts/run_benchmarks.py",
+        "scripts/verify_public_tree.py",
         "scripts/verify_reference_regions.py",
         "scripts/verify_phase11_lifecycle.py",
         "scripts/verify_release.py",
@@ -36,6 +37,7 @@ def _required_sdist_files() -> set[str]:
         "src/topoforge/web/static/asset-manifest.json",
         "src/topoforge/web/static/index.html",
         "tests/release/test_phase8_contracts.py",
+        "tests/release/test_public_tree.py",
         "tests/web/test_api.py",
         "tests/web/test_jobs.py",
         "tests/web/test_map_tiles.py",
@@ -100,13 +102,18 @@ def _write_wheel(path: Path) -> None:
         )
 
 
-def test_release_archive_contracts_reject_private_generated_content(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "forbidden_member", [".agent/STATE.md", ".codex/settings.json", "AGENTS.md"]
+)
+def test_release_archive_contracts_reject_private_generated_content(
+    tmp_path: Path, forbidden_member: str
+) -> None:
     clean = tmp_path / f"topoforge-{VERSION}.tar.gz"
     _write_sdist(clean)
     assert inspect_sdist(clean, VERSION)["forbidden_member_count"] == 0
 
     forbidden = tmp_path / f"topoforge-{VERSION}-bad.tar.gz"
-    _write_sdist(forbidden, forbidden=".agent/STATE.md")
+    _write_sdist(forbidden, forbidden=forbidden_member)
     with pytest.raises(ValueError, match="forbidden"):
         inspect_sdist(forbidden, VERSION)
 

@@ -403,13 +403,14 @@ def _backup_identity_payload(
     *,
     workflow_id: str,
     original_workspace: Path,
+    topoforge_version: str,
     files: tuple[WorkflowBackupFile, ...],
 ) -> dict[str, object]:
     return {
         "schema_version": _BACKUP_SCHEMA_VERSION,
         "workflow_id": workflow_id,
         "original_workspace": str(original_workspace),
-        "topoforge_version": __version__,
+        "topoforge_version": topoforge_version,
         "files": [item.model_dump(mode="json") for item in files],
         "required_checks_passed": True,
     }
@@ -508,6 +509,7 @@ def create_workflow_backup(workspace_dir: Path, archive_path: Path) -> WorkflowB
     identity_payload = _backup_identity_payload(
         workflow_id=summary.workflow_id,
         original_workspace=root,
+        topoforge_version=__version__,
         files=records,
     )
     manifest = WorkflowBackupManifest(
@@ -583,6 +585,7 @@ def verify_workflow_backup(archive_path: Path) -> WorkflowBackupManifest:
     identity_payload = _backup_identity_payload(
         workflow_id=manifest.workflow_id,
         original_workspace=manifest.original_workspace,
+        topoforge_version=manifest.topoforge_version,
         files=manifest.files,
     )
     if sha256_bytes(_canonical_json(identity_payload)) != manifest.backup_id:

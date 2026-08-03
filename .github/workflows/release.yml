@@ -87,6 +87,9 @@ jobs:
       - name: Install locked build dependencies
         if: steps.target.outputs.publish == 'true'
         run: uv sync --locked --all-groups
+      - name: Verify public source tree
+        if: steps.target.outputs.publish == 'true'
+        run: uv run python scripts/verify_public_tree.py
       - name: Build packaged Web application
         if: steps.target.outputs.publish == 'true'
         working-directory: web

@@ -1,6 +1,14 @@
 # Local release and offline installation
 
-TopoForge 0.10.0 is the Phase 11 local-use release. It adds bilingual local project storage, deterministic backup, identity-confirmed cleanup, checksum-bound download, atomic restore, restored-job registration, dynamic CI versioning, and automated GitHub Release assets while preserving the CLI, loopback FastAPI adapter, and React/MapLibre/Three.js application. It does not add a public deployment, authentication layer, database service, or remote multi-user contract.
+TopoForge 0.10.1 is a local-use patch over the Phase 11 release. It preserves the CLI, loopback FastAPI adapter, and bilingual React/MapLibre/Three.js application while adding Web vertical-scaling controls, validated Bambu Studio/P2S runtime injection, safe terminal-job deletion, deterministic stale-request cancellation, desktop/high-DPI display fixes, and an automated public-tree privacy gate. Generated terrain, downloads, local Web state, contributor-only state, and machine-local hotfix evidence are excluded from the release tree. It does not add a public deployment, authentication layer, database service, or remote multi-user contract.
+
+## 0.10.1 patch contents
+
+- Natural, fit-height, auto-perceptual, and custom vertical policies are selectable in both interface languages.
+- Bambu Studio and the complete P2S profile set are probed before a slicing job enters the queue and are propagated into isolated workers.
+- Completed, failed, and cancelled job records can be removed without deleting project files; project deletion remains separately confirmed.
+- Desktop controls stay within the viewport, high-DPI 3D views frame the entire model, and stale map/assembly reads cannot overwrite newer selections.
+- The public Git index and CI reject local runtime roots, contributor-only state, and machine-local verification records.
 
 ## Verified platform boundary
 
@@ -27,9 +35,9 @@ uv build --no-sources --out-dir dist/repeat
 uv run python scripts/verify_release.py \
   --primary-dir dist/primary \
   --repeat-dir dist/repeat \
-  --version 0.10.0 \
+  --version 0.10.1 \
   --install \
-  --report artifacts/logs/phase11-release-verification.json
+  --report artifacts/logs/topoforge-0.10.1-release-verification.json
 ```
 
 The verifier requires byte-identical sdist and wheel archives, bounded archive contents,
@@ -49,11 +57,11 @@ checksums. Existing Release pages are detected and skipped without replacing ass
 ## Connected installation
 
 ```bash
-python3.12 -m venv ~/.venvs/topoforge-0.10.0
-~/.venvs/topoforge-0.10.0/bin/python -m pip install \
-  /PATH/TO/topoforge-0.10.0-py3-none-any.whl
-~/.venvs/topoforge-0.10.0/bin/topoforge doctor
-~/.venvs/topoforge-0.10.0/bin/topoforge web --check --workspace-root /tmp/topoforge-workspaces --input-root . --no-open
+python3.12 -m venv ~/.venvs/topoforge-0.10.1
+~/.venvs/topoforge-0.10.1/bin/python -m pip install \
+  /PATH/TO/topoforge-0.10.1-py3-none-any.whl
+~/.venvs/topoforge-0.10.1/bin/topoforge doctor
+~/.venvs/topoforge-0.10.1/bin/topoforge web --check --workspace-root /tmp/topoforge-workspaces --input-root . --no-open
 ```
 
 ## Prepare an offline wheelhouse
@@ -63,24 +71,24 @@ On a connected machine matching the offline target:
 ```bash
 python3.12 -m venv /tmp/topoforge-wheelhouse-tools
 /tmp/topoforge-wheelhouse-tools/bin/python -m pip install --upgrade pip
-mkdir -p topoforge-0.10.0-wheelhouse
+mkdir -p topoforge-0.10.1-wheelhouse
 /tmp/topoforge-wheelhouse-tools/bin/python -m pip download \
-  --dest topoforge-0.10.0-wheelhouse \
-  /PATH/TO/topoforge-0.10.0-py3-none-any.whl
-sha256sum topoforge-0.10.0-wheelhouse/* > topoforge-0.10.0-wheelhouse/SHA256SUMS
-sha256sum -c topoforge-0.10.0-wheelhouse/SHA256SUMS
+  --dest topoforge-0.10.1-wheelhouse \
+  /PATH/TO/topoforge-0.10.1-py3-none-any.whl
+sha256sum topoforge-0.10.1-wheelhouse/* > topoforge-0.10.1-wheelhouse/SHA256SUMS
+sha256sum -c topoforge-0.10.1-wheelhouse/SHA256SUMS
 ```
 
 On the offline workstation:
 
 ```bash
-cd /PATH/TO/topoforge-0.10.0-wheelhouse
+cd /PATH/TO/topoforge-0.10.1-wheelhouse
 sha256sum -c SHA256SUMS
-python3.12 -m venv ~/.venvs/topoforge-0.10.0
-~/.venvs/topoforge-0.10.0/bin/python -m pip install \
-  --no-index --find-links . topoforge==0.10.0
-~/.venvs/topoforge-0.10.0/bin/topoforge doctor
-~/.venvs/topoforge-0.10.0/bin/topoforge web --check --workspace-root /tmp/topoforge-workspaces --input-root . --no-open
+python3.12 -m venv ~/.venvs/topoforge-0.10.1
+~/.venvs/topoforge-0.10.1/bin/python -m pip install \
+  --no-index --find-links . topoforge==0.10.1
+~/.venvs/topoforge-0.10.1/bin/topoforge doctor
+~/.venvs/topoforge-0.10.1/bin/topoforge web --check --workspace-root /tmp/topoforge-workspaces --input-root . --no-open
 ```
 
 A TopoForge wheel by itself is not an offline installation bundle. The wheelhouse must
@@ -91,23 +99,23 @@ contain every resolved platform dependency, especially lib3mf and the geospatial
 1. Run `topoforge backup WORKSPACE --output BACKUP.zip` for each active workflow.
 2. Keep the previous environment and wheelhouse until the new version passes
    `topoforge doctor` and a local smoke build.
-3. Install 0.10.0 into a new environment rather than mutating the old one.
+3. Install 0.10.1 into a new environment rather than mutating the old one.
 4. Resume or browse existing workspaces. Stage reuse remains checksum-bound.
 5. Generate new outputs in new directories; existing DEMs and bundles remain immutable.
 
 ## Rollback
 
-Installed CLI rollback keeps the 0.10.0 environment intact and switches back to 0.9.0:
+Installed CLI rollback keeps the 0.10.1 environment intact and switches back to 0.10.0:
 
 ```bash
-~/.venvs/topoforge-0.9.0/bin/topoforge doctor
-ln -sfn ~/.venvs/topoforge-0.9.0/bin/topoforge ~/.local/bin/topoforge
+~/.venvs/topoforge-0.10.0/bin/topoforge doctor
+ln -sfn ~/.venvs/topoforge-0.10.0/bin/topoforge ~/.local/bin/topoforge
 ```
 
 For a source checkout after the Phase 11 release commit and tag:
 
 ```bash
-scripts/rollback-topoforge-0.10.0.sh --confirm-rollback
+scripts/rollback-topoforge-0.10.1.sh --confirm-rollback
 ```
 
 Restore a workflow only from a checksum-verified backup:

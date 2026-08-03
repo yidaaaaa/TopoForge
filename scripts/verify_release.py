@@ -46,6 +46,8 @@ def inspect_sdist(path: Path, version: str) -> dict[str, Any]:
     prefix = f"topoforge-{version}/"
     forbidden_roots = {
         ".agent",
+        ".agents",
+        ".codex",
         ".hypothesis",
         "artifacts",
         "build",
@@ -64,8 +66,9 @@ def inspect_sdist(path: Path, version: str) -> dict[str, Any]:
         "benchmarks/baseline.json",
         "pyproject.toml",
         "reference_regions/catalog.yaml",
-        "scripts/rollback-topoforge-0.10.0.sh",
+        "scripts/rollback-topoforge-0.10.1.sh",
         "scripts/run_benchmarks.py",
+        "scripts/verify_public_tree.py",
         "scripts/verify_reference_regions.py",
         "scripts/verify_phase11_lifecycle.py",
         "scripts/verify_release.py",
@@ -73,6 +76,7 @@ def inspect_sdist(path: Path, version: str) -> dict[str, Any]:
         "src/topoforge/web/static/asset-manifest.json",
         "src/topoforge/web/static/index.html",
         "tests/release/test_phase8_contracts.py",
+        "tests/release/test_public_tree.py",
         "tests/web/test_api.py",
         "tests/web/test_jobs.py",
         "tests/web/test_map_tiles.py",
@@ -107,7 +111,8 @@ def inspect_sdist(path: Path, version: str) -> dict[str, Any]:
     forbidden = sorted(
         name
         for name in files
-        if PurePosixPath(name).parts[0] in forbidden_roots
+        if name == "AGENTS.md"
+        or PurePosixPath(name).parts[0] in forbidden_roots
         or any(
             part in {"node_modules", "playwright-report", "test-results"}
             for part in PurePosixPath(name).parts

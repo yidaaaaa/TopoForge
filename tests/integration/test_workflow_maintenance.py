@@ -4,6 +4,7 @@ import json
 import zipfile
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from topoforge.cli.app import app
@@ -25,11 +26,14 @@ from topoforge.workflow import (
     verify_workflow_backup,
     write_workflow_launch_config,
 )
+from topoforge.workflow import maintenance as workflow_maintenance
 
 runner = CliRunner()
 
 
-def test_storage_cleanup_backup_restore_and_offline_resume(tmp_path: Path) -> None:
+def test_storage_cleanup_backup_restore_and_offline_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     source = create_synthetic_geotiff(
         tmp_path / "source.tif",
         SyntheticTerrain.SADDLE,
@@ -148,6 +152,8 @@ def test_storage_cleanup_backup_restore_and_offline_resume(tmp_path: Path) -> No
     second_backup = create_workflow_backup(workspace, second_archive)
     assert first_archive.read_bytes() == second_archive.read_bytes()
     assert first_backup.archive_sha256 == second_backup.archive_sha256
+    assert verify_workflow_backup(first_archive) == first_backup.manifest
+    monkeypatch.setattr(workflow_maintenance, "__version__", "99.0.0")
     assert verify_workflow_backup(first_archive) == first_backup.manifest
     assert sum(item.kind == "external" for item in first_backup.manifest.files) >= 2
 
