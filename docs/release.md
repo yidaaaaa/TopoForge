@@ -1,14 +1,15 @@
 # Local release and offline installation
 
-TopoForge 0.10.1 is a local-use patch over the Phase 11 release. It preserves the CLI, loopback FastAPI adapter, and bilingual React/MapLibre/Three.js application while adding Web vertical-scaling controls, validated Bambu Studio/P2S runtime injection, safe terminal-job deletion, deterministic stale-request cancellation, desktop/high-DPI display fixes, and an automated public-tree privacy gate. Generated terrain, downloads, local Web state, contributor-only state, and machine-local hotfix evidence are excluded from the release tree. It does not add a public deployment, authentication layer, database service, or remote multi-user contract.
+TopoForge 0.10.2 is a local-use lifecycle patch over 0.10.1. It preserves the CLI, loopback FastAPI adapter, bilingual React/MapLibre/Three.js application, manufacturing core, and public-tree privacy gate while adding deterministic batch management for completed, failed, and cancelled Web jobs. Generated terrain, downloads, local Web state, contributor-only state, and machine-local verification evidence remain excluded from the release tree. It does not add a public deployment, authentication layer, database service, or remote multi-user contract.
 
-## 0.10.1 patch contents
+## 0.10.2 patch contents
 
-- Natural, fit-height, auto-perceptual, and custom vertical policies are selectable in both interface languages.
-- Bambu Studio and the complete P2S profile set are probed before a slicing job enters the queue and are propagated into isolated workers.
-- Completed, failed, and cancelled job records can be removed without deleting project files; project deletion remains separately confirmed.
-- Desktop controls stay within the viewport, high-DPI 3D views frame the entire model, and stale map/assembly reads cannot overwrite newer selections.
-- The public Git index and CI reject local runtime roots, contributor-only state, and machine-local verification records.
+- Jobs can be sorted by newest, oldest, workspace name, or status, and only terminal jobs can enter a batch selection.
+- Every batch action requires a deterministic SHA-256 plan that measures record bytes, unique workspaces, workspace bytes, backup work, and blockers before apply.
+- `record-only` retains project files, `quarantine-workspace` moves records and unshared workspaces into recoverable trash, and `backup-and-quarantine` first creates and strictly reopens a verified workflow backup.
+- Trash records retain exact job/workspace identities for seven days, support complete restore, and require exact batch confirmation before permanent purge. Verified backups survive purge.
+- Active jobs, shared or externally referenced workspaces, symlinks, path escapes, duplicate job IDs, stale plans, conflicting restores, and unsafe permanent deletion are rejected.
+- The bilingual Web flow covers batch preflight, apply, trash restore, and purge without stale selected-job requests or horizontal sidebar overflow.
 
 ## Verified platform boundary
 
@@ -35,9 +36,9 @@ uv build --no-sources --out-dir dist/repeat
 uv run python scripts/verify_release.py \
   --primary-dir dist/primary \
   --repeat-dir dist/repeat \
-  --version 0.10.1 \
+  --version 0.10.2 \
   --install \
-  --report artifacts/logs/topoforge-0.10.1-release-verification.json
+  --report artifacts/logs/topoforge-0.10.2-release-verification.json
 ```
 
 The verifier requires byte-identical sdist and wheel archives, bounded archive contents,
@@ -57,11 +58,11 @@ checksums. Existing Release pages are detected and skipped without replacing ass
 ## Connected installation
 
 ```bash
-python3.12 -m venv ~/.venvs/topoforge-0.10.1
-~/.venvs/topoforge-0.10.1/bin/python -m pip install \
-  /PATH/TO/topoforge-0.10.1-py3-none-any.whl
-~/.venvs/topoforge-0.10.1/bin/topoforge doctor
-~/.venvs/topoforge-0.10.1/bin/topoforge web --check --workspace-root /tmp/topoforge-workspaces --input-root . --no-open
+python3.12 -m venv ~/.venvs/topoforge-0.10.2
+~/.venvs/topoforge-0.10.2/bin/python -m pip install \
+  /PATH/TO/topoforge-0.10.2-py3-none-any.whl
+~/.venvs/topoforge-0.10.2/bin/topoforge doctor
+~/.venvs/topoforge-0.10.2/bin/topoforge web --check --workspace-root /tmp/topoforge-workspaces --input-root . --no-open
 ```
 
 ## Prepare an offline wheelhouse
@@ -71,24 +72,24 @@ On a connected machine matching the offline target:
 ```bash
 python3.12 -m venv /tmp/topoforge-wheelhouse-tools
 /tmp/topoforge-wheelhouse-tools/bin/python -m pip install --upgrade pip
-mkdir -p topoforge-0.10.1-wheelhouse
+mkdir -p topoforge-0.10.2-wheelhouse
 /tmp/topoforge-wheelhouse-tools/bin/python -m pip download \
-  --dest topoforge-0.10.1-wheelhouse \
-  /PATH/TO/topoforge-0.10.1-py3-none-any.whl
-sha256sum topoforge-0.10.1-wheelhouse/* > topoforge-0.10.1-wheelhouse/SHA256SUMS
-sha256sum -c topoforge-0.10.1-wheelhouse/SHA256SUMS
+  --dest topoforge-0.10.2-wheelhouse \
+  /PATH/TO/topoforge-0.10.2-py3-none-any.whl
+sha256sum topoforge-0.10.2-wheelhouse/* > topoforge-0.10.2-wheelhouse/SHA256SUMS
+sha256sum -c topoforge-0.10.2-wheelhouse/SHA256SUMS
 ```
 
 On the offline workstation:
 
 ```bash
-cd /PATH/TO/topoforge-0.10.1-wheelhouse
+cd /PATH/TO/topoforge-0.10.2-wheelhouse
 sha256sum -c SHA256SUMS
-python3.12 -m venv ~/.venvs/topoforge-0.10.1
-~/.venvs/topoforge-0.10.1/bin/python -m pip install \
-  --no-index --find-links . topoforge==0.10.1
-~/.venvs/topoforge-0.10.1/bin/topoforge doctor
-~/.venvs/topoforge-0.10.1/bin/topoforge web --check --workspace-root /tmp/topoforge-workspaces --input-root . --no-open
+python3.12 -m venv ~/.venvs/topoforge-0.10.2
+~/.venvs/topoforge-0.10.2/bin/python -m pip install \
+  --no-index --find-links . topoforge==0.10.2
+~/.venvs/topoforge-0.10.2/bin/topoforge doctor
+~/.venvs/topoforge-0.10.2/bin/topoforge web --check --workspace-root /tmp/topoforge-workspaces --input-root . --no-open
 ```
 
 A TopoForge wheel by itself is not an offline installation bundle. The wheelhouse must
@@ -99,23 +100,23 @@ contain every resolved platform dependency, especially lib3mf and the geospatial
 1. Run `topoforge backup WORKSPACE --output BACKUP.zip` for each active workflow.
 2. Keep the previous environment and wheelhouse until the new version passes
    `topoforge doctor` and a local smoke build.
-3. Install 0.10.1 into a new environment rather than mutating the old one.
+3. Install 0.10.2 into a new environment rather than mutating the old one.
 4. Resume or browse existing workspaces. Stage reuse remains checksum-bound.
 5. Generate new outputs in new directories; existing DEMs and bundles remain immutable.
 
 ## Rollback
 
-Installed CLI rollback keeps the 0.10.1 environment intact and switches back to 0.10.0:
+Installed CLI rollback keeps the 0.10.2 environment intact and switches back to 0.10.1:
 
 ```bash
-~/.venvs/topoforge-0.10.0/bin/topoforge doctor
-ln -sfn ~/.venvs/topoforge-0.10.0/bin/topoforge ~/.local/bin/topoforge
+~/.venvs/topoforge-0.10.1/bin/topoforge doctor
+ln -sfn ~/.venvs/topoforge-0.10.1/bin/topoforge ~/.local/bin/topoforge
 ```
 
 For a source checkout after the Phase 11 release commit and tag:
 
 ```bash
-scripts/rollback-topoforge-0.10.1.sh --confirm-rollback
+scripts/rollback-topoforge-0.10.2.sh --confirm-rollback
 ```
 
 Restore a workflow only from a checksum-verified backup:

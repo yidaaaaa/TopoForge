@@ -3,13 +3,28 @@ from __future__ import annotations
 import subprocess
 import sys
 import time
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
 from topoforge.exceptions import ConfigurationError
 from topoforge.web.jobs import LocalJobManager, expected_workflow_stages
-from topoforge.web.models import JobDeleteRequest, JobRecord, JobState, WebAppConfig, utc_now
+from topoforge.web.models import (
+    JobBatchDeleteApplyRequest,
+    JobBatchDeleteMode,
+    JobBatchDeletePlanRequest,
+    JobDeleteRequest,
+    JobRecord,
+    JobState,
+    JobTrashActionRequest,
+    JobTrashRecord,
+    JobTrashTransaction,
+    JobTrashTransactionMove,
+    JobTrashWorkspace,
+    WebAppConfig,
+    utc_now,
+)
 from topoforge.web.server import is_loopback_host
 from topoforge.workflow import WorkflowStage
 
@@ -51,6 +66,76 @@ class SlowJobManager(LocalJobManager):
             ),
             message_key="job.started",
         )
+
+
+def prepare_interrupted_trash_transaction(
+    manager: LocalJobManager,
+    *,
+    job_id: str,
+    workspace: Path,
+    batch_id: str,
+) -> JobTrashTransaction:
+    request = JobBatchDeletePlanRequest(
+        job_ids=(job_id,),
+        mode=JobBatchDeleteMode.QUARANTINE_WORKSPACE,
+    )
+    plan = manager.plan_batch_delete(request)
+    state_temporary = manager.trash_dir / f".{batch_id}.creating"
+    state_destination = manager._trash_batch_dir(batch_id)
+    workspace_temporary = manager.workspace_trash_dir / f".{batch_id}.creating"
+    workspace_destination = manager._workspace_trash_batch_dir(batch_id)
+    quarantined = workspace_destination / f"0000-{workspace.name}"
+    created_at = utc_now()
+    transaction = JobTrashTransaction(
+        batch_id=batch_id,
+        state_temporary=state_temporary,
+        state_destination=state_destination,
+        workspace_temporary=workspace_temporary,
+        workspace_destination=workspace_destination,
+        job_moves=(
+            JobTrashTransactionMove(
+                source=manager._job_dir(job_id),
+                temporary=state_temporary / "jobs" / job_id,
+                destination=state_destination / "jobs" / job_id,
+            ),
+        ),
+        workspace_moves=(
+            JobTrashTransactionMove(
+                source=workspace,
+                temporary=workspace_temporary / quarantined.name,
+                destination=quarantined,
+            ),
+        ),
+        trash_record=JobTrashRecord(
+            batch_id=batch_id,
+            plan_id=plan.plan_id,
+            mode=plan.mode,
+            created_at=created_at,
+            purge_after=created_at + timedelta(days=7),
+            job_ids=plan.job_ids,
+            job_record_bytes=plan.job_record_bytes,
+            workspaces=(
+                JobTrashWorkspace(
+                    original_workspace=workspace,
+                    quarantined_workspace=quarantined,
+                    workspace_existed=True,
+                    size_bytes=plan.workspace_bytes,
+                ),
+            ),
+            total_quarantined_bytes=plan.total_target_bytes,
+            backups_preserved=True,
+            required_checks_passed=True,
+        ),
+    )
+    transaction_path = manager._trash_transaction_path(batch_id)
+    transaction_path.parent.mkdir(parents=True)
+    transaction_path.write_text(
+        transaction.model_dump_json(indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (state_temporary / "jobs").mkdir(parents=True)
+    workspace_temporary.mkdir(parents=True)
+    return transaction
 
 
 def test_loopback_policy_and_stage_contract(web_config: WebAppConfig) -> None:
@@ -364,6 +449,260 @@ def test_workspace_deletion_rejects_root_and_symlink_records(
         manager.close()
 
 
+def test_batch_delete_plan_is_deterministic_and_reports_active_and_shared_blockers(
+    web_config: WebAppConfig,
+) -> None:
+    manager = SlowJobManager(web_config)
+    manager.start()
+    try:
+        running = manager.submit(make_job_request(web_config, name="batch-shared"))
+        queued = manager.submit(make_job_request(web_config, name="batch-shared"))
+        active_plan = manager.plan_batch_delete(
+            JobBatchDeletePlanRequest(
+                job_ids=(running.job_id,),
+                mode=JobBatchDeleteMode.QUARANTINE_WORKSPACE,
+            )
+        )
+        assert active_plan.required_checks_passed is False
+        assert any("job is active" in blocker for blocker in active_plan.blockers)
+        assert any("unselected jobs" in blocker for blocker in active_plan.blockers)
+
+        manager.cancel(queued.job_id)
+        manager.cancel(running.job_id)
+        assert wait_for_terminal(manager, running.job_id, timeout_seconds=15).state is (
+            JobState.CANCELLED
+        )
+
+        shared_plan = manager.plan_batch_delete(
+            JobBatchDeletePlanRequest(
+                job_ids=(running.job_id,),
+                mode=JobBatchDeleteMode.QUARANTINE_WORKSPACE,
+            )
+        )
+        assert shared_plan.required_checks_passed is False
+        assert shared_plan.items[0].unselected_reference_job_ids == (queued.job_id,)
+
+        request = JobBatchDeletePlanRequest(
+            job_ids=(queued.job_id, running.job_id),
+            mode=JobBatchDeleteMode.QUARANTINE_WORKSPACE,
+        )
+        first = manager.plan_batch_delete(request)
+        second = manager.plan_batch_delete(request)
+        assert first == second
+        assert first.required_checks_passed is True
+        assert first.job_ids == tuple(sorted((running.job_id, queued.job_id)))
+        assert first.unique_workspace_count == 1
+
+        record_only = manager.plan_batch_delete(
+            JobBatchDeletePlanRequest(
+                job_ids=(running.job_id,),
+                mode=JobBatchDeleteMode.RECORD_ONLY,
+            )
+        )
+        assert record_only.required_checks_passed is True
+        assert record_only.workspace_bytes == 0
+    finally:
+        manager.close()
+
+
+def test_batch_workspace_quarantine_restore_and_permanent_purge(
+    web_config: WebAppConfig,
+) -> None:
+    manager = LocalJobManager(web_config)
+    manager.start()
+    try:
+        now = utc_now()
+        job_ids = ("d" * 32, "e" * 32)
+        markers: dict[str, Path] = {}
+        for index, job_id in enumerate(job_ids):
+            workspace = web_config.workspace_root / f"batch-project-{index}"
+            workspace.mkdir(parents=True)
+            marker = workspace / "retained.bin"
+            marker.write_bytes(f"workspace-{index}".encode())
+            markers[job_id] = marker
+            manager._write_record(
+                JobRecord(
+                    job_id=job_id,
+                    created_at=now,
+                    updated_at=now,
+                    state=JobState.CANCELLED,
+                    workspace_dir=workspace,
+                    expected_stages=(),
+                    progress_fraction=0.0,
+                    cancellation_requested=True,
+                )
+            )
+        backup_marker = manager.backups_dir / "must-survive.bin"
+        backup_marker.write_bytes(b"backup evidence")
+
+        plan_request = JobBatchDeletePlanRequest(
+            job_ids=job_ids,
+            mode=JobBatchDeleteMode.QUARANTINE_WORKSPACE,
+        )
+        plan = manager.plan_batch_delete(plan_request)
+        applied = manager.apply_batch_delete(
+            JobBatchDeleteApplyRequest(
+                **plan_request.model_dump(),
+                confirm_plan_id=plan.plan_id,
+            )
+        )
+        assert applied.job_ids == job_ids
+        assert applied.total_quarantined_bytes == plan.total_target_bytes
+        assert not any(manager.trash_transactions_dir.glob("*/transaction.json"))
+        assert len(applied.workspaces) == 2
+        assert all(workspace.quarantined_workspace is not None for workspace in applied.workspaces)
+        assert manager.list() == ()
+        assert all(not marker.exists() for marker in markers.values())
+        assert manager.list_trash() == (applied,)
+
+        with pytest.raises(ConfigurationError, match="confirmation"):
+            manager.restore_trash(
+                applied.batch_id,
+                JobTrashActionRequest(confirm_batch_id="0" * 32),
+            )
+        restored = manager.restore_trash(
+            applied.batch_id,
+            JobTrashActionRequest(confirm_batch_id=applied.batch_id),
+        )
+        assert restored.action == "restored"
+        assert restored.required_checks_passed is True
+        assert {record.job_id for record in manager.list()} == set(job_ids)
+        assert all(marker.is_file() for marker in markers.values())
+        assert manager.list_trash() == ()
+
+        repeat_plan = manager.plan_batch_delete(plan_request)
+        repeat = manager.apply_batch_delete(
+            JobBatchDeleteApplyRequest(
+                **plan_request.model_dump(),
+                confirm_plan_id=repeat_plan.plan_id,
+            )
+        )
+        purged = manager.purge_trash(
+            repeat.batch_id,
+            JobTrashActionRequest(confirm_batch_id=repeat.batch_id),
+        )
+        assert purged.action == "purged"
+        assert purged.affected_bytes > 0
+        assert manager.list_trash() == ()
+        assert manager.list() == ()
+        assert all(not marker.exists() for marker in markers.values())
+        assert backup_marker.read_bytes() == b"backup evidence"
+        assert (manager.deletion_audit_dir / f"{applied.batch_id}-restored.json").is_file()
+        assert (manager.deletion_audit_dir / f"{repeat.batch_id}-purged.json").is_file()
+    finally:
+        manager.close()
+
+
+def test_start_rolls_back_unpublished_trash_transaction(
+    web_config: WebAppConfig,
+) -> None:
+    manager = LocalJobManager(web_config)
+    manager.start()
+    job_id = "a" * 32
+    workspace = web_config.workspace_root / "interrupted-rollback"
+    workspace.mkdir(parents=True)
+    marker = workspace / "retained.bin"
+    marker.write_bytes(b"rollback evidence")
+    now = utc_now()
+    manager._write_record(
+        JobRecord(
+            job_id=job_id,
+            created_at=now,
+            updated_at=now,
+            state=JobState.CANCELLED,
+            workspace_dir=workspace,
+            expected_stages=(),
+            progress_fraction=0.0,
+            cancellation_requested=True,
+        )
+    )
+    transaction = prepare_interrupted_trash_transaction(
+        manager,
+        job_id=job_id,
+        workspace=workspace,
+        batch_id="1" * 32,
+    )
+    manager.close()
+
+    transaction.workspace_moves[0].source.replace(transaction.workspace_moves[0].temporary)
+    transaction.job_moves[0].source.replace(transaction.job_moves[0].temporary)
+    assert not marker.exists()
+    assert not manager._job_dir(job_id).exists()
+
+    recovered = LocalJobManager(web_config)
+    recovered.start()
+    try:
+        assert recovered.get(job_id).state is JobState.CANCELLED
+        assert marker.read_bytes() == b"rollback evidence"
+        assert recovered.list_trash() == ()
+        assert not recovered._trash_transaction_path(transaction.batch_id).exists()
+        assert not transaction.state_temporary.exists()
+        assert not transaction.workspace_temporary.exists()
+    finally:
+        recovered.close()
+
+
+def test_start_completes_published_workspace_trash_transaction(
+    web_config: WebAppConfig,
+) -> None:
+    manager = LocalJobManager(web_config)
+    manager.start()
+    job_id = "b" * 32
+    workspace = web_config.workspace_root / "interrupted-publish"
+    workspace.mkdir(parents=True)
+    marker = workspace / "retained.bin"
+    marker.write_bytes(b"publish evidence")
+    now = utc_now()
+    manager._write_record(
+        JobRecord(
+            job_id=job_id,
+            created_at=now,
+            updated_at=now,
+            state=JobState.CANCELLED,
+            workspace_dir=workspace,
+            expected_stages=(),
+            progress_fraction=0.0,
+            cancellation_requested=True,
+        )
+    )
+    transaction = prepare_interrupted_trash_transaction(
+        manager,
+        job_id=job_id,
+        workspace=workspace,
+        batch_id="2" * 32,
+    )
+    manager.close()
+
+    transaction.workspace_moves[0].source.replace(transaction.workspace_moves[0].temporary)
+    transaction.job_moves[0].source.replace(transaction.job_moves[0].temporary)
+    (transaction.state_temporary / "trash.json").write_text(
+        transaction.trash_record.model_dump_json(indent=2) + "\n",
+        encoding="utf-8",
+    )
+    transaction.workspace_temporary.replace(transaction.workspace_destination)
+    assert transaction.workspace_destination.is_dir()
+    assert transaction.state_temporary.is_dir()
+    assert not transaction.state_destination.exists()
+
+    recovered = LocalJobManager(web_config)
+    recovered.start()
+    try:
+        assert recovered.list() == ()
+        assert recovered.list_trash() == (transaction.trash_record,)
+        assert transaction.state_destination.is_dir()
+        assert not transaction.state_temporary.exists()
+        assert not recovered._trash_transaction_path(transaction.batch_id).exists()
+        restored = recovered.restore_trash(
+            transaction.batch_id,
+            JobTrashActionRequest(confirm_batch_id=transaction.batch_id),
+        )
+        assert restored.action == "restored"
+        assert recovered.get(job_id).state is JobState.CANCELLED
+        assert marker.read_bytes() == b"publish evidence"
+    finally:
+        recovered.close()
+
+
 def test_completed_job_maintenance_backup_cleanup_and_restore(
     web_config: WebAppConfig,
 ) -> None:
@@ -420,5 +759,28 @@ def test_completed_job_maintenance_backup_cleanup_and_restore(
         assert cleanup.removed_paths == ("stages/99-unused/stale",)
         assert not unused.exists()
         assert manager.maintenance(completed.job_id).cleanup.reclaimable_bytes == 0
+
+        plan_request = JobBatchDeletePlanRequest(
+            job_ids=(restored.job_id,),
+            mode=JobBatchDeleteMode.BACKUP_AND_QUARANTINE,
+        )
+        plan = manager.plan_batch_delete(plan_request)
+        assert plan.required_checks_passed is True
+        assert plan.backup_job_ids == (restored.job_id,)
+        trashed = manager.apply_batch_delete(
+            JobBatchDeleteApplyRequest(
+                **plan_request.model_dump(),
+                confirm_plan_id=plan.plan_id,
+            )
+        )
+        assert len(trashed.backup_ids) == 1
+        assert manager.backup_archive_path(trashed.backup_ids[0])[0].is_file()
+        assert not restored.workspace_dir.exists()
+        manager.restore_trash(
+            trashed.batch_id,
+            JobTrashActionRequest(confirm_batch_id=trashed.batch_id),
+        )
+        assert manager.get(restored.job_id).state is JobState.COMPLETED
+        assert restored.workspace_dir.is_dir()
     finally:
         manager.close()

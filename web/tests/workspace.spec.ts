@@ -483,27 +483,99 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   await expect(page.getByRole("button", { name: "Start build" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Assembly" })).toBeVisible();
 
-  page.once("dialog", (dialog) => dialog.accept());
-  const [deleteResponse] = await Promise.all([
+  const restoredWorkspaceName = basename(restoredJob.workspace_dir);
+  const taskSearchEnglish = page.getByRole("searchbox", { name: "Search jobs" });
+  await taskSearchEnglish.fill(restoredWorkspaceName);
+  await expect(page.getByLabel("Visible jobs")).toHaveText(/1\/\d+/);
+  await page
+    .getByRole("checkbox", {
+      name: new RegExp(`Select job for batch management: ${restoredWorkspaceName}`),
+    })
+    .check();
+  await page
+    .getByRole("combobox", { name: "Batch action" })
+    .selectOption("quarantine-workspace");
+  const [planResponse] = await Promise.all([
     page.waitForResponse(
       (response) =>
-        response.url().endsWith(`/api/v1/jobs/${restoredJob.job_id}`) &&
-        response.request().method() === "DELETE",
+        response.url().endsWith("/api/v1/lifecycle/deletions/plan") &&
+        response.request().method() === "POST",
     ),
-    page.getByRole("button", { name: "Delete project files" }).click(),
+    page.getByRole("button", { name: "Review batch action" }).click(),
   ]);
-  expect(deleteResponse.ok()).toBe(true);
-  const deletion = (await deleteResponse.json()) as {
-    workspace_removed: boolean;
+  expect(planResponse.ok()).toBe(true);
+  const plan = (await planResponse.json()) as {
+    plan_id: string;
+    selected_job_count: number;
+    total_target_bytes: number;
+    required_checks_passed: boolean;
+  };
+  expect(plan.selected_job_count).toBe(1);
+  expect(plan.total_target_bytes).toBeGreaterThan(0);
+  expect(plan.required_checks_passed).toBe(true);
+  await expect(page.getByLabel("Batch action review")).toBeVisible();
+
+  page.once("dialog", (dialog) => dialog.accept());
+  const [applyResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/v1/lifecycle/deletions/apply") &&
+        response.request().method() === "POST",
+    ),
+    page.getByRole("button", { name: "Apply reviewed action" }).click(),
+  ]);
+  expect(applyResponse.ok()).toBe(true);
+  const trashed = (await applyResponse.json()) as {
+    batch_id: string;
+    job_ids: string[];
     backups_preserved: boolean;
     required_checks_passed: boolean;
   };
-  expect(deletion.workspace_removed).toBe(true);
-  expect(deletion.backups_preserved).toBe(true);
-  expect(deletion.required_checks_passed).toBe(true);
-  await expect(
-    page.getByText("Project files and job record deleted; backups retained"),
-  ).toBeVisible();
+  expect(trashed.job_ids).toEqual([restoredJob.job_id]);
+  expect(trashed.backups_preserved).toBe(true);
+  expect(trashed.required_checks_passed).toBe(true);
+  await expect(page.getByText("Selected jobs moved to trash")).toBeVisible();
+  expect((await page.request.get(`/api/v1/jobs/${restoredJob.job_id}`)).status()).toBe(404);
+  await taskSearchEnglish.fill("");
+  await expect(page.getByText(new RegExp(`Batch ${trashed.batch_id.slice(0, 12)}`))).toBeVisible();
+
+  page.once("dialog", (dialog) => dialog.accept());
+  const [trashRestoreResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith(
+          `/api/v1/lifecycle/trash/${trashed.batch_id}/restore`,
+        ) && response.request().method() === "POST",
+    ),
+    page.getByRole("button", { name: "Restore batch" }).click(),
+  ]);
+  expect(trashRestoreResponse.ok()).toBe(true);
+  await expect(page.getByText("Trash batch restored")).toBeVisible();
+  expect((await page.request.get(`/api/v1/jobs/${restoredJob.job_id}`)).ok()).toBe(true);
+
+  const repeatPlan = await page.request.post("/api/v1/lifecycle/deletions/plan", {
+    data: {
+      job_ids: [restoredJob.job_id],
+      mode: "quarantine-workspace",
+    },
+  });
+  expect(repeatPlan.ok()).toBe(true);
+  const repeatPlanPayload = (await repeatPlan.json()) as { plan_id: string };
+  const repeatApply = await page.request.post("/api/v1/lifecycle/deletions/apply", {
+    data: {
+      job_ids: [restoredJob.job_id],
+      mode: "quarantine-workspace",
+      confirm_plan_id: repeatPlanPayload.plan_id,
+    },
+  });
+  expect(repeatApply.status()).toBe(201);
+  const repeatTrash = (await repeatApply.json()) as { batch_id: string };
+  const purge = await page.request.delete(
+    `/api/v1/lifecycle/trash/${repeatTrash.batch_id}`,
+    { data: { confirm_batch_id: repeatTrash.batch_id } },
+  );
+  expect(purge.ok()).toBe(true);
+  expect((await purge.json()).action).toBe("purged");
   expect((await page.request.get(`/api/v1/jobs/${restoredJob.job_id}`)).status()).toBe(404);
   expect((await page.request.get(backup.download_url)).ok()).toBe(true);
   expect((await page.request.get("/api/v1/jobs")).ok()).toBe(true);

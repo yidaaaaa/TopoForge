@@ -13,7 +13,7 @@ from scripts.run_benchmarks import terrain_triangle_count
 from scripts.verify_reference_regions import verify_reference_catalog
 from scripts.verify_release import inspect_sdist, inspect_wheel
 
-VERSION = "0.10.1"
+VERSION = "0.10.2"
 
 
 def _required_sdist_files() -> set[str]:
@@ -27,7 +27,7 @@ def _required_sdist_files() -> set[str]:
         "benchmarks/baseline.json",
         "pyproject.toml",
         "reference_regions/catalog.yaml",
-        "scripts/rollback-topoforge-0.10.1.sh",
+        "scripts/rollback-topoforge-0.10.2.sh",
         "scripts/run_benchmarks.py",
         "scripts/verify_public_tree.py",
         "scripts/verify_reference_regions.py",

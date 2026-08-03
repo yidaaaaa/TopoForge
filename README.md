@@ -2,7 +2,7 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Current release (TopoForge 0.10.1):** this local-use patch stabilizes desktop panel sizing and high-DPI 3D framing, exposes the core vertical-scaling modes in the bilingual Web UI, validates and propagates Bambu Studio/P2S runtime settings before queueing, and adds safe deletion for terminal job records. Stale map/assembly requests are cancelled deterministically, while local operator state, generated terrain, downloads, and machine-local verification records stay outside the public Git tree under an automated CI privacy gate.
+**Current release (TopoForge 0.10.2):** this local-use patch adds bilingual job sorting, terminal-job batch selection, deterministic measured deletion previews, recoverable workspace quarantine, optional verified backup before quarantine, seven-day trash retention, restore, and explicitly confirmed permanent purge. Shared workspaces, active jobs, symlinks, path escapes, changed plans, and unselected references are blocked; backups and all local terrain evidence remain outside the public Git tree.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
 
@@ -22,7 +22,7 @@ Open `http://127.0.0.1:8765/`. The header switches the complete interface betwee
 Chinese and English. The first screen is the working application: local DEM, bbox, or
 center-radius source selection; print-aware/source-preserving/custom sampling; resource
 budgets; tiling; optional overlays and slicing; MapLibre AOI plus processed DEM terrain/elevation/hillshade layers; synchronized 2D/3D tile assembly; isolated job
-progress/cancellation; bilingual job search and status filtering with visible-result counts; Three.js GLB inspection; metrics; and checksum-bound artifacts.
+progress/cancellation; bilingual job search, filtering, sorting, batch lifecycle management, and recoverable trash; Three.js GLB inspection; metrics; and checksum-bound artifacts.
 
 The server accepts only loopback hosts. Local file browsing is limited to explicit
 `--input-root` directories, Web-created workflows must be children of
@@ -477,7 +477,7 @@ SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/primary
 SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/repeat
 uv run python scripts/verify_release.py \
   --primary-dir dist/primary --repeat-dir dist/repeat \
-  --version 0.10.1 --install \
+  --version 0.10.2 --install \
   --report artifacts/logs/phase11-release-verification.json
 uv run python scripts/verify_reference_regions.py \
   --catalog reference_regions/catalog.yaml --definitions-only \

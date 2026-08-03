@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   Archive,
   CheckCircle2,
+  CheckSquare2,
   Download,
   ExternalLink,
   HardDrive,
@@ -9,10 +10,13 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  ShieldCheck,
   Square,
   Trash2,
+  Undo2,
+  X,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { formatBytes } from "../config";
 import {
@@ -21,7 +25,14 @@ import {
   translate,
   type TranslationKey,
 } from "../i18n";
-import type { JobMaintenanceOverview, JobRecord, Language } from "../types";
+import type {
+  JobBatchDeleteMode,
+  JobBatchDeletePlan,
+  JobMaintenanceOverview,
+  JobRecord,
+  JobTrashRecord,
+  Language,
+} from "../types";
 
 interface ResultsPanelProps {
   language: Language;
@@ -34,13 +45,17 @@ interface ResultsPanelProps {
     | "backup"
     | "cleanup"
     | "restore"
-    | "delete-record"
-    | "delete-workspace"
     | null;
+  batchPlan: JobBatchDeletePlan | null;
+  jobTrash: JobTrashRecord[];
+  batchBusy: "plan" | "apply" | "restore" | "purge" | null;
   onRefresh: () => void;
   onSelect: (jobId: string) => void;
   onCancel: (jobId: string) => void;
-  onDelete: (jobId: string, workspaceName: string, deleteWorkspace: boolean) => void;
+  onPlanBatch: (jobIds: string[], mode: JobBatchDeleteMode) => void;
+  onApplyBatch: () => void;
+  onRestoreTrash: (batchId: string) => void;
+  onPurgeTrash: (batchId: string) => void;
   onBackup: (jobId: string) => void;
   onCleanup: (jobId: string, workflowId: string) => void;
   onRestore: (backupId: string) => void;
@@ -59,6 +74,17 @@ function artifactLabel(role: string): string {
 
 
 type JobStatusFilter = "all" | "active" | "completed" | "failed" | "cancelled";
+type JobSort = "newest" | "oldest" | "name" | "status";
+
+const terminalStates = new Set(["cancelled", "failed", "completed"]);
+const statusOrder: Record<JobRecord["state"], number> = {
+  running: 0,
+  queued: 1,
+  cancelling: 2,
+  failed: 3,
+  cancelled: 4,
+  completed: 5,
+};
 
 function matchesStatus(job: JobRecord, filter: JobStatusFilter): boolean {
   if (filter === "all") {
@@ -78,10 +104,16 @@ export function ResultsPanel({
   loading,
   maintenanceLoading,
   maintenanceBusy,
+  batchPlan,
+  jobTrash,
+  batchBusy,
   onRefresh,
   onSelect,
   onCancel,
-  onDelete,
+  onPlanBatch,
+  onApplyBatch,
+  onRestoreTrash,
+  onPurgeTrash,
   onBackup,
   onCleanup,
   onRestore,
@@ -96,9 +128,14 @@ export function ResultsPanel({
   });
   const [jobQuery, setJobQuery] = useState("");
   const [jobStatusFilter, setJobStatusFilter] = useState<JobStatusFilter>("all");
+  const [jobSort, setJobSort] = useState<JobSort>("newest");
+  const [batchMode, setBatchMode] = useState<JobBatchDeleteMode>("record-only");
+  const [selectedBatchJobIds, setSelectedBatchJobIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const filteredJobs = useMemo(() => {
     const query = jobQuery.trim().toLocaleLowerCase(language);
-    return jobs.filter((job) => {
+    const visible = jobs.filter((job) => {
       if (!matchesStatus(job, jobStatusFilter)) {
         return false;
       }
@@ -108,7 +145,55 @@ export function ResultsPanel({
       const workspaceName = job.workspace_dir.split("/").at(-1) ?? job.workspace_dir;
       return `${workspaceName} ${job.job_id}`.toLocaleLowerCase(language).includes(query);
     });
-  }, [jobQuery, jobStatusFilter, jobs, language]);
+    return [...visible].sort((left, right) => {
+      if (jobSort === "oldest") {
+        return Date.parse(left.created_at) - Date.parse(right.created_at);
+      }
+      if (jobSort === "name") {
+        const leftName = left.workspace_dir.split("/").at(-1) ?? left.workspace_dir;
+        const rightName = right.workspace_dir.split("/").at(-1) ?? right.workspace_dir;
+        return leftName.localeCompare(rightName, language) || left.job_id.localeCompare(right.job_id);
+      }
+      if (jobSort === "status") {
+        return (
+          statusOrder[left.state] - statusOrder[right.state] ||
+          Date.parse(right.created_at) - Date.parse(left.created_at)
+        );
+      }
+      return Date.parse(right.created_at) - Date.parse(left.created_at);
+    });
+  }, [jobQuery, jobSort, jobStatusFilter, jobs, language]);
+  const visibleTerminalJobIds = useMemo(
+    () => filteredJobs.filter((job) => terminalStates.has(job.state)).map((job) => job.job_id),
+    [filteredJobs],
+  );
+  const allVisibleTerminalSelected =
+    visibleTerminalJobIds.length > 0 &&
+    visibleTerminalJobIds.every((jobId) => selectedBatchJobIds.has(jobId));
+
+  useEffect(() => {
+    const retained = new Set(
+      [...selectedBatchJobIds].filter((jobId) => jobs.some((job) => job.job_id === jobId)),
+    );
+    if (
+      retained.size !== selectedBatchJobIds.size ||
+      [...retained].some((jobId) => !selectedBatchJobIds.has(jobId))
+    ) {
+      setSelectedBatchJobIds(retained);
+    }
+  }, [jobs, selectedBatchJobIds]);
+
+  const toggleBatchJob = (jobId: string) => {
+    setSelectedBatchJobIds((current) => {
+      const next = new Set(current);
+      if (next.has(jobId)) {
+        next.delete(jobId);
+      } else {
+        next.add(jobId);
+      }
+      return next;
+    });
+  };
 
   return (
     <aside className="results-panel" aria-label={t("tabResults")}>
@@ -147,6 +232,16 @@ export function ResultsPanel({
           <option value="failed">{t("filterFailed")}</option>
           <option value="cancelled">{t("filterCancelled")}</option>
         </select>
+        <select
+          value={jobSort}
+          onChange={(event) => setJobSort(event.target.value as JobSort)}
+          aria-label={t("sortJobs")}
+        >
+          <option value="newest">{t("sortNewest")}</option>
+          <option value="oldest">{t("sortOldest")}</option>
+          <option value="name">{t("sortName")}</option>
+          <option value="status">{t("sortStatus")}</option>
+        </select>
         <span
           className="job-count"
           aria-label={t("visibleJobs")}
@@ -156,6 +251,70 @@ export function ResultsPanel({
         </span>
       </div>
 
+      {(visibleTerminalJobIds.length > 0 || selectedBatchJobIds.size > 0) && (
+        <div className="batch-toolbar">
+          <div className="batch-selection-row">
+            <button
+              type="button"
+              className="icon-button"
+              disabled={visibleTerminalJobIds.length === 0 || batchBusy !== null}
+              onClick={() =>
+                setSelectedBatchJobIds((current) => {
+                  const next = new Set(current);
+                  if (allVisibleTerminalSelected) {
+                    visibleTerminalJobIds.forEach((jobId) => next.delete(jobId));
+                  } else {
+                    visibleTerminalJobIds.forEach((jobId) => next.add(jobId));
+                  }
+                  return next;
+                })
+              }
+              title={t("selectVisibleTerminal")}
+              aria-label={t("selectVisibleTerminal")}
+            >
+              <CheckSquare2 size={15} />
+            </button>
+            <span>
+              {t("selectedJobs")}: <strong>{selectedBatchJobIds.size}</strong>
+            </span>
+            <button
+              type="button"
+              className="icon-button"
+              disabled={selectedBatchJobIds.size === 0 || batchBusy !== null}
+              onClick={() => setSelectedBatchJobIds(new Set())}
+              title={t("clearBatchSelection")}
+              aria-label={t("clearBatchSelection")}
+            >
+              <X size={15} />
+            </button>
+          </div>
+          <div className="batch-action-row">
+            <select
+              value={batchMode}
+              onChange={(event) =>
+                setBatchMode(event.target.value as JobBatchDeleteMode)
+              }
+              aria-label={t("batchAction")}
+            >
+              <option value="record-only">{t("batchRecordOnly")}</option>
+              <option value="quarantine-workspace">{t("batchQuarantine")}</option>
+              <option value="backup-and-quarantine">
+                {t("batchBackupQuarantine")}
+              </option>
+            </select>
+            <button
+              type="button"
+              className="secondary"
+              disabled={selectedBatchJobIds.size === 0 || batchBusy !== null}
+              onClick={() => onPlanBatch([...selectedBatchJobIds], batchMode)}
+            >
+              <ShieldCheck size={14} />
+              {t("reviewBatch")}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="job-list">
         {jobs.length === 0 && <div className="empty-state">{t("noJobs")}</div>}
         {jobs.length > 0 && filteredJobs.length === 0 && (
@@ -163,30 +322,150 @@ export function ResultsPanel({
         )}
         {filteredJobs.map((job) => {
           const stageTranslation = stageKey(job.current_stage);
+          const terminal = terminalStates.has(job.state);
           return (
-            <button
-              type="button"
+            <div
               className={selectedJob?.job_id === job.job_id ? "job-row active" : "job-row"}
               key={job.job_id}
-              onClick={() => onSelect(job.job_id)}
             >
-              <div className="job-row-head">
-                <strong>{job.workspace_dir.split("/").at(-1)}</strong>
-                <span className={`state-badge ${job.state}`}>
-                  {t(jobStateKey(job.state))}
-                </span>
-              </div>
-              <div className="progress-track">
-                <span style={{ width: `${job.progress_fraction * 100}%` }} />
-              </div>
-              <small>
-                {stageTranslation ? t(stageTranslation) : t("status")} ·{" "}
-                {Math.round(job.progress_fraction * 100)}%
-              </small>
-            </button>
+              {terminal && (
+                <label
+                  className="job-batch-toggle"
+                  title={t("selectJobForBatch")}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedBatchJobIds.has(job.job_id)}
+                    onChange={() => toggleBatchJob(job.job_id)}
+                    aria-label={`${t("selectJobForBatch")}: ${job.workspace_dir.split("/").at(-1)}`}
+                  />
+                </label>
+              )}
+              <button
+                type="button"
+                className="job-row-main"
+                onClick={() => onSelect(job.job_id)}
+              >
+                <div className="job-row-head">
+                  <strong>{job.workspace_dir.split("/").at(-1)}</strong>
+                  <span className={`state-badge ${job.state}`}>
+                    {t(jobStateKey(job.state))}
+                  </span>
+                </div>
+                <div className="progress-track">
+                  <span style={{ width: `${job.progress_fraction * 100}%` }} />
+                </div>
+                <small>
+                  {stageTranslation ? t(stageTranslation) : t("status")} ·{" "}
+                  {Math.round(job.progress_fraction * 100)}%
+                </small>
+              </button>
+            </div>
           );
         })}
       </div>
+
+      {batchPlan && (
+        <section
+          className={`batch-review${batchPlan.required_checks_passed ? "" : " blocked"}`}
+          aria-label={t("batchReview")}
+        >
+          <div className="subheading">
+            <ShieldCheck size={16} />
+            <h3>{t("batchReview")}</h3>
+            <code>{batchPlan.plan_id.slice(0, 12)}</code>
+          </div>
+          <dl className="summary-list">
+            <div>
+              <dt>{t("selectedJobs")}</dt>
+              <dd>{batchPlan.selected_job_count}</dd>
+            </div>
+            <div>
+              <dt>{t("batchEligible")}</dt>
+              <dd>{batchPlan.eligible_job_count}</dd>
+            </div>
+            <div>
+              <dt>{t("batchWorkspaces")}</dt>
+              <dd>{batchPlan.unique_workspace_count}</dd>
+            </div>
+            <div>
+              <dt>{t("batchTargetBytes")}</dt>
+              <dd>{formatBytes(batchPlan.total_target_bytes)}</dd>
+            </div>
+            <div>
+              <dt>{t("batchBackups")}</dt>
+              <dd>{batchPlan.backup_job_ids.length}</dd>
+            </div>
+          </dl>
+          {batchPlan.blockers.length > 0 && (
+            <div className="batch-blockers">
+              <strong>{t("batchBlocked")}</strong>
+              {batchPlan.blockers.map((blocker) => (
+                <code key={blocker}>{blocker}</code>
+              ))}
+            </div>
+          )}
+          <div className="batch-review-actions">
+            <button
+              type="button"
+              className="danger-button"
+              disabled={!batchPlan.required_checks_passed || batchBusy !== null}
+              onClick={onApplyBatch}
+            >
+              <Trash2 size={14} />
+              {t("applyBatch")}
+            </button>
+          </div>
+        </section>
+      )}
+
+      <section className="trash-section" aria-label={t("trash")}>
+        <div className="subheading">
+          <Trash2 size={16} />
+          <h3>{t("trash")}</h3>
+          <span>{jobTrash.length}</span>
+        </div>
+        {jobTrash.length === 0 && (
+          <div className="empty-state compact">{t("trashEmpty")}</div>
+        )}
+        {jobTrash.map((record) => (
+          <div className="trash-row" key={record.batch_id}>
+            <div>
+              <strong>
+                {t("trashBatch")} {record.batch_id.slice(0, 12)}
+              </strong>
+              <small>
+                {record.job_ids.length} · {formatBytes(record.total_quarantined_bytes)}
+              </small>
+              <small>
+                {t("recoveryUntil")}: {formatter.format(new Date(record.purge_after))}
+              </small>
+            </div>
+            <div className="trash-actions">
+              <button
+                type="button"
+                className="icon-button"
+                disabled={batchBusy !== null}
+                onClick={() => onRestoreTrash(record.batch_id)}
+                title={t("restoreTrash")}
+                aria-label={t("restoreTrash")}
+              >
+                <Undo2 size={15} />
+              </button>
+              <button
+                type="button"
+                className="icon-button danger-icon"
+                disabled={batchBusy !== null}
+                onClick={() => onPurgeTrash(record.batch_id)}
+                title={t("purgeTrash")}
+                aria-label={t("purgeTrash")}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </section>
 
       {selectedJob ? (
         <div className="job-detail">
@@ -359,13 +638,9 @@ export function ResultsPanel({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={maintenanceBusy !== null}
+                  disabled={maintenanceBusy !== null || batchBusy !== null}
                   onClick={() =>
-                    onDelete(
-                      selectedJob.job_id,
-                      selectedJob.workspace_dir.split("/").at(-1) ?? selectedJob.workspace_dir,
-                      false,
-                    )
+                    onPlanBatch([selectedJob.job_id], "record-only")
                   }
                 >
                   <ListX size={14} />
@@ -374,13 +649,9 @@ export function ResultsPanel({
                 <button
                   type="button"
                   className="danger-button"
-                  disabled={maintenanceBusy !== null}
+                  disabled={maintenanceBusy !== null || batchBusy !== null}
                   onClick={() =>
-                    onDelete(
-                      selectedJob.job_id,
-                      selectedJob.workspace_dir.split("/").at(-1) ?? selectedJob.workspace_dir,
-                      true,
-                    )
+                    onPlanBatch([selectedJob.job_id], "quarantine-workspace")
                   }
                 >
                   <Trash2 size={14} />

@@ -16,7 +16,7 @@ from topoforge.overlays import (
 )
 from topoforge.web.api import create_app, verify_static_assets
 from topoforge.web.jobs import LocalJobManager
-from topoforge.web.models import WebAppConfig
+from topoforge.web.models import JobRecord, JobState, WebAppConfig, utc_now
 from topoforge.workflow import write_workflow_launch_config
 
 from .conftest import make_job_request
@@ -204,6 +204,90 @@ def test_asset_manifest_and_job_api_not_found_contract(
     with TestClient(app) as client:
         response = client.get("/api/v1/jobs/" + "0" * 32)
         assert response.status_code == 404
+
+
+def test_batch_lifecycle_api_plans_restores_and_purges_terminal_workspaces(
+    web_config: WebAppConfig,
+    web_static_dir: Path,
+) -> None:
+    manager = LocalJobManager(web_config)
+    now = utc_now()
+    job_ids = ("c" * 32, "d" * 32)
+    markers: list[Path] = []
+    for index, job_id in enumerate(job_ids):
+        workspace = web_config.workspace_root / f"api-batch-{index}"
+        workspace.mkdir(parents=True)
+        marker = workspace / "marker.bin"
+        marker.write_bytes(f"api-batch-{index}".encode())
+        markers.append(marker)
+        manager._write_record(
+            JobRecord(
+                job_id=job_id,
+                created_at=now,
+                updated_at=now,
+                state=JobState.CANCELLED,
+                workspace_dir=workspace,
+                expected_stages=(),
+                progress_fraction=0.0,
+                cancellation_requested=True,
+            )
+        )
+    app = create_app(web_config, manager=manager, static_dir=web_static_dir)
+    request = {"job_ids": list(job_ids), "mode": "quarantine-workspace"}
+    with TestClient(app) as client:
+        capabilities = client.get("/api/v1/capabilities").json()
+        assert capabilities["lifecycle"]["recoverable_trash"] is True
+
+        plan_response = client.post("/api/v1/lifecycle/deletions/plan", json=request)
+        assert plan_response.status_code == 200
+        plan = plan_response.json()
+        assert plan["required_checks_passed"] is True
+        assert plan["selected_job_count"] == 2
+        assert plan["unique_workspace_count"] == 2
+
+        rejected = client.post(
+            "/api/v1/lifecycle/deletions/apply",
+            json={**request, "confirm_plan_id": "0" * 64},
+        )
+        assert rejected.status_code == 422
+        assert all(marker.is_file() for marker in markers)
+
+        applied_response = client.post(
+            "/api/v1/lifecycle/deletions/apply",
+            json={**request, "confirm_plan_id": plan["plan_id"]},
+        )
+        assert applied_response.status_code == 201
+        applied = applied_response.json()
+        batch_id = applied["batch_id"]
+        assert applied["required_checks_passed"] is True
+        assert client.get("/api/v1/jobs").json() == []
+        assert len(client.get("/api/v1/lifecycle/trash").json()) == 1
+        assert all(not marker.exists() for marker in markers)
+
+        restored = client.post(
+            f"/api/v1/lifecycle/trash/{batch_id}/restore",
+            json={"confirm_batch_id": batch_id},
+        )
+        assert restored.status_code == 200
+        assert restored.json()["action"] == "restored"
+        assert len(client.get("/api/v1/jobs").json()) == 2
+        assert all(marker.is_file() for marker in markers)
+
+        repeat_plan = client.post("/api/v1/lifecycle/deletions/plan", json=request).json()
+        repeat = client.post(
+            "/api/v1/lifecycle/deletions/apply",
+            json={**request, "confirm_plan_id": repeat_plan["plan_id"]},
+        ).json()
+        purged = client.request(
+            "DELETE",
+            f"/api/v1/lifecycle/trash/{repeat['batch_id']}",
+            json={"confirm_batch_id": repeat["batch_id"]},
+        )
+        assert purged.status_code == 200
+        assert purged.json()["action"] == "purged"
+        assert purged.json()["affected_bytes"] > 0
+        assert client.get("/api/v1/lifecycle/trash").json() == []
+        assert all(not marker.exists() for marker in markers)
 
 
 def test_config_loader_reopens_launch_and_overlay_yaml(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import itertools
 import json
 import mimetypes
@@ -14,6 +15,7 @@ import sys
 import threading
 import time
 from collections.abc import Iterator
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -35,6 +37,11 @@ from topoforge.web.models import (
     FileEntry,
     FileListing,
     JobArtifact,
+    JobBatchDeleteApplyRequest,
+    JobBatchDeleteMode,
+    JobBatchDeletePlan,
+    JobBatchDeletePlanItem,
+    JobBatchDeletePlanRequest,
     JobCreateRequest,
     JobDeleteRequest,
     JobDeleteResult,
@@ -43,6 +50,12 @@ from topoforge.web.models import (
     JobMaintenanceOverview,
     JobRecord,
     JobState,
+    JobTrashActionRequest,
+    JobTrashActionResult,
+    JobTrashRecord,
+    JobTrashTransaction,
+    JobTrashTransactionMove,
+    JobTrashWorkspace,
     WebAppConfig,
     WorkerResult,
     WorkflowBackupRecord,
@@ -173,6 +186,26 @@ class LocalJobManager:
         """Return the adapter-owned verified workflow backup directory."""
         return self.config.state_dir / "backups"
 
+    @property
+    def trash_dir(self) -> Path:
+        """Return the durable state root for recoverable task batches."""
+        return self.config.state_dir / "trash"
+
+    @property
+    def deletion_audit_dir(self) -> Path:
+        """Return the append-only result root for completed trash actions."""
+        return self.config.state_dir / "deletion-audit"
+
+    @property
+    def trash_transactions_dir(self) -> Path:
+        """Return the durable intent root for interrupted trash operations."""
+        return self.config.state_dir / "trash-transactions"
+
+    @property
+    def workspace_trash_dir(self) -> Path:
+        """Return the same-filesystem quarantine root below the workspace root."""
+        return self.config.workspace_root / ".topoforge-trash"
+
     def _slicer_adapter(self, name: str) -> SlicerAdapter:
         if name == "bambu-studio":
             return BambuStudioAdapter(self.config.bambu_studio_executable)
@@ -261,6 +294,11 @@ class LocalJobManager:
             self.config.workspace_root.mkdir(parents=True, exist_ok=True)
             self.jobs_dir.mkdir(parents=True, exist_ok=True)
             self.backups_dir.mkdir(parents=True, exist_ok=True)
+            self.trash_dir.mkdir(parents=True, exist_ok=True)
+            self.deletion_audit_dir.mkdir(parents=True, exist_ok=True)
+            self.workspace_trash_dir.mkdir(parents=True, exist_ok=True)
+            self.trash_transactions_dir.mkdir(parents=True, exist_ok=True)
+            self._recover_trash_transactions()
             self.refresh()
             if self._monitor is None or not self._monitor.is_alive():
                 self._stop.clear()
@@ -294,6 +332,205 @@ class LocalJobManager:
         ):
             raise KeyError(job_id)
         return self.jobs_dir / job_id
+
+    @staticmethod
+    def _validate_batch_id(batch_id: str) -> str:
+        if len(batch_id) != 32 or any(
+            character not in "0123456789abcdef" for character in batch_id
+        ):
+            raise KeyError(batch_id)
+        return batch_id
+
+    def _trash_batch_dir(self, batch_id: str) -> Path:
+        return self.trash_dir / self._validate_batch_id(batch_id)
+
+    def _workspace_trash_batch_dir(self, batch_id: str) -> Path:
+        return self.workspace_trash_dir / self._validate_batch_id(batch_id)
+
+    def _trash_record_path(self, batch_id: str) -> Path:
+        return self._trash_batch_dir(batch_id) / "trash.json"
+
+    def _trash_transaction_dir(self, batch_id: str) -> Path:
+        return self.trash_transactions_dir / self._validate_batch_id(batch_id)
+
+    def _trash_transaction_path(self, batch_id: str) -> Path:
+        return self._trash_transaction_dir(batch_id) / "transaction.json"
+
+    def _read_trash_record(self, batch_id: str) -> JobTrashRecord:
+        path = self._trash_record_path(batch_id)
+        if not path.is_file():
+            raise KeyError(batch_id)
+        return _read_model(path, JobTrashRecord)
+
+    @staticmethod
+    def _same_path(left: Path, right: Path) -> bool:
+        return left.expanduser().resolve() == right.expanduser().resolve()
+
+    def _validate_trash_transaction(
+        self,
+        transaction: JobTrashTransaction,
+    ) -> JobTrashTransaction:
+        batch_id = self._validate_batch_id(transaction.batch_id)
+        expected_paths = (
+            (transaction.state_temporary, self.trash_dir / f".{batch_id}.creating"),
+            (transaction.state_destination, self._trash_batch_dir(batch_id)),
+            (
+                transaction.workspace_temporary,
+                self.workspace_trash_dir / f".{batch_id}.creating",
+            ),
+            (
+                transaction.workspace_destination,
+                self._workspace_trash_batch_dir(batch_id),
+            ),
+        )
+        if any(not self._same_path(actual, expected) for actual, expected in expected_paths):
+            raise ConfigurationError("trash transaction contains an unexpected batch path")
+        if transaction.trash_record.batch_id != batch_id:
+            raise ConfigurationError("trash transaction batch identity does not match its record")
+
+        expected_job_ids = set(transaction.trash_record.job_ids)
+        actual_job_ids: set[str] = set()
+        for move in transaction.job_moves:
+            job_id = move.source.name
+            self._job_dir(job_id)
+            expected = JobTrashTransactionMove(
+                source=self._job_dir(job_id),
+                temporary=transaction.state_temporary / "jobs" / job_id,
+                destination=transaction.state_destination / "jobs" / job_id,
+            )
+            if move != expected:
+                raise ConfigurationError("trash transaction contains an unexpected job path")
+            actual_job_ids.add(job_id)
+        if actual_job_ids != expected_job_ids or len(actual_job_ids) != len(transaction.job_moves):
+            raise ConfigurationError("trash transaction job identities do not match its record")
+
+        expected_workspace_moves = {
+            (
+                workspace.original_workspace.expanduser().resolve(),
+                workspace.quarantined_workspace.expanduser().resolve(),
+            )
+            for workspace in transaction.trash_record.workspaces
+            if workspace.quarantined_workspace is not None
+        }
+        actual_workspace_moves: set[tuple[Path, Path]] = set()
+        workspace_root = self.config.workspace_root.resolve()
+        for move in transaction.workspace_moves:
+            source = move.source.expanduser().resolve()
+            temporary = move.temporary.expanduser().resolve()
+            destination = move.destination.expanduser().resolve()
+            if source == workspace_root or workspace_root not in source.parents:
+                raise ConfigurationError("trash transaction workspace escaped its configured root")
+            if (
+                transaction.workspace_temporary.resolve() not in temporary.parents
+                or transaction.workspace_destination.resolve() not in destination.parents
+                or temporary.relative_to(transaction.workspace_temporary.resolve())
+                != destination.relative_to(transaction.workspace_destination.resolve())
+            ):
+                raise ConfigurationError(
+                    "trash transaction contains an unexpected workspace quarantine path"
+                )
+            actual_workspace_moves.add((source, destination))
+        if actual_workspace_moves != expected_workspace_moves or len(actual_workspace_moves) != len(
+            transaction.workspace_moves
+        ):
+            raise ConfigurationError(
+                "trash transaction workspaces do not match its recovery record"
+            )
+        return transaction
+
+    @staticmethod
+    def _transaction_move_location(move: JobTrashTransactionMove) -> Path:
+        locations = tuple(
+            path
+            for path in (move.source, move.temporary, move.destination)
+            if path.exists() or path.is_symlink()
+        )
+        if len(locations) != 1:
+            raise ConfigurationError(
+                "trash transaction recovery requires exactly one copy of every moved path"
+            )
+        if locations[0].is_symlink():
+            raise ConfigurationError("trash transaction moved path must not be a symlink")
+        return locations[0]
+
+    def _remove_trash_transaction(self, transaction: JobTrashTransaction) -> None:
+        path = self._trash_transaction_path(transaction.batch_id)
+        path.unlink()
+        with contextlib.suppress(OSError):
+            path.parent.rmdir()
+
+    def _rollback_trash_transaction(self, transaction: JobTrashTransaction) -> None:
+        for move in reversed((*transaction.job_moves, *transaction.workspace_moves)):
+            current = self._transaction_move_location(move)
+            if current != move.source:
+                move.source.parent.mkdir(parents=True, exist_ok=True)
+                current.replace(move.source)
+        for record_path in (
+            transaction.state_temporary / "trash.json",
+            transaction.state_destination / "trash.json",
+        ):
+            if record_path.exists():
+                record_path.unlink()
+        for path in (
+            transaction.state_temporary / "jobs",
+            transaction.state_temporary,
+            transaction.state_destination / "jobs",
+            transaction.state_destination,
+            transaction.workspace_temporary,
+            transaction.workspace_destination,
+        ):
+            if path.exists():
+                path.rmdir()
+        self._remove_trash_transaction(transaction)
+
+    def _publish_trash_transaction(
+        self,
+        transaction: JobTrashTransaction,
+    ) -> JobTrashRecord:
+        for move in (*transaction.job_moves, *transaction.workspace_moves):
+            self._transaction_move_location(move)
+        temporary_record = transaction.state_temporary / "trash.json"
+        published_record = transaction.state_destination / "trash.json"
+        if transaction.state_temporary.exists() and transaction.state_destination.exists():
+            raise ConfigurationError("trash transaction has duplicate state batch directories")
+        if published_record.is_file():
+            reopened = _read_model(published_record, JobTrashRecord)
+        elif temporary_record.is_file():
+            reopened = _read_model(temporary_record, JobTrashRecord)
+            if transaction.workspace_moves:
+                if transaction.workspace_destination.exists():
+                    if transaction.workspace_temporary.exists():
+                        raise ConfigurationError(
+                            "trash transaction has duplicate workspace batch directories"
+                        )
+                elif transaction.workspace_temporary.exists():
+                    transaction.workspace_temporary.replace(transaction.workspace_destination)
+                else:
+                    raise ConfigurationError(
+                        "trash transaction workspace batch is missing during publication"
+                    )
+            transaction.state_temporary.replace(transaction.state_destination)
+        else:
+            raise ConfigurationError("trash transaction is not ready for publication")
+        if reopened != transaction.trash_record:
+            raise ConfigurationError("trash transaction record changed before publication")
+        verified = self._verify_trash_record(reopened)
+        self._remove_trash_transaction(transaction)
+        return verified
+
+    def _recover_trash_transactions(self) -> None:
+        for path in sorted(self.trash_transactions_dir.glob("*/transaction.json")):
+            if path.is_symlink() or path.parent.is_symlink():
+                raise ConfigurationError("trash transaction path must not be a symlink")
+            transaction = self._validate_trash_transaction(_read_model(path, JobTrashTransaction))
+            if path != self._trash_transaction_path(transaction.batch_id):
+                raise ConfigurationError("trash transaction is stored under the wrong batch id")
+            if (transaction.state_temporary / "trash.json").is_file() or (
+                transaction.state_destination / "trash.json"
+            ).is_file():
+                self._publish_trash_transaction(transaction)
+            else:
+                self._rollback_trash_transaction(transaction)
 
     def _record_path(self, job_id: str) -> Path:
         return self._job_dir(job_id) / "job.json"
@@ -807,6 +1044,434 @@ class LocalJobManager:
                     daemon=True,
                 ).start()
             return updated
+
+    def plan_batch_delete(self, request: JobBatchDeletePlanRequest) -> JobBatchDeletePlan:
+        """Measure one terminal-job batch without changing records or workspaces."""
+        with self._lock:
+            self.refresh()
+            job_ids = tuple(sorted(request.job_ids))
+            records = {job_id: self._read_record(job_id) for job_id in job_ids}
+            all_records = self._all_records()
+            selected = set(job_ids)
+            terminal_states = {
+                JobState.CANCELLED,
+                JobState.COMPLETED,
+                JobState.FAILED,
+            }
+            backups_by_workflow: dict[str, list[str]] = {}
+            for backup in self.list_backups():
+                backups_by_workflow.setdefault(backup.workflow_id, []).append(backup.backup_id)
+
+            selected_by_workspace: dict[Path, list[JobRecord]] = {}
+            references_by_workspace: dict[Path, list[str]] = {}
+            source_paths: dict[Path, Path] = {}
+            for record in all_records:
+                source_path = record.workspace_dir.expanduser()
+                workspace = source_path.resolve()
+                references_by_workspace.setdefault(workspace, []).append(record.job_id)
+                if record.job_id in selected:
+                    selected_by_workspace.setdefault(workspace, []).append(record)
+                    source_paths[workspace] = source_path
+
+            workspace_blockers: dict[Path, tuple[str, ...]] = {}
+            workspace_sizes: dict[Path, int] = {}
+            backup_job_by_workspace: dict[Path, str] = {}
+            for workspace, workspace_records in selected_by_workspace.items():
+                source_path = source_paths[workspace]
+                blockers: list[str] = []
+                exists = source_path.exists() or source_path.is_symlink()
+                workspace_sizes[workspace] = _path_size_bytes(source_path) if exists else 0
+                if request.mode is not JobBatchDeleteMode.RECORD_ONLY:
+                    workspace_root = self.config.workspace_root.resolve()
+                    if source_path.is_symlink():
+                        blockers.append(
+                            "workspace is a symlink and cannot be moved into quarantine"
+                        )
+                    if workspace == workspace_root or workspace_root not in workspace.parents:
+                        blockers.append("workspace is outside the configured workspace root")
+                    unselected = sorted(set(references_by_workspace.get(workspace, ())) - selected)
+                    if unselected:
+                        blockers.append(
+                            "workspace is still referenced by unselected jobs: "
+                            + ", ".join(unselected)
+                        )
+                    if request.mode is JobBatchDeleteMode.BACKUP_AND_QUARANTINE:
+                        if not exists:
+                            blockers.append(
+                                "workspace is missing and cannot be verified for backup"
+                            )
+                        candidates = sorted(
+                            record.job_id
+                            for record in workspace_records
+                            if record.state is JobState.COMPLETED and record.summary is not None
+                        )
+                        if candidates:
+                            backup_job_by_workspace[workspace] = candidates[0]
+                        else:
+                            blockers.append(
+                                "verified workflow backup requires a selected completed job"
+                            )
+                workspace_blockers[workspace] = tuple(blockers)
+
+            items: list[JobBatchDeletePlanItem] = []
+            aggregate_blockers: list[str] = []
+            for job_id in job_ids:
+                record = records[job_id]
+                workspace = record.workspace_dir.expanduser().resolve()
+                blockers = list(workspace_blockers[workspace])
+                if record.state not in terminal_states:
+                    blockers.insert(0, "job is active; cancel it before batch removal")
+                workflow_id = record.summary.workflow_id if record.summary is not None else None
+                verified_backups = tuple(
+                    sorted(backups_by_workflow.get(workflow_id, ()))
+                    if workflow_id is not None
+                    else ()
+                )
+                references = tuple(sorted(references_by_workspace.get(workspace, ())))
+                unselected_references = tuple(sorted(set(references) - selected))
+                item = JobBatchDeletePlanItem(
+                    job_id=job_id,
+                    state=record.state,
+                    workspace=workspace,
+                    workspace_existed=(
+                        record.workspace_dir.expanduser().exists()
+                        or record.workspace_dir.expanduser().is_symlink()
+                    ),
+                    job_record_bytes=_path_size_bytes(self._job_dir(job_id)),
+                    workspace_bytes=(
+                        0
+                        if request.mode is JobBatchDeleteMode.RECORD_ONLY
+                        else workspace_sizes[workspace]
+                    ),
+                    workspace_reference_job_ids=references,
+                    unselected_reference_job_ids=unselected_references,
+                    verified_backup_ids=verified_backups,
+                    eligible=not blockers,
+                    blockers=tuple(blockers),
+                )
+                items.append(item)
+                aggregate_blockers.extend(f"{job_id}: {blocker}" for blocker in blockers)
+
+            job_record_bytes = sum(item.job_record_bytes for item in items)
+            workspace_bytes = (
+                0
+                if request.mode is JobBatchDeleteMode.RECORD_ONLY
+                else sum(workspace_sizes.values())
+            )
+            provisional = JobBatchDeletePlan(
+                plan_id="0" * 64,
+                mode=request.mode,
+                job_ids=job_ids,
+                items=tuple(items),
+                selected_job_count=len(job_ids),
+                eligible_job_count=sum(item.eligible for item in items),
+                unique_workspace_count=len(selected_by_workspace),
+                job_record_bytes=job_record_bytes,
+                workspace_bytes=workspace_bytes,
+                total_target_bytes=job_record_bytes + workspace_bytes,
+                backup_job_ids=tuple(sorted(backup_job_by_workspace.values())),
+                blockers=tuple(aggregate_blockers),
+                required_checks_passed=not aggregate_blockers,
+            )
+            identity = provisional.model_dump(mode="json", exclude={"plan_id"})
+            plan_id = hashlib.sha256(_canonical_bytes(identity)).hexdigest()
+            return provisional.model_copy(update={"plan_id": plan_id})
+
+    def _verify_trash_record(self, record: JobTrashRecord) -> JobTrashRecord:
+        batch_dir = self._trash_batch_dir(record.batch_id)
+        if not record.required_checks_passed:
+            raise ConfigurationError("job trash record did not pass its creation checks")
+        for job_id in record.job_ids:
+            quarantined_job = batch_dir / "jobs" / job_id
+            if not quarantined_job.is_dir() or quarantined_job.is_symlink():
+                raise ConfigurationError(f"quarantined job record is missing or unsafe: {job_id}")
+        workspace_batch = self._workspace_trash_batch_dir(record.batch_id)
+        for workspace in record.workspaces:
+            quarantined = workspace.quarantined_workspace
+            if quarantined is None:
+                continue
+            if workspace_batch.resolve() not in quarantined.resolve().parents:
+                raise ConfigurationError("quarantined workspace escaped its batch root")
+            if not quarantined.exists() or quarantined.is_symlink():
+                raise ConfigurationError(
+                    f"quarantined workspace is missing or unsafe: {quarantined}"
+                )
+        for backup_id in record.backup_ids:
+            self.backup_archive_path(backup_id)
+        return record
+
+    def list_trash(self) -> tuple[JobTrashRecord, ...]:
+        """Strictly reopen recoverable batches newest first."""
+        with self._lock:
+            if not self.trash_dir.exists():
+                return ()
+            records = [
+                self._verify_trash_record(_read_model(path, JobTrashRecord))
+                for path in self.trash_dir.glob("*/trash.json")
+            ]
+            return tuple(sorted(records, key=lambda item: item.created_at, reverse=True))
+
+    def apply_batch_delete(self, request: JobBatchDeleteApplyRequest) -> JobTrashRecord:
+        """Apply one unchanged reviewed plan by moving records and workspaces to trash."""
+        with self._lock:
+            plan = self.plan_batch_delete(
+                JobBatchDeletePlanRequest(job_ids=request.job_ids, mode=request.mode)
+            )
+            if request.confirm_plan_id != plan.plan_id:
+                raise ConfigurationError(
+                    "batch deletion plan changed; review the new measured plan before applying"
+                )
+            if not plan.required_checks_passed:
+                raise ConfigurationError(
+                    "batch deletion plan has blockers: " + "; ".join(plan.blockers)
+                )
+
+            backup_ids = tuple(
+                sorted({self.create_backup(job_id).backup_id for job_id in plan.backup_job_ids})
+            )
+            batch_id = uuid4().hex
+            state_temporary = self.trash_dir / f".{batch_id}.creating"
+            state_destination = self._trash_batch_dir(batch_id)
+            workspace_temporary = self.workspace_trash_dir / f".{batch_id}.creating"
+            workspace_destination = self._workspace_trash_batch_dir(batch_id)
+            transaction_dir = self._trash_transaction_dir(batch_id)
+            if any(
+                path.exists() or path.is_symlink()
+                for path in (
+                    state_temporary,
+                    state_destination,
+                    workspace_temporary,
+                    workspace_destination,
+                    transaction_dir,
+                )
+            ):
+                raise ConfigurationError("generated trash batch destination already exists")
+
+            workspace_items: dict[Path, JobBatchDeletePlanItem] = {}
+            for item in plan.items:
+                workspace_items.setdefault(item.workspace, item)
+            workspace_moves: list[JobTrashTransactionMove] = []
+            trash_workspaces: list[JobTrashWorkspace] = []
+            for index, (workspace, item) in enumerate(sorted(workspace_items.items())):
+                existed = workspace.exists()
+                size_bytes = _path_size_bytes(workspace) if existed else 0
+                quarantined: Path | None = None
+                if request.mode is not JobBatchDeleteMode.RECORD_ONLY and existed:
+                    name = f"{index:04d}-{workspace.name or 'workspace'}"
+                    temporary = workspace_temporary / name
+                    quarantined = workspace_destination / name
+                    workspace_moves.append(
+                        JobTrashTransactionMove(
+                            source=workspace,
+                            temporary=temporary,
+                            destination=quarantined,
+                        )
+                    )
+                trash_workspaces.append(
+                    JobTrashWorkspace(
+                        original_workspace=workspace,
+                        quarantined_workspace=quarantined,
+                        workspace_existed=item.workspace_existed,
+                        size_bytes=size_bytes,
+                    )
+                )
+
+            job_moves = tuple(
+                JobTrashTransactionMove(
+                    source=self._job_dir(job_id),
+                    temporary=state_temporary / "jobs" / job_id,
+                    destination=state_destination / "jobs" / job_id,
+                )
+                for job_id in plan.job_ids
+            )
+            created_at = utc_now()
+            trash_record = JobTrashRecord(
+                batch_id=batch_id,
+                plan_id=plan.plan_id,
+                mode=plan.mode,
+                created_at=created_at,
+                purge_after=created_at + timedelta(days=7),
+                job_ids=plan.job_ids,
+                job_record_bytes=plan.job_record_bytes,
+                workspaces=tuple(trash_workspaces),
+                backup_ids=backup_ids,
+                total_quarantined_bytes=plan.total_target_bytes,
+                backups_preserved=True,
+                required_checks_passed=True,
+            )
+            transaction = self._validate_trash_transaction(
+                JobTrashTransaction(
+                    batch_id=batch_id,
+                    state_temporary=state_temporary,
+                    state_destination=state_destination,
+                    workspace_temporary=workspace_temporary,
+                    workspace_destination=workspace_destination,
+                    job_moves=job_moves,
+                    workspace_moves=tuple(workspace_moves),
+                    trash_record=trash_record,
+                )
+            )
+
+            self.trash_dir.mkdir(parents=True, exist_ok=True)
+            self.workspace_trash_dir.mkdir(parents=True, exist_ok=True)
+            self.trash_transactions_dir.mkdir(parents=True, exist_ok=True)
+            _atomic_write(self._trash_transaction_path(batch_id), transaction)
+            state_temporary.mkdir(parents=True)
+            (state_temporary / "jobs").mkdir()
+            if workspace_moves:
+                workspace_temporary.mkdir(parents=True)
+
+            try:
+                for move in transaction.workspace_moves:
+                    move.source.replace(move.temporary)
+                for move in transaction.job_moves:
+                    move.source.replace(move.temporary)
+                _atomic_write(state_temporary / "trash.json", trash_record)
+                published = self._publish_trash_transaction(transaction)
+            except BaseException:
+                if self._trash_transaction_path(batch_id).is_file():
+                    self._rollback_trash_transaction(transaction)
+                raise
+            for job_id in plan.job_ids:
+                self._processes.pop(job_id, None)
+            return published
+
+    def _write_trash_audit(
+        self,
+        record: JobTrashRecord,
+        *,
+        action: str,
+        affected_bytes: int,
+    ) -> None:
+        self.deletion_audit_dir.mkdir(parents=True, exist_ok=True)
+        _atomic_write(
+            self.deletion_audit_dir / f"{record.batch_id}-{action}.json",
+            {
+                "schema_version": "topoforge-web-job-trash-audit-v1",
+                "batch_id": record.batch_id,
+                "plan_id": record.plan_id,
+                "action": action,
+                "occurred_at": utc_now().isoformat(),
+                "job_ids": record.job_ids,
+                "affected_bytes": affected_bytes,
+                "backup_ids": record.backup_ids,
+                "backups_preserved": True,
+                "required_checks_passed": True,
+            },
+        )
+
+    def restore_trash(
+        self,
+        batch_id: str,
+        request: JobTrashActionRequest,
+    ) -> JobTrashActionResult:
+        """Restore every job record and quarantined workspace in one batch."""
+        with self._lock:
+            if request.confirm_batch_id != batch_id:
+                raise ConfigurationError(
+                    "trash restore confirmation does not match the selected batch"
+                )
+            record = self._verify_trash_record(self._read_trash_record(batch_id))
+            for job_id in record.job_ids:
+                if self._job_dir(job_id).exists():
+                    raise ConfigurationError(
+                        f"job id already exists and blocks trash restore: {job_id}"
+                    )
+            for workspace in record.workspaces:
+                original = workspace.original_workspace
+                if workspace.quarantined_workspace is not None and original.exists():
+                    raise ConfigurationError(
+                        f"workspace destination already exists and blocks restore: {original}"
+                    )
+                if (
+                    workspace.quarantined_workspace is None
+                    and workspace.workspace_existed
+                    and not original.exists()
+                ):
+                    raise ConfigurationError(
+                        f"retained workspace is missing and blocks job record restore: {original}"
+                    )
+
+            workspace_moves: list[tuple[Path, Path]] = []
+            job_moves: list[tuple[Path, Path]] = []
+            try:
+                for workspace in record.workspaces:
+                    quarantined = workspace.quarantined_workspace
+                    if quarantined is None:
+                        continue
+                    workspace.original_workspace.parent.mkdir(parents=True, exist_ok=True)
+                    quarantined.replace(workspace.original_workspace)
+                    workspace_moves.append((workspace.original_workspace, quarantined))
+                for job_id in record.job_ids:
+                    source = self._trash_batch_dir(batch_id) / "jobs" / job_id
+                    destination = self._job_dir(job_id)
+                    source.replace(destination)
+                    job_moves.append((destination, source))
+            except BaseException:
+                for destination, source in reversed(job_moves):
+                    if destination.exists() and not source.exists():
+                        destination.replace(source)
+                for destination, source in reversed(workspace_moves):
+                    if destination.exists() and not source.exists():
+                        destination.replace(source)
+                raise
+
+            workspace_batch = self._workspace_trash_batch_dir(batch_id)
+            if workspace_batch.exists():
+                shutil.rmtree(workspace_batch)
+            shutil.rmtree(self._trash_batch_dir(batch_id))
+            self._write_trash_audit(
+                record,
+                action="restored",
+                affected_bytes=record.total_quarantined_bytes,
+            )
+            checks = all(self._job_dir(job_id).is_dir() for job_id in record.job_ids)
+            if not checks:
+                raise ConfigurationError("trash restore finished without all job records")
+            return JobTrashActionResult(
+                batch_id=batch_id,
+                action="restored",
+                job_ids=record.job_ids,
+                workspace_count=len(record.workspaces),
+                affected_bytes=record.total_quarantined_bytes,
+                backups_preserved=True,
+                required_checks_passed=True,
+            )
+
+    def purge_trash(
+        self,
+        batch_id: str,
+        request: JobTrashActionRequest,
+    ) -> JobTrashActionResult:
+        """Permanently remove one reviewed trash batch while preserving backups."""
+        with self._lock:
+            if request.confirm_batch_id != batch_id:
+                raise ConfigurationError(
+                    "trash purge confirmation does not match the selected batch"
+                )
+            record = self._verify_trash_record(self._read_trash_record(batch_id))
+            state_batch = self._trash_batch_dir(batch_id)
+            workspace_batch = self._workspace_trash_batch_dir(batch_id)
+            affected_bytes = _path_size_bytes(state_batch) + _path_size_bytes(workspace_batch)
+            if workspace_batch.exists():
+                shutil.rmtree(workspace_batch)
+            shutil.rmtree(state_batch)
+            self._write_trash_audit(
+                record,
+                action="purged",
+                affected_bytes=affected_bytes,
+            )
+            if state_batch.exists() or workspace_batch.exists():
+                raise ConfigurationError("trash purge finished without removing every batch path")
+            return JobTrashActionResult(
+                batch_id=batch_id,
+                action="purged",
+                job_ids=record.job_ids,
+                workspace_count=len(record.workspaces),
+                affected_bytes=affected_bytes,
+                backups_preserved=True,
+                required_checks_passed=True,
+            )
 
     def delete(
         self,

@@ -27,11 +27,27 @@ import App from "./App";
 
 const health = {
   status: "ok",
-  version: "0.10.1",
+  version: "0.10.2",
   loopback_only: true,
   languages: ["zh-CN", "en"],
   workspace_root: "/tmp/workspaces",
   state_dir: "/tmp/state",
+};
+
+const trashBatch = {
+  schema_version: "topoforge-web-job-trash-v1",
+  batch_id: "9".repeat(32),
+  plan_id: "8".repeat(64),
+  mode: "quarantine-workspace",
+  created_at: "2026-08-03T00:00:00Z",
+  purge_after: "2026-08-10T00:00:00Z",
+  job_ids: ["b".repeat(32)],
+  job_record_bytes: 2048,
+  workspaces: [],
+  backup_ids: [],
+  total_quarantined_bytes: 10240,
+  backups_preserved: true,
+  required_checks_passed: true,
 };
 
 function response(value: unknown, status = 200): Response {
@@ -232,6 +248,9 @@ describe("TopoForge bilingual workspace", () => {
         if (path.endsWith("/api/v1/jobs")) {
           return response([]);
         }
+        if (path.endsWith("/api/v1/lifecycle/trash")) {
+          return response([]);
+        }
         if (path.startsWith("/api/v1/files")) {
           return response({ path: null, parent: null, roots: [], entries: [] });
         }
@@ -244,7 +263,7 @@ describe("TopoForge bilingual workspace", () => {
     render(<App />);
     expect(screen.getByText("本地地形制造工作台")).toBeInTheDocument();
     expect(screen.getByTestId("map-panel")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("v0.10.1")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("v0.10.2")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "开始构建" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
@@ -307,6 +326,9 @@ describe("TopoForge bilingual workspace", () => {
         if (path.endsWith("/api/v1/jobs")) {
           return response([completedJob]);
         }
+        if (path.endsWith("/api/v1/lifecycle/trash")) {
+          return response([]);
+        }
         return response({});
       }),
     );
@@ -361,6 +383,9 @@ describe("TopoForge bilingual workspace", () => {
         if (path.endsWith("/api/v1/jobs")) {
           return response([completedJob, cancelledJob, failedJob]);
         }
+        if (path.endsWith("/api/v1/lifecycle/trash")) {
+          return response([]);
+        }
         return response({});
       }),
     );
@@ -385,52 +410,146 @@ describe("TopoForge bilingual workspace", () => {
     expect(screen.getByText("cancelled-project")).toBeInTheDocument();
     expect(screen.queryByText("failed-project")).not.toBeInTheDocument();
 
+    fireEvent.change(filter, { target: { value: "all" } });
+    const sort = screen.getByRole("combobox", { name: "任务排序" });
+    fireEvent.change(sort, { target: { value: "name" } });
+    const names = screen
+      .getAllByRole("button")
+      .filter((button) =>
+        ["phase10", "cancelled-project", "failed-project"].some((name) =>
+          button.textContent?.includes(name),
+        ),
+      )
+      .map((button) => button.textContent);
+    expect(names[0]).toContain("cancelled-project");
+
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
     expect(screen.getByRole("searchbox", { name: "Search jobs" })).toBeInTheDocument();
     expect(
       screen.getByRole("combobox", { name: "Filter job status" }),
-    ).toHaveValue("cancelled");
-    expect(screen.getByLabelText("Visible jobs")).toHaveTextContent("1/3");
+    ).toHaveValue("all");
+    expect(screen.getByRole("combobox", { name: "Sort jobs" })).toHaveValue("name");
+    expect(screen.getByLabelText("Visible jobs")).toHaveTextContent("3/3");
   });
 
-  it("removes terminal job records and optionally deletes project files", async () => {
+  it("selects visible terminal jobs and submits one measured batch plan", async () => {
+    const planBodies: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path.endsWith("/api/v1/health")) {
+          return response(health);
+        }
+        if (path.endsWith("/api/v1/lifecycle/trash")) {
+          return response([]);
+        }
+        if (path.endsWith("/api/v1/lifecycle/deletions/plan")) {
+          const body = JSON.parse(String(init?.body));
+          planBodies.push(body);
+          return response({
+            schema_version: "topoforge-web-job-batch-delete-plan-v1",
+            plan_id: "7".repeat(64),
+            mode: body.mode,
+            job_ids: body.job_ids,
+            items: [],
+            selected_job_count: 3,
+            eligible_job_count: 3,
+            unique_workspace_count: 3,
+            job_record_bytes: 6144,
+            workspace_bytes: 24576,
+            total_target_bytes: 30720,
+            backup_job_ids: [],
+            blockers: [],
+            required_checks_passed: true,
+          });
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10/maintenance")) {
+          return response(maintenanceOverview);
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10/map/manifest")) {
+          return response(mapManifest);
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10/assembly")) {
+          return response(assembly);
+        }
+        if (path.endsWith("/api/v1/jobs")) {
+          return response([completedJob, cancelledJob, failedJob]);
+        }
+        return response({});
+      }),
+    );
+
+    render(<App />);
+    await screen.findByLabelText("可见任务数");
+    fireEvent.click(screen.getByRole("button", { name: "选择当前终态任务" }));
+    expect(screen.getByText(/已选任务:/)).toHaveTextContent("3");
+    fireEvent.change(screen.getByRole("combobox", { name: "批量操作" }), {
+      target: { value: "quarantine-workspace" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "预检批量操作" }));
+    expect(await screen.findByLabelText("批量操作预检")).toBeInTheDocument();
+    expect(screen.getByText("30.0 KiB")).toBeInTheDocument();
+    expect(planBodies).toEqual([
+      {
+        job_ids: [completedJob.job_id, cancelledJob.job_id, failedJob.job_id],
+        mode: "quarantine-workspace",
+      },
+    ]);
+  });
+
+  it("reviews terminal job batches and moves selected projects into recoverable trash", async () => {
     let jobs = [cancelledJob, failedJob];
-    const deletionBodies: unknown[] = [];
+    let trash: unknown[] = [];
+    const planBodies: unknown[] = [];
+    const applyBodies: unknown[] = [];
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const path = String(input);
         if (path.endsWith("/api/v1/health")) {
           return response(health);
         }
-        if (init?.method === "DELETE") {
-          const jobId = path.split("/").at(-1)!;
-          const body = JSON.parse(String(init.body)) as {
-            confirm_job_id: string;
-            delete_workspace: boolean;
+        if (path.endsWith("/api/v1/lifecycle/deletions/plan")) {
+          const body = JSON.parse(String(init?.body)) as {
+            job_ids: string[];
+            mode: string;
           };
-          deletionBodies.push(body);
-          expect(body.confirm_job_id).toBe(jobId);
-          jobs = jobs.filter((job) => job.job_id !== jobId);
+          planBodies.push(body);
+          const jobId = body.job_ids[0];
           return response({
-            schema_version: "topoforge-web-job-delete-v1",
-            job_id: jobId,
-            previous_state: jobId === cancelledJob.job_id ? "cancelled" : "failed",
-            workspace:
-              jobId === cancelledJob.job_id
-                ? cancelledJob.workspace_dir
-                : failedJob.workspace_dir,
-            workspace_existed: true,
-            workspace_removed: body.delete_workspace,
-            workspace_retained: !body.delete_workspace,
-            deleted_job_record_bytes: 2048,
-            deleted_workspace_bytes: body.delete_workspace ? 8192 : 0,
-            reclaimed_bytes: body.delete_workspace ? 10240 : 2048,
-            backups_preserved: true,
+            schema_version: "topoforge-web-job-batch-delete-plan-v1",
+            plan_id: body.mode === "record-only" ? "1".repeat(64) : "2".repeat(64),
+            mode: body.mode,
+            job_ids: body.job_ids,
+            items: [],
+            selected_job_count: 1,
+            eligible_job_count: 1,
+            unique_workspace_count: 1,
+            job_record_bytes: 2048,
+            workspace_bytes: body.mode === "record-only" ? 0 : 8192,
+            total_target_bytes: body.mode === "record-only" ? 2048 : 10240,
+            backup_job_ids: [],
+            blockers: [],
             required_checks_passed: true,
+            job_id: jobId,
           });
+        }
+        if (path.endsWith("/api/v1/lifecycle/deletions/apply")) {
+          const body = JSON.parse(String(init?.body)) as {
+            job_ids: string[];
+            mode: string;
+            confirm_plan_id: string;
+          };
+          applyBodies.push(body);
+          jobs = jobs.filter((job) => !body.job_ids.includes(job.job_id));
+          trash = [{ ...trashBatch, mode: body.mode, job_ids: body.job_ids }];
+          return response(trash[0], 201);
         }
         if (path.endsWith("/api/v1/jobs")) {
           return response(jobs);
+        }
+        if (path.endsWith("/api/v1/lifecycle/trash")) {
+          return response(trash);
         }
         return response({});
       },
@@ -443,28 +562,45 @@ describe("TopoForge bilingual workspace", () => {
       name: "移除任务记录",
     });
     fireEvent.click(removeRecord);
+    expect(await screen.findByLabelText("批量操作预检")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "执行已核对操作" }));
     await waitFor(() =>
-      expect(screen.getByText("任务记录已移除，项目文件已保留")).toBeInTheDocument(),
+      expect(screen.getByText("所选任务已移入回收站")).toBeInTheDocument(),
     );
     expect(confirm).toHaveBeenCalledWith(
-      "仅从任务列表移除“cancelled-project”？工作区文件和备份会保留。",
+      "执行已核对的批次 111111111111？所选记录将进入可恢复回收站。",
     );
     expect(
       await screen.findByRole("heading", { name: "failed-project" }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "删除项目文件" }));
+    fireEvent.click(screen.getByRole("button", { name: "将项目移入回收站" }));
+    expect(await screen.findByLabelText("批量操作预检")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "执行已核对操作" }));
     await waitFor(() =>
-      expect(screen.getByText("项目文件和任务记录已删除，备份已保留")).toBeInTheDocument(),
+      expect(screen.getByText("所选任务已移入回收站")).toBeInTheDocument(),
     );
     expect(confirm).toHaveBeenLastCalledWith(
-      "永久删除“failed-project”的任务记录和工作区文件？备份会保留。此操作不可撤销。",
+      "执行已核对的批次 222222222222？所选记录将进入可恢复回收站。",
     );
-    expect(deletionBodies).toEqual([
-      { confirm_job_id: cancelledJob.job_id, delete_workspace: false },
-      { confirm_job_id: failedJob.job_id, delete_workspace: true },
+    expect(planBodies).toEqual([
+      { job_ids: [cancelledJob.job_id], mode: "record-only" },
+      { job_ids: [failedJob.job_id], mode: "quarantine-workspace" },
+    ]);
+    expect(applyBodies).toEqual([
+      {
+        job_ids: [cancelledJob.job_id],
+        mode: "record-only",
+        confirm_plan_id: "1".repeat(64),
+      },
+      {
+        job_ids: [failedJob.job_id],
+        mode: "quarantine-workspace",
+        confirm_plan_id: "2".repeat(64),
+      },
     ]);
     expect(screen.getByText("暂无任务")).toBeInTheDocument();
+    expect(screen.getByText(/批次 999999999999/)).toBeInTheDocument();
   });
 
   it("creates backups, confirms cleanup, and restores a completed project", async () => {
@@ -513,6 +649,9 @@ describe("TopoForge bilingual workspace", () => {
       }
       if (path.endsWith("/api/v1/jobs")) {
         return response([completedJob]);
+      }
+      if (path.endsWith("/api/v1/lifecycle/trash")) {
+        return response([]);
       }
       if (path.endsWith("/api/v1/jobs/job-phase10/map/manifest")) {
         return response(mapManifest);

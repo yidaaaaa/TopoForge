@@ -6,23 +6,35 @@ import {
   Mountain,
   RefreshCw,
 } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   ApiError,
+  applyJobBatchDeletion,
   cancelJob,
   cleanupJob,
   createJob,
   createJobBackup,
-  deleteJob,
   fetchJobAssembly,
   fetchJobMaintenance,
   fetchJobMap,
   fetchHealth,
   listJobs,
+  listJobTrash,
   loadLocalConfig,
   normalizeAoi,
+  planJobBatchDeletion,
+  purgeJobTrash,
   restoreBackup,
+  restoreJobTrash,
   validateJob,
 } from "./api";
 import { BuildPanel } from "./components/BuildPanel";
@@ -39,9 +51,12 @@ import type {
   FormState,
   Health,
   JobAssemblyOverview,
+  JobBatchDeleteMode,
+  JobBatchDeletePlan,
   JobMaintenanceOverview,
   JobMapManifest,
   JobRecord,
+  JobTrashRecord,
   JsonObject,
   Language,
   NormalizedAoi,
@@ -108,12 +123,12 @@ export default function App() {
   const [maintenance, setMaintenance] = useState<JobMaintenanceOverview | null>(null);
   const [maintenanceLoading, setMaintenanceLoading] = useState(false);
   const [maintenanceBusy, setMaintenanceBusy] = useState<
-    | "backup"
-    | "cleanup"
-    | "restore"
-    | "delete-record"
-    | "delete-workspace"
-    | null
+    "backup" | "cleanup" | "restore" | null
+  >(null);
+  const [batchPlan, setBatchPlan] = useState<JobBatchDeletePlan | null>(null);
+  const [jobTrash, setJobTrash] = useState<JobTrashRecord[]>([]);
+  const [batchBusy, setBatchBusy] = useState<
+    "plan" | "apply" | "restore" | "purge" | null
   >(null);
   const [jobMap, setJobMap] = useState<JobMapManifest | null>(null);
   const [jobAssembly, setJobAssembly] = useState<JobAssemblyOverview | null>(null);
@@ -129,16 +144,26 @@ export default function App() {
   const [notice, setNotice] = useState<{ tone: "error" | "success"; text: string } | null>(
     null,
   );
+  const jobsLoadGeneration = useRef(0);
+  const lifecycleMutationInProgress = useRef(false);
   const t = useCallback(
     (key: TranslationKey) => translate(language, key),
     [language],
   );
 
-  const loadJobs = useCallback(async () => {
+  const loadJobs = useCallback(async (force = false) => {
+    if (lifecycleMutationInProgress.current && !force) {
+      return;
+    }
+    const generation = ++jobsLoadGeneration.current;
     setJobsLoading(true);
     try {
-      const records = await listJobs();
+      const [records, trashRecords] = await Promise.all([listJobs(), listJobTrash()]);
+      if (generation !== jobsLoadGeneration.current) {
+        return;
+      }
       setJobs(records);
+      setJobTrash(trashRecords);
       setSelectedJobId((current) => {
         if (current && records.some((job) => job.job_id === current)) {
           return current;
@@ -146,9 +171,13 @@ export default function App() {
         return records[0]?.job_id ?? null;
       });
     } catch (reason) {
-      setNotice({ tone: "error", text: errorMessage(reason, language) });
+      if (generation === jobsLoadGeneration.current) {
+        setNotice({ tone: "error", text: errorMessage(reason, language) });
+      }
     } finally {
-      setJobsLoading(false);
+      if (generation === jobsLoadGeneration.current) {
+        setJobsLoading(false);
+      }
     }
   }, [language]);
 
@@ -413,36 +442,90 @@ export default function App() {
     }
   };
 
-  const handleDelete = async (
-    jobId: string,
-    workspaceName: string,
-    deleteWorkspace: boolean,
-  ) => {
-    const confirmation = t(
-      deleteWorkspace ? "confirmDeleteProject" : "confirmRemoveJob",
-    ).replace("{workspace}", workspaceName);
+  const handlePlanBatch = async (jobIds: string[], mode: JobBatchDeleteMode) => {
+    setBatchBusy("plan");
+    try {
+      setBatchPlan(await planJobBatchDeletion(jobIds, mode));
+    } catch (reason) {
+      setNotice({ tone: "error", text: errorMessage(reason, language) });
+    } finally {
+      setBatchBusy(null);
+    }
+  };
+
+  const handleApplyBatch = async () => {
+    if (!batchPlan) {
+      return;
+    }
+    const confirmation = t("confirmBatchApply").replace(
+      "{planId}",
+      batchPlan.plan_id.slice(0, 12),
+    );
     if (!window.confirm(confirmation)) {
       return;
     }
-    setMaintenanceBusy(deleteWorkspace ? "delete-workspace" : "delete-record");
-    setSelectedJobId(null);
-    setMaintenance(null);
-    setJobMap(null);
-    setJobAssembly(null);
-    setSelectedTileId(null);
+    lifecycleMutationInProgress.current = true;
+    jobsLoadGeneration.current += 1;
+    setJobsLoading(false);
+    setBatchBusy("apply");
+    if (selectedJobId && batchPlan.job_ids.includes(selectedJobId)) {
+      setSelectedJobId(null);
+      setMaintenance(null);
+      setJobMap(null);
+      setJobAssembly(null);
+      setSelectedTileId(null);
+    }
     try {
-      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-      await deleteJob(jobId, deleteWorkspace);
-      await loadJobs();
-      setNotice({
-        tone: "success",
-        text: t(deleteWorkspace ? "projectFilesDeleted" : "jobRecordRemoved"),
-      });
+      await applyJobBatchDeletion(batchPlan);
+      setBatchPlan(null);
+      await loadJobs(true);
+      setNotice({ tone: "success", text: t("batchMovedToTrash") });
     } catch (reason) {
       setNotice({ tone: "error", text: errorMessage(reason, language) });
-      await loadJobs();
+      await loadJobs(true);
     } finally {
-      setMaintenanceBusy(null);
+      lifecycleMutationInProgress.current = false;
+      setBatchBusy(null);
+    }
+  };
+
+  const handleRestoreTrash = async (batchId: string) => {
+    const confirmation = t("confirmRestoreTrash").replace(
+      "{batchId}",
+      batchId.slice(0, 12),
+    );
+    if (!window.confirm(confirmation)) {
+      return;
+    }
+    setBatchBusy("restore");
+    try {
+      await restoreJobTrash(batchId);
+      await loadJobs();
+      setNotice({ tone: "success", text: t("trashRestored") });
+    } catch (reason) {
+      setNotice({ tone: "error", text: errorMessage(reason, language) });
+    } finally {
+      setBatchBusy(null);
+    }
+  };
+
+  const handlePurgeTrash = async (batchId: string) => {
+    const confirmation = t("confirmPurgeTrash").replace(
+      "{batchId}",
+      batchId.slice(0, 12),
+    );
+    if (!window.confirm(confirmation)) {
+      return;
+    }
+    setBatchBusy("purge");
+    try {
+      await purgeJobTrash(batchId);
+      await loadJobs();
+      setNotice({ tone: "success", text: t("trashPurged") });
+    } catch (reason) {
+      setNotice({ tone: "error", text: errorMessage(reason, language) });
+    } finally {
+      setBatchBusy(null);
     }
   };
 
@@ -609,15 +692,19 @@ export default function App() {
           loading={jobsLoading}
           maintenanceLoading={maintenanceLoading}
           maintenanceBusy={maintenanceBusy}
+          batchPlan={batchPlan}
+          jobTrash={jobTrash}
+          batchBusy={batchBusy}
           onRefresh={() => void loadJobs()}
           onSelect={setSelectedJobId}
           onCancel={(jobId) => void handleCancel(jobId)}
           onBackup={(jobId) => void handleBackup(jobId)}
           onCleanup={(jobId, workflowId) => void handleCleanup(jobId, workflowId)}
           onRestore={(backupId) => void handleRestore(backupId)}
-          onDelete={(jobId, workspaceName, deleteWorkspace) =>
-            void handleDelete(jobId, workspaceName, deleteWorkspace)
-          }
+          onPlanBatch={(jobIds, mode) => void handlePlanBatch(jobIds, mode)}
+          onApplyBatch={() => void handleApplyBatch()}
+          onRestoreTrash={(batchId) => void handleRestoreTrash(batchId)}
+          onPurgeTrash={(batchId) => void handlePurgeTrash(batchId)}
         />
       </div>
 

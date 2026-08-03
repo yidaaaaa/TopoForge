@@ -3,11 +3,15 @@ import type {
   FileListing,
   Health,
   JobAssemblyOverview,
+  JobBatchDeleteMode,
+  JobBatchDeletePlan,
   JobCreateRequest,
   JobDeleteResult,
   JobMaintenanceOverview,
   JobMapManifest,
   JobRecord,
+  JobTrashActionResult,
+  JobTrashRecord,
   JsonObject,
   WorkflowBackupRecord,
   WorkflowCleanupResult,
@@ -95,6 +99,50 @@ export function deleteJob(
   return request<JobDeleteResult>(`/api/v1/jobs/${jobId}`, {
     method: "DELETE",
     body: JSON.stringify({ confirm_job_id: jobId, delete_workspace: deleteWorkspace }),
+  });
+}
+
+export function planJobBatchDeletion(
+  jobIds: string[],
+  mode: JobBatchDeleteMode,
+): Promise<JobBatchDeletePlan> {
+  return request<JobBatchDeletePlan>("/api/v1/lifecycle/deletions/plan", {
+    method: "POST",
+    body: JSON.stringify({ job_ids: jobIds, mode }),
+  });
+}
+
+export function applyJobBatchDeletion(
+  plan: JobBatchDeletePlan,
+): Promise<JobTrashRecord> {
+  return request<JobTrashRecord>("/api/v1/lifecycle/deletions/apply", {
+    method: "POST",
+    body: JSON.stringify({
+      job_ids: plan.job_ids,
+      mode: plan.mode,
+      confirm_plan_id: plan.plan_id,
+    }),
+  });
+}
+
+export function listJobTrash(): Promise<JobTrashRecord[]> {
+  return request<JobTrashRecord[]>("/api/v1/lifecycle/trash");
+}
+
+export function restoreJobTrash(batchId: string): Promise<JobTrashActionResult> {
+  return request<JobTrashActionResult>(
+    `/api/v1/lifecycle/trash/${batchId}/restore`,
+    {
+      method: "POST",
+      body: JSON.stringify({ confirm_batch_id: batchId }),
+    },
+  );
+}
+
+export function purgeJobTrash(batchId: string): Promise<JobTrashActionResult> {
+  return request<JobTrashActionResult>(`/api/v1/lifecycle/trash/${batchId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ confirm_batch_id: batchId }),
   });
 }
 

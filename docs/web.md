@@ -1,6 +1,6 @@
 # Local Web application
 
-TopoForge 0.10.1 includes a single-user local Web application. It is an adapter over the
+TopoForge 0.10.2 includes a single-user local Web application. It is an adapter over the
 same `WorkflowLaunchConfig` and `execute_workflow_launch()` path used by the CLI. Raster,
 sampling, mesh, tiling, overlay, slicing, validation, and artifact logic remains in the
 Python core.
@@ -46,9 +46,10 @@ English. Both versions expose the same controls and results:
 - optional OpenStreetMap raster tiles when the operator enables the online basemap;
 - model dimensions, sampling mode, mesh spacing, and adapt/strict resource budgets;
 - deterministic tile size, overlap, overlay YAML, slicing, and Bambu project settings;
-- persistent jobs, progress events, cancellation, bilingual workspace/id search, all/active/completed/failed/cancelled filters, visible-result counts, structured failures, and corrective text;
+- persistent jobs, progress events, cancellation, bilingual workspace/id search, status filters, newest/oldest/name/status sorting, terminal-job selection, measured batch preflight, structured failures, and corrective text;
 - measured workflow metrics and checksum-bound artifact downloads;
 - measured local-project storage, reclaimable old stages, deterministic backup creation and download, exact-identity cleanup, and atomic restore as a newly registered completed job;
+- record-only removal, recoverable workspace quarantine, optional verified backup before quarantine, seven-day trash retention, complete restore, and explicitly confirmed permanent purge;
 - 2D physical assembly with tile labels, connectors, and a North marker;
 - Three.js whole-model and per-tile assembly viewing with visibility, explosion, selection, and `+X East`, `+Y North`, and `+Z Up` labels.
 
@@ -68,6 +69,11 @@ child process.
   containment, and rehashed before serving.
 - Backup archives live below the adapter state directory, are strictly reopened before
   listing or download, and expose their verified SHA-256 in response headers.
+- Recoverable job records live below `--state-dir/trash`; quarantined workspaces live
+  below `--workspace-root/.topoforge-trash` so directory publication stays on the
+  workspace filesystem.
+- In-progress batch intent lives below `--state-dir/trash-transactions`. Restore and
+  permanent-purge audit records live below `--state-dir/deletion-audit`.
 - Restores reject path escapes and existing destinations, extract through the core atomic
   restore contract, and are registered only after strict workspace reopen succeeds.
 - Assembly metadata is anchored to the published workflow manifest and validated CONNECT-stage
@@ -88,6 +94,11 @@ PIDs, worker result files, and the checksum-bound workflow status. A running chi
 continues independently if the HTTP process stops; the restarted manager reconnects to
 its durable state. A failed job preserves request JSON, events, stdout, stderr, structured
 error details, and the underlying workflow failure record.
+
+Batch removal writes a strict transaction before moving any job or workspace. On startup,
+a transaction without a prepared `trash.json` is rolled back to the original job and
+workspace paths. A transaction with the exact prepared record is completed and strictly
+reopened as a recoverable trash batch before its intent record is removed.
 
 Cancellation sends a process-group termination signal and records `cancelling` followed by
 `cancelled`. It does not delete source data, completed content-addressed stages, workspaces,
@@ -127,12 +138,12 @@ wheel retains only the compiled, checksum-bound application inside `topoforge.we
 
 ## Rollback
 
-Stop the 0.10.1 listener, start the retained 0.10.0 CLI environment, and keep existing
+Stop the 0.10.2 listener, start the retained 0.10.1 CLI environment, and keep existing
 workspaces and state directories unchanged:
 
 ```bash
-~/.venvs/topoforge-0.10.0/bin/topoforge doctor
-ln -sfn ~/.venvs/topoforge-0.10.0/bin/topoforge ~/.local/bin/topoforge
+~/.venvs/topoforge-0.10.1/bin/topoforge doctor
+ln -sfn ~/.venvs/topoforge-0.10.1/bin/topoforge ~/.local/bin/topoforge
 ```
 
-For a source checkout exactly at the 0.10.1 release tag, run `scripts/rollback-topoforge-0.10.1.sh --confirm-rollback`; it creates a separate detached 0.10.0 worktree and leaves retained state untouched.
+For a source checkout exactly at the 0.10.2 release tag, run `scripts/rollback-topoforge-0.10.2.sh --confirm-rollback`; it creates a separate detached 0.10.1 worktree and leaves retained state untouched.

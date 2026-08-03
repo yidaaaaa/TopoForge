@@ -20,6 +20,10 @@ export type JobState =
   | "cancelled"
   | "completed"
   | "failed";
+export type JobBatchDeleteMode =
+  | "record-only"
+  | "quarantine-workspace"
+  | "backup-and-quarantine";
 
 export interface Health {
   status: string;
@@ -227,6 +231,71 @@ export interface JobDeleteResult {
   deleted_job_record_bytes: number;
   deleted_workspace_bytes: number;
   reclaimed_bytes: number;
+  backups_preserved: boolean;
+  required_checks_passed: boolean;
+}
+
+export interface JobBatchDeletePlanItem {
+  job_id: string;
+  state: JobState;
+  workspace: string;
+  workspace_existed: boolean;
+  job_record_bytes: number;
+  workspace_bytes: number;
+  workspace_reference_job_ids: string[];
+  unselected_reference_job_ids: string[];
+  verified_backup_ids: string[];
+  eligible: boolean;
+  blockers: string[];
+}
+
+export interface JobBatchDeletePlan {
+  schema_version: string;
+  plan_id: string;
+  mode: JobBatchDeleteMode;
+  job_ids: string[];
+  items: JobBatchDeletePlanItem[];
+  selected_job_count: number;
+  eligible_job_count: number;
+  unique_workspace_count: number;
+  job_record_bytes: number;
+  workspace_bytes: number;
+  total_target_bytes: number;
+  backup_job_ids: string[];
+  blockers: string[];
+  required_checks_passed: boolean;
+}
+
+export interface JobTrashWorkspace {
+  original_workspace: string;
+  quarantined_workspace: string | null;
+  workspace_existed: boolean;
+  size_bytes: number;
+}
+
+export interface JobTrashRecord {
+  schema_version: string;
+  batch_id: string;
+  plan_id: string;
+  mode: JobBatchDeleteMode;
+  created_at: string;
+  purge_after: string;
+  job_ids: string[];
+  job_record_bytes: number;
+  workspaces: JobTrashWorkspace[];
+  backup_ids: string[];
+  total_quarantined_bytes: number;
+  backups_preserved: boolean;
+  required_checks_passed: boolean;
+}
+
+export interface JobTrashActionResult {
+  schema_version: string;
+  batch_id: string;
+  action: "restored" | "purged";
+  job_ids: string[];
+  workspace_count: number;
+  affected_bytes: number;
   backups_preserved: boolean;
   required_checks_passed: boolean;
 }

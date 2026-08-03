@@ -167,6 +167,162 @@ class JobDeleteResult(BaseModel):
     required_checks_passed: bool
 
 
+class JobBatchDeleteMode(StrEnum):
+    """Supported reviewable actions for one terminal-job batch."""
+
+    RECORD_ONLY = "record-only"
+    QUARANTINE_WORKSPACE = "quarantine-workspace"
+    BACKUP_AND_QUARANTINE = "backup-and-quarantine"
+
+
+class JobBatchDeletePlanRequest(BaseModel):
+    """Selected terminal jobs and the requested review mode."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    job_ids: tuple[str, ...] = Field(min_length=1, max_length=100)
+    mode: JobBatchDeleteMode
+
+    @model_validator(mode="after")
+    def validate_job_ids(self) -> JobBatchDeletePlanRequest:
+        """Require unique canonical Web job identifiers."""
+        if len(set(self.job_ids)) != len(self.job_ids):
+            raise ValueError("batch job ids must be unique")
+        invalid = [
+            job_id
+            for job_id in self.job_ids
+            if len(job_id) != 32 or any(character not in "0123456789abcdef" for character in job_id)
+        ]
+        if invalid:
+            raise ValueError("batch job ids must be 32 lowercase hexadecimal characters")
+        return self
+
+
+class JobBatchDeleteApplyRequest(JobBatchDeletePlanRequest):
+    """Exact plan confirmation required before applying a reviewed batch."""
+
+    confirm_plan_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class JobBatchDeletePlanItem(BaseModel):
+    """Measured deletion eligibility and blockers for one selected job."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    job_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    state: JobState
+    workspace: Path
+    workspace_existed: bool
+    job_record_bytes: int = Field(ge=0)
+    workspace_bytes: int = Field(ge=0)
+    workspace_reference_job_ids: tuple[str, ...] = ()
+    unselected_reference_job_ids: tuple[str, ...] = ()
+    verified_backup_ids: tuple[str, ...] = ()
+    eligible: bool
+    blockers: tuple[str, ...] = ()
+
+
+class JobBatchDeletePlan(BaseModel):
+    """Deterministic, measured review record for one terminal-job batch."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: str = "topoforge-web-job-batch-delete-plan-v1"
+    plan_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    mode: JobBatchDeleteMode
+    job_ids: tuple[str, ...]
+    items: tuple[JobBatchDeletePlanItem, ...]
+    selected_job_count: int = Field(ge=1)
+    eligible_job_count: int = Field(ge=0)
+    unique_workspace_count: int = Field(ge=0)
+    job_record_bytes: int = Field(ge=0)
+    workspace_bytes: int = Field(ge=0)
+    total_target_bytes: int = Field(ge=0)
+    backup_job_ids: tuple[str, ...] = ()
+    blockers: tuple[str, ...] = ()
+    required_checks_passed: bool
+
+
+class JobTrashWorkspace(BaseModel):
+    """Original and same-filesystem quarantine identity for one workspace."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    original_workspace: Path
+    quarantined_workspace: Path | None = None
+    workspace_existed: bool
+    size_bytes: int = Field(ge=0)
+
+
+class JobTrashRecord(BaseModel):
+    """Strictly reopenable recovery record for one applied batch."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: str = "topoforge-web-job-trash-v1"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    plan_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    mode: JobBatchDeleteMode
+    created_at: datetime
+    purge_after: datetime
+    job_ids: tuple[str, ...]
+    job_record_bytes: int = Field(ge=0)
+    workspaces: tuple[JobTrashWorkspace, ...]
+    backup_ids: tuple[str, ...] = ()
+    total_quarantined_bytes: int = Field(ge=0)
+    backups_preserved: bool
+    required_checks_passed: bool
+
+
+class JobTrashTransactionMove(BaseModel):
+    """One exact source, temporary, and published path in a trash transaction."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: Path
+    temporary: Path
+    destination: Path
+
+
+class JobTrashTransaction(BaseModel):
+    """Durable intent used to recover an interrupted trash publication."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: str = "topoforge-web-job-trash-transaction-v1"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    state_temporary: Path
+    state_destination: Path
+    workspace_temporary: Path
+    workspace_destination: Path
+    job_moves: tuple[JobTrashTransactionMove, ...]
+    workspace_moves: tuple[JobTrashTransactionMove, ...]
+    trash_record: JobTrashRecord
+
+
+class JobTrashActionRequest(BaseModel):
+    """Exact batch-id confirmation for restore or permanent purge."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    confirm_batch_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+
+
+class JobTrashActionResult(BaseModel):
+    """Measured result of restoring or permanently purging one batch."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: str = "topoforge-web-job-trash-action-v1"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    action: str
+    job_ids: tuple[str, ...]
+    workspace_count: int = Field(ge=0)
+    affected_bytes: int = Field(ge=0)
+    backups_preserved: bool
+    required_checks_passed: bool
+
+
 class WorkflowCleanupRequest(BaseModel):
     """Exact workflow-id confirmation required before cleanup."""
 

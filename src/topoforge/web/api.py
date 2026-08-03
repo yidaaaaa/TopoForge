@@ -32,11 +32,17 @@ from topoforge.web.map_tiles import (
 )
 from topoforge.web.models import (
     FileListing,
+    JobBatchDeleteApplyRequest,
+    JobBatchDeletePlan,
+    JobBatchDeletePlanRequest,
     JobCreateRequest,
     JobDeleteRequest,
     JobDeleteResult,
     JobMaintenanceOverview,
     JobRecord,
+    JobTrashActionRequest,
+    JobTrashActionResult,
+    JobTrashRecord,
     WebAppConfig,
     WorkflowBackupRecord,
     WorkflowCleanupRequest,
@@ -199,6 +205,11 @@ def create_app(
                 "formats": ["glb"],
                 "assembly_tiles": True,
             },
+            "lifecycle": {
+                "batch_delete_plan": True,
+                "recoverable_trash": True,
+                "verified_backup_before_trash": True,
+            },
         }
 
     @app.post("/api/v1/aoi/normalize", response_model=AreaOfInterest)
@@ -236,6 +247,64 @@ def create_app(
     @app.get("/api/v1/jobs", response_model=tuple[JobRecord, ...])
     def list_jobs() -> tuple[JobRecord, ...]:
         return jobs.list()
+
+    @app.post(
+        "/api/v1/lifecycle/deletions/plan",
+        response_model=JobBatchDeletePlan,
+    )
+    def plan_job_batch_deletion(
+        request: JobBatchDeletePlanRequest,
+    ) -> JobBatchDeletePlan:
+        try:
+            return jobs.plan_batch_delete(request)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+
+    @app.post(
+        "/api/v1/lifecycle/deletions/apply",
+        response_model=JobTrashRecord,
+        status_code=201,
+    )
+    def apply_job_batch_deletion(
+        request: JobBatchDeleteApplyRequest,
+    ) -> JobTrashRecord:
+        try:
+            return jobs.apply_batch_delete(request)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+
+    @app.get(
+        "/api/v1/lifecycle/trash",
+        response_model=tuple[JobTrashRecord, ...],
+    )
+    def list_job_trash() -> tuple[JobTrashRecord, ...]:
+        return jobs.list_trash()
+
+    @app.post(
+        "/api/v1/lifecycle/trash/{batch_id}/restore",
+        response_model=JobTrashActionResult,
+    )
+    def restore_job_trash(
+        batch_id: str,
+        request: JobTrashActionRequest,
+    ) -> JobTrashActionResult:
+        try:
+            return jobs.restore_trash(batch_id, request)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="trash batch not found") from exc
+
+    @app.delete(
+        "/api/v1/lifecycle/trash/{batch_id}",
+        response_model=JobTrashActionResult,
+    )
+    def purge_job_trash(
+        batch_id: str,
+        request: JobTrashActionRequest,
+    ) -> JobTrashActionResult:
+        try:
+            return jobs.purge_trash(batch_id, request)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="trash batch not found") from exc
 
     @app.get("/api/v1/jobs/{job_id}", response_model=JobRecord)
     def get_job(job_id: str) -> JobRecord:
