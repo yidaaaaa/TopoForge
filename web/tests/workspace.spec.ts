@@ -277,6 +277,13 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await verticalScale.selectOption("auto-perceptual");
   await expect(verticalExaggeration).toBeHidden();
+  const connectorTolerance = page.getByRole("combobox", {
+    name: "连接器总间隙（毫米）",
+  });
+  await connectorTolerance.scrollIntoViewIfNeeded();
+  await expect(connectorTolerance).toHaveValue("0.2");
+  await expect(connectorTolerance.locator("option")).toHaveCount(6);
+  await connectorTolerance.selectOption("0.4");
   const slicingToggle = page.getByText("执行软件切片", { exact: true });
   await slicingToggle.scrollIntoViewIfNeeded();
   const panelScrollBeforeSlicing = await controlPanel.evaluate(

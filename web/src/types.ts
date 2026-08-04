@@ -10,6 +10,7 @@ export type VerticalScaleMode =
   | "custom";
 export type ResourceBudgetMode = "adapt" | "strict";
 export type TerrainMode = "best-available" | "dtm" | "dsm" | "bathymetry";
+export type ConnectorToleranceMm = 0.1 | 0.15 | 0.2 | 0.25 | 0.3 | 0.4;
 export type WorkspaceTab = "map" | "preview" | "assembly";
 export type MapTileStyle = "terrain" | "elevation" | "hillshade";
 export type AssemblyMode = "2d" | "3d";
@@ -345,6 +346,7 @@ export interface FormState {
   resourceBudgetMode: ResourceBudgetMode;
   maximumTileWidthMm: number;
   maximumTileDepthMm: number;
+  connectorToleranceMm: ConnectorToleranceMm;
   overlapCells: number;
   slicingEnabled: boolean;
   slicerName: "bambu-studio" | "orca" | "prusa" | "auto";

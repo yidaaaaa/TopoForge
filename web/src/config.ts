@@ -6,6 +6,15 @@ import type {
   JsonObject,
 } from "./types";
 
+export const CONNECTOR_TOLERANCE_OPTIONS_MM = [
+  0.1,
+  0.15,
+  0.2,
+  0.25,
+  0.3,
+  0.4,
+] as const;
+
 export const defaultFormState: FormState = {
   workspaceName: "terrain-model",
   sourceMode: "local",
@@ -27,6 +36,7 @@ export const defaultFormState: FormState = {
   resourceBudgetMode: "adapt",
   maximumTileWidthMm: 180,
   maximumTileDepthMm: 180,
+  connectorToleranceMm: 0.2,
   overlapCells: 1,
   slicingEnabled: false,
   slicerName: "bambu-studio",
@@ -82,6 +92,9 @@ export function buildJobRequest(
     model_depth_mm: form.modelDepthMm,
     base_thickness_mm: form.baseThicknessMm,
     max_height_mm: form.maxHeightMm,
+    printer_profile: {
+      connector_tolerance_mm: form.connectorToleranceMm,
+    },
     vertical_scale_mode: form.verticalScaleMode,
     vertical_exaggeration: form.verticalExaggeration,
     sampling_mode: form.samplingMode,

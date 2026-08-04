@@ -26,7 +26,7 @@ language and React/MapLibre/Three.js framework contracts without starting a list
 
 1. Start the loopback service with a dedicated state directory, workspace root, and one or more explicit input roots.
 2. Select `Local DEM`, browse to an existing GeoTIFF, and choose a unique workspace name.
-3. Keep `Print aware` and `Adapt` for the first build. The defaults are 180 mm width, automatic depth, 45 mm maximum height, 3 mm base, 180 mm tile limits, one overlap cell, and software slicing disabled.
+3. Keep `Print aware` and `Adapt` for the first build. The defaults are 180 mm width, automatic depth, 45 mm maximum height, 3 mm base, 180 mm tile limits, 0.20 mm connector total clearance, one overlap cell, and software slicing disabled. The connector menu also offers 0.10, 0.15, 0.25, 0.30, and 0.40 mm so the operator can use results from the target printer and material instead of relying on a universal tolerance.
 4. Select `Start build` and follow the durable job in the results panel. Processed terrain map layers, the 3D model, assembly, metrics, and downloads appear after the job reaches `Completed`. Before completion, a local-DEM map intentionally shows only the offline geographic reference background.
 5. Open `Map` for terrain/elevation/hillshade, `3D model` for the whole GLB, and `Assembly` for physical tile layout and per-tile 3D. When Bambu project evidence is enabled, download `Bambu Studio project 3MF (recommended for printing)`. `Generic 3MF (geometry only)` is the interoperable Core geometry and may prompt Bambu Studio to import settings because it is not a Bambu project. Use STL only when the target tool requires it.
 6. Click the selected job again or use the close icon in the job detail header to clear the selection. The map, assembly, and detail overlays remain cleared across the one-second job refresh loop until another job is selected.
@@ -46,7 +46,7 @@ English. Both versions expose the same controls and results:
 - geographic manufacturing tile footprints with map selection synchronized to assembly;
 - optional OpenStreetMap raster tiles when the operator enables the online basemap;
 - model dimensions, sampling mode, mesh spacing, and adapt/strict resource budgets;
-- deterministic tile size, overlap, overlay YAML, slicing, and Bambu project settings;
+- deterministic tile size, user-selected connector total clearance, overlap, overlay YAML, slicing, and Bambu project settings;
 - persistent jobs, progress events, cancellation, explicit job deselection, bilingual workspace/id search, status filters, newest/oldest/name/status sorting, terminal-job selection, measured batch preflight, structured failures, and corrective text;
 - measured workflow metrics and checksum-bound artifact downloads;
 - measured local-project storage, reclaimable old stages, deterministic backup creation and download, exact-identity cleanup, and atomic restore as a newly registered completed job;

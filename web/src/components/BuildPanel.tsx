@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useCallback } from "react";
 
+import { CONNECTOR_TOLERANCE_OPTIONS_MM } from "../config";
 import { translate, type TranslationKey } from "../i18n";
 import type {
   FormState,
@@ -426,6 +427,26 @@ export function BuildPanel({
             step={1}
             onChange={(value) => update("overlapCells", value ?? 0)}
           />
+          <label className="field">
+            <span title={t("connectorToleranceHint")}>
+              {t("connectorTolerance")}
+            </span>
+            <select
+              value={form.connectorToleranceMm}
+              onChange={(event) =>
+                update(
+                  "connectorToleranceMm",
+                  Number(event.target.value) as FormState["connectorToleranceMm"],
+                )
+              }
+            >
+              {CONNECTOR_TOLERANCE_OPTIONS_MM.map((value) => (
+                <option key={value} value={value}>
+                  {value.toFixed(2)} mm
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <label className="field">
           <span>

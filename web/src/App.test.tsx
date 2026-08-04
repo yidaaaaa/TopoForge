@@ -343,6 +343,26 @@ describe("TopoForge bilingual workspace", () => {
     ).toHaveValue(2.5);
   });
 
+  it("offers all six connector clearances and preserves the selected value across languages", () => {
+    render(<App />);
+    const tolerance = screen.getByRole("combobox", {
+      name: "连接器总间隙（毫米）",
+    });
+    expect(tolerance).toHaveValue("0.2");
+    expect(
+      Array.from(tolerance.querySelectorAll("option")).map(
+        (option) => option.value,
+      ),
+    ).toEqual(["0.1", "0.15", "0.2", "0.25", "0.3", "0.4"]);
+    fireEvent.change(tolerance, { target: { value: "0.4" } });
+    expect(tolerance).toHaveValue("0.4");
+
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    expect(
+      screen.getByRole("combobox", { name: "Connector total clearance (mm)" }),
+    ).toHaveValue("0.4");
+  });
+
   it("synchronizes selected manufacturing tiles between map and assembly", async () => {
     vi.stubGlobal(
       "fetch",

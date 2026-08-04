@@ -84,6 +84,12 @@ def test_aoi_normalization_and_launch_validation_reuse_core_contracts(
         assert validation.json()["valid"] is True
         assert validation.json()["expected_stages"][-1] == "connect"
 
+        selected_clearance = request.model_dump(mode="json")
+        selected_clearance["launch"]["build"]["printer_profile"] = {"connector_tolerance_mm": 0.4}
+        clearance_validation = client.post("/api/v1/jobs/validate", json=selected_clearance)
+        assert clearance_validation.status_code == 200
+        assert clearance_validation.json()["valid"] is True
+
 
 def test_bambu_validation_requires_and_reuses_server_tool_configuration(
     web_config: WebAppConfig,

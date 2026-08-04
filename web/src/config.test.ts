@@ -41,6 +41,7 @@ describe("bilingual configuration contracts", () => {
     expect(launch.slicing_enabled).toBe(false);
     expect(launch.build).toMatchObject({
       dem_path: "/data/dem.tif",
+      printer_profile: { connector_tolerance_mm: 0.2 },
       vertical_scale_mode: "auto-perceptual",
       vertical_exaggeration: 1,
       sampling_mode: "source-preserving",
@@ -64,6 +65,21 @@ describe("bilingual configuration contracts", () => {
       vertical_scale_mode: "custom",
       vertical_exaggeration: 2.5,
       max_height_mm: 45,
+    });
+  });
+
+  it("passes the selected production connector clearance to the core profile", () => {
+    const request = buildJobRequest(
+      {
+        ...defaultFormState,
+        workspaceName: "connector-clearance-demo",
+        sourcePath: "/data/dem.tif",
+        connectorToleranceMm: 0.4,
+      },
+      health,
+    );
+    expect(request.launch.build).toMatchObject({
+      printer_profile: { connector_tolerance_mm: 0.4 },
     });
   });
 

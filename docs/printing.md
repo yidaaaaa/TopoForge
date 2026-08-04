@@ -58,7 +58,7 @@ The project operator has physically printed several TopoForge terrain models on 
 
 Exact print settings, model identities, photos, and dimensional measurements for those terrain prints were not published, and the report is not vendor certification.
 
-A compact six-pair connector coupon was subsequently printed on the same P2S. The operator reported that all `.10` through `.40` pairs inserted and felt good, but the raised labels on both top surfaces contacted before complete seating. That print therefore does not promote a production tolerance. The corrected v3 coupon recesses each label by `0.4 mm`, leaves the male/female connector dimensions unchanged, and passes official Bambu Studio project export plus standalone reopen/reslice. Physical confirmation of complete seating with v3 remains pending.
+A compact six-pair connector coupon was subsequently printed on the same P2S. The first version showed that all `.10` through `.40` pairs inserted and felt good, but raised labels on both top surfaces contacted before complete seating. The corrected v3 coupon recesses each label by `0.4 mm` without changing the male/female connector dimensions and passes official Bambu Studio project export plus standalone reopen/reslice. The operator then printed all six v3 pairs and reported complete seating with very good results, confirming that the label-interference defect is resolved. No production tolerance is promoted yet because per-clearance insertion force, play, dimensional error, print parameters, and a preferred clearance were not reported.
 
 ## Artifact roles
 
