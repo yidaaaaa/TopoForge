@@ -24,8 +24,8 @@ from topoforge.exporters.three_mf import (
 )
 
 CALIBRATION_CLEARANCES_MM = (0.10, 0.15, 0.20, 0.25, 0.30, 0.40)
-CALIBRATION_SCHEMA_VERSION = "topoforge-connector-calibration-v2"
-CALIBRATION_ARTIFACT_NAME = "connector-calibration-p2s-v2-compact.3mf"
+CALIBRATION_SCHEMA_VERSION = "topoforge-connector-calibration-v3-recessed"
+CALIBRATION_ARTIFACT_NAME = "connector-calibration-p2s-v3-recessed.3mf"
 
 _COUPON_WIDTH_MM = 20.0
 _COUPON_DEPTH_MM = 12.0
@@ -42,8 +42,7 @@ _INSERTION_DEPTH_MM = 3.2
 _CONNECTOR_NECK_X_MM = 2.0
 _LABEL_PIXEL_MM = 0.5
 _LABEL_PIXEL_GAP_MM = 0.05
-_LABEL_RAISED_MM = 0.4
-_LABEL_EMBED_MM = 0.1
+_LABEL_RECESS_MM = 0.4
 _PLA_DENSITY_G_CM3 = 1.26
 _V1_DIMENSIONS_MM = (238.0, 68.0, 14.0)
 
@@ -161,7 +160,7 @@ def _female_coupon(total_clearance_mm: float) -> trimesh.Trimesh:
     )
 
 
-def _label_mesh(text: str) -> trimesh.Trimesh:
+def _label_tool(text: str) -> trimesh.Trimesh:
     font = ImageFont.load_default(size=16)
     left, top, right, bottom = font.getbbox(text)
     width_px = max(1, round(right - left))
@@ -185,7 +184,8 @@ def _label_mesh(text: str) -> trimesh.Trimesh:
     if origin_y_mm < 0.5 or origin_y_mm + height_mm > _COUPON_DEPTH_MM - 0.5:
         raise ValueError(f"connector calibration label {text!r} exceeds the coupon")
 
-    thickness_mm = _LABEL_RAISED_MM + _LABEL_EMBED_MM
+    # Extend slightly above the original top face so the boolean cut is robust.
+    thickness_mm = _LABEL_RECESS_MM + 0.05
     boxes: list[trimesh.Trimesh] = []
     for row, column in active:
         pixel = trimesh.creation.box(extents=(_LABEL_PIXEL_MM, _LABEL_PIXEL_MM, thickness_mm))
@@ -193,12 +193,20 @@ def _label_mesh(text: str) -> trimesh.Trimesh:
             (
                 origin_x_mm + float(column) * pitch_mm + _LABEL_PIXEL_MM / 2.0,
                 origin_y_mm + float(height_px - int(row) - 1) * pitch_mm + _LABEL_PIXEL_MM / 2.0,
-                _BASE_THICKNESS_MM - _LABEL_EMBED_MM + thickness_mm / 2.0,
+                _BASE_THICKNESS_MM - _LABEL_RECESS_MM + thickness_mm / 2.0,
             )
         )
         boxes.append(pixel)
     label = trimesh.util.concatenate(boxes)
-    return _require_mesh(label, operation=f"label {text!r}")
+    return _require_mesh(label, operation=f"label tool {text!r}")
+
+
+def _engrave_label(coupon: trimesh.Trimesh, label_tool: trimesh.Trimesh) -> trimesh.Trimesh:
+    """Cut a recessed label into the exposed top of one coupon."""
+    return _require_mesh(
+        trimesh.boolean.difference([coupon, label_tool], engine="manifold"),
+        operation="recessed label difference",
+    )
 
 
 def _translated(mesh: trimesh.Trimesh, x_mm: float, y_mm: float) -> trimesh.Trimesh:
@@ -223,10 +231,10 @@ def _render_preview(path: Path, samples: list[dict[str, Any]]) -> Path:
         (247, 248, 246),
     )
     draw = ImageDraw.Draw(canvas)
-    draw.text((margin_px, 14), "TopoForge compact connector calibration v2", fill=(24, 31, 35))
+    draw.text((margin_px, 14), "TopoForge compact connector calibration v3", fill=(24, 31, 35))
     draw.text(
         (margin_px, 40),
-        "Physical raised labels: .10-.40 mm total clearance; male left, female right",
+        "Physical recessed labels: .10-.40 mm total clearance; male left, female right",
         fill=(73, 85, 91),
     )
 
@@ -314,7 +322,6 @@ def generate_connector_calibration(output_dir: Path) -> ConnectorCalibrationResu
     objects: list[ThreeMFObject] = []
     samples: list[dict[str, Any]] = []
     coupon_volume_mm3 = 0.0
-    label_volume_mm3 = 0.0
     for index, clearance_mm in enumerate(CALIBRATION_CLEARANCES_MM):
         row = index // _COLUMN_COUNT
         column = index % _COLUMN_COUNT
@@ -324,20 +331,23 @@ def generate_connector_calibration(output_dir: Path) -> ConnectorCalibrationResu
         token = f"{round(clearance_mm * 100):02d}"
         physical_label = f".{token}"
 
-        male = _translated(_male_coupon(), pair_x_mm, pair_y_mm)
-        female = _translated(_female_coupon(clearance_mm), female_x_mm, pair_y_mm)
-        label = _label_mesh(physical_label)
-        male_label = _translated(label, pair_x_mm, pair_y_mm)
-        female_label = _translated(label, female_x_mm, pair_y_mm)
+        label = _label_tool(physical_label)
+        male = _translated(
+            _engrave_label(_male_coupon(), label),
+            pair_x_mm,
+            pair_y_mm,
+        )
+        female = _translated(
+            _engrave_label(_female_coupon(clearance_mm), label),
+            female_x_mm,
+            pair_y_mm,
+        )
         coupon_volume_mm3 += float(male.volume + female.volume)
-        label_volume_mm3 += float(male_label.volume + female_label.volume)
         prefix = f"clearance-0p{token}"
         objects.extend(
             (
                 ThreeMFObject(f"{prefix}-male", male, f"cal-{token}-male"),
-                ThreeMFObject(f"{prefix}-male-label", male_label, f"cal-{token}-male-label"),
                 ThreeMFObject(f"{prefix}-female", female, f"cal-{token}-female"),
-                ThreeMFObject(f"{prefix}-female-label", female_label, f"cal-{token}-female-label"),
             )
         )
         samples.append(
@@ -371,7 +381,10 @@ def generate_connector_calibration(output_dir: Path) -> ConnectorCalibrationResu
         "support": "false",
         "base_thickness_mm": f"{_BASE_THICKNESS_MM:.3f}",
         "clearance_matrix_mm": ",".join(f"{value:.2f}" for value in CALIBRATION_CLEARANCES_MM),
-        "physical_labels": ".10,.15,.20,.25,.30,.40 on every male and female coupon",
+        "physical_labels": ".10,.15,.20,.25,.30,.40 recessed into every male and female coupon",
+        "label_geometry": (
+            "recessed; label floor is below the coupon top and cannot interfere with pairing"
+        ),
         "label_semantics": ".10 means 0.10 mm total lateral and vertical clearance",
         "layout": "2 columns x 3 rows; male left and female right within every pair",
         "assembly_direction": "+Z: lower each female coupon over its matching male",
@@ -379,7 +392,7 @@ def generate_connector_calibration(output_dir: Path) -> ConnectorCalibrationResu
     core_path = export_3mf_objects(
         tuple(objects),
         output / CALIBRATION_ARTIFACT_NAME,
-        title="TopoForge P2S Compact Connector Calibration v2",
+        title="TopoForge P2S Compact Connector Calibration v3 Recessed Labels",
         metadata=metadata,
     )
     inspection = inspect_3mf(core_path)
@@ -396,10 +409,7 @@ def generate_connector_calibration(output_dir: Path) -> ConnectorCalibrationResu
 
     preview_path = _render_preview(output / "connector-calibration-preview.png", samples)
     measurement_path = _write_bytes(output / "measurement-sheet.csv", _measurement_csv(samples))
-    raised_label_volume_mm3 = label_volume_mm3 * (
-        _LABEL_RAISED_MM / (_LABEL_RAISED_MM + _LABEL_EMBED_MM)
-    )
-    estimated_fused_volume_mm3 = coupon_volume_mm3 + raised_label_volume_mm3
+    estimated_fused_volume_mm3 = coupon_volume_mm3
     solid_mass_upper_bound_g = estimated_fused_volume_mm3 / 1000.0 * _PLA_DENSITY_G_CM3
     old_footprint_mm2 = _V1_DIMENSIONS_MM[0] * _V1_DIMENSIONS_MM[1]
     new_footprint_mm2 = plate_width_mm * plate_depth_mm
@@ -427,15 +437,16 @@ def generate_connector_calibration(output_dir: Path) -> ConnectorCalibrationResu
         "estimated_solid_mass_upper_bound_g": solid_mass_upper_bound_g,
         "comparison_to_v1": {
             "v1_dimensions_mm": list(_V1_DIMENSIONS_MM),
-            "v2_dimensions_mm": list(inspection.dimensions_mm),
+            "v3_dimensions_mm": list(inspection.dimensions_mm),
             "footprint_reduction_fraction": footprint_reduction_fraction,
             "maximum_height_reduction_fraction": (
                 1.0 - inspection.dimensions_mm[2] / _V1_DIMENSIONS_MM[2]
             ),
         },
         "print_instruction": (
-            "Open at 100% scale. Print the complete plate once. Match identical raised "
-            "labels; male is left and female is right in each pair. Record fit before "
+            "Open at 100% scale. Print the complete plate once. Match identical recessed "
+            "labels; male is left and female is right in each pair. Recesses stay below "
+            "the top surface and do not interfere with insertion. Record fit before "
             "changing the production connector tolerance."
         ),
         "samples": samples,
@@ -449,7 +460,8 @@ def generate_connector_calibration(output_dir: Path) -> ConnectorCalibrationResu
         "lib3mf_version": list(inspection.lib3mf_version),
         "object_count": inspection.object_count,
         "coupon_object_count": len(CALIBRATION_CLEARANCES_MM) * 2,
-        "physical_label_object_count": len(CALIBRATION_CLEARANCES_MM) * 2,
+        "physical_label_object_count": 0,
+        "labels_integrated_into_coupon_meshes": True,
         "component_count": inspection.component_count,
         "build_item_count": inspection.build_item_count,
         "triangle_count": inspection.triangle_count,
@@ -461,22 +473,21 @@ def generate_connector_calibration(output_dir: Path) -> ConnectorCalibrationResu
         ),
         "minimum_required_roof_thickness_mm": 0.8,
         "minimum_label_feature_mm": _LABEL_PIXEL_MM,
-        "label_raised_height_mm": _LABEL_RAISED_MM,
-        "label_embed_depth_mm": _LABEL_EMBED_MM,
+        "label_raised_height_mm": 0.0,
+        "label_recess_depth_mm": _LABEL_RECESS_MM,
+        "label_floor_height_mm": _BASE_THICKNESS_MM - _LABEL_RECESS_MM,
         "physical_labels_present": True,
         "male_female_pairing_recorded": True,
         "support_required": False,
-        "all_coupon_meshes_watertight": all(
-            item.mesh.is_watertight for item in objects if not item.name.endswith("-label")
-        ),
+        "all_coupon_meshes_watertight": all(item.mesh.is_watertight for item in objects),
         "all_coupon_meshes_winding_consistent": all(
-            item.mesh.is_winding_consistent for item in objects if not item.name.endswith("-label")
+            item.mesh.is_winding_consistent for item in objects
         ),
         "all_object_volumes_positive": all(item.mesh.volume > 0.0 for item in objects),
         "estimated_fused_solid_volume_mm3": estimated_fused_volume_mm3,
         "estimated_solid_mass_upper_bound_g": solid_mass_upper_bound_g,
         "v1_footprint_mm2": old_footprint_mm2,
-        "v2_footprint_mm2": new_footprint_mm2,
+        "v3_footprint_mm2": new_footprint_mm2,
         "footprint_reduction_fraction": footprint_reduction_fraction,
         "required_checks_passed": True,
     }

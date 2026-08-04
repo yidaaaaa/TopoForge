@@ -56,7 +56,9 @@ The 3MF ZIP test, embedded G-code MD5, embedded-versus-external G-code bytes, em
 
 The project operator has physically printed several TopoForge terrain models on a Bambu Lab P2S and reported very good results for all of them. This is qualitative end-to-end printability evidence.
 
-Exact print settings, model identities, photos, dimensional measurements, and connector-fit measurements were not published. Connector tolerances therefore remain software-validated rather than quantitatively calibrated, and the report is not vendor certification.
+Exact print settings, model identities, photos, and dimensional measurements for those terrain prints were not published, and the report is not vendor certification.
+
+A compact six-pair connector coupon was subsequently printed on the same P2S. The operator reported that all `.10` through `.40` pairs inserted and felt good, but the raised labels on both top surfaces contacted before complete seating. That print therefore does not promote a production tolerance. The corrected v3 coupon recesses each label by `0.4 mm`, leaves the male/female connector dimensions unchanged, and passes official Bambu Studio project export plus standalone reopen/reslice. Physical confirmation of complete seating with v3 remains pending.
 
 ## Artifact roles
 

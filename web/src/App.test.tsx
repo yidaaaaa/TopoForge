@@ -83,6 +83,43 @@ const completedJob = {
   artifacts: [],
 };
 
+const completedJobWithPrintArtifacts = {
+  ...completedJob,
+  artifacts: [
+    {
+      artifact_id: "bambu_project_3mf",
+      relative_path: "stages/70-project/tile/model.bambu-p2s.3mf",
+      filename: "model.bambu-p2s.3mf",
+      kind: "file",
+      media_type: "application/vnd.ms-3mfdocument",
+      size_bytes: 4096,
+      sha256: "1".repeat(64),
+      download_url: "/api/v1/jobs/job-phase10/artifacts/bambu_project_3mf",
+    },
+    {
+      artifact_id: "bambu_project_validation",
+      relative_path: "stages/70-project/tile/project_validation.json",
+      filename: "project_validation.json",
+      kind: "file",
+      media_type: "application/json",
+      size_bytes: 1024,
+      sha256: "2".repeat(64),
+      download_url:
+        "/api/v1/jobs/job-phase10/artifacts/bambu_project_validation",
+    },
+    {
+      artifact_id: "model_3mf",
+      relative_path: "stages/10-build/model.3mf",
+      filename: "model.3mf",
+      kind: "file",
+      media_type: "application/vnd.ms-3mfdocument",
+      size_bytes: 3072,
+      sha256: "3".repeat(64),
+      download_url: "/api/v1/jobs/job-phase10/artifacts/model_3mf",
+    },
+  ],
+};
+
 const cancelledJob = {
   ...completedJob,
   job_id: "a".repeat(32),
@@ -361,6 +398,68 @@ describe("TopoForge bilingual workspace", () => {
       "data-selected-tile",
       "tile-r0000-c0000",
     );
+  });
+
+  it("keeps a cleared job selection empty and distinguishes printable 3MF roles", async () => {
+    let jobListRequests = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.endsWith("/api/v1/health")) {
+          return response(health);
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10/maintenance")) {
+          return response(maintenanceOverview);
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10/map/manifest")) {
+          return response(mapManifest);
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10/assembly")) {
+          return response(assembly);
+        }
+        if (path.endsWith("/api/v1/jobs")) {
+          jobListRequests += 1;
+          return response([completedJobWithPrintArtifacts]);
+        }
+        if (path.endsWith("/api/v1/lifecycle/trash")) {
+          return response([]);
+        }
+        return response({});
+      }),
+    );
+
+    render(<App />);
+    expect(
+      await screen.findByText("Bambu Studio 工程 3MF（推荐打印）"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("通用 3MF（仅几何）")).toBeInTheDocument();
+    expect(screen.getByText("Bambu 工程验证报告")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    expect(
+      screen.getByText("Bambu Studio project 3MF (recommended for printing)"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Generic 3MF (geometry only)")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close job details" }));
+    expect(screen.getByText("Select a job")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("map-panel")).toHaveAttribute(
+        "data-selected-tile",
+        "",
+      ),
+    );
+
+    const requestCountBeforeRefresh = jobListRequests;
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() =>
+      expect(jobListRequests).toBeGreaterThan(requestCountBeforeRefresh),
+    );
+    expect(screen.getByText("Select a job")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Bambu Studio project 3MF (recommended for printing)"),
+    ).not.toBeInTheDocument();
   });
 
   it("searches and filters retained jobs with bilingual result counts", async () => {

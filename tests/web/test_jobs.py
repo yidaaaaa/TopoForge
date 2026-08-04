@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import time
@@ -9,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from topoforge.exceptions import ConfigurationError
+from topoforge.util import sha256_file
 from topoforge.web.jobs import LocalJobManager, expected_workflow_stages
 from topoforge.web.models import (
     JobBatchDeleteApplyRequest,
@@ -26,7 +28,7 @@ from topoforge.web.models import (
     utc_now,
 )
 from topoforge.web.server import is_loopback_host
-from topoforge.workflow import WorkflowStage
+from topoforge.workflow import WorkflowRunSummary, WorkflowStage, WorkflowState
 
 from .conftest import make_job_request
 
@@ -237,6 +239,147 @@ def test_isolated_worker_inherits_configured_bambu_executable(
         assert captured_environments[0]["TOPOFORGE_BAMBU_STUDIO"] == str(executable.resolve())
     finally:
         manager.close()
+
+
+def test_bambu_project_manifest_publishes_recommended_project_artifacts(
+    web_config: WebAppConfig,
+) -> None:
+    manager = LocalJobManager(web_config)
+    workspace = web_config.workspace_root / "project-artifacts"
+    project_root = workspace / "stages" / "70-project" / "fixture"
+    tile_root = project_root / "tiles" / "tile-r0000-c0000"
+    tile_root.mkdir(parents=True)
+    core = workspace / "model.3mf"
+    core.write_bytes(b"core-geometry")
+    project = tile_root / "model.bambu-p2s.3mf"
+    project.write_bytes(b"bambu-project")
+    validation = tile_root / "project_validation.json"
+    validation.write_text("{}\n", encoding="utf-8")
+    manifest = project_root / "bambu-tile-project-manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "topoforge-bambu-tile-project-assembly-v1",
+                "required_checks_passed": True,
+                "tile_count": 1,
+                "tiles": [
+                    {
+                        "tile_id": "tile-r0000-c0000",
+                        "required_checks_passed": True,
+                        "files": {
+                            "bambu_project_3mf": "tiles/tile-r0000-c0000/model.bambu-p2s.3mf"
+                        },
+                        "sha256": {"bambu_project_3mf": sha256_file(project)},
+                        "validation_path": ("tiles/tile-r0000-c0000/project_validation.json"),
+                        "validation_sha256": sha256_file(validation),
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    now = utc_now()
+    record = JobRecord(
+        job_id="d" * 32,
+        created_at=now,
+        updated_at=now,
+        state=JobState.COMPLETED,
+        workspace_dir=workspace,
+        expected_stages=(),
+        progress_fraction=1.0,
+        exit_code=0,
+    )
+
+    artifacts = manager._artifacts(
+        record,
+        {
+            "model_3mf": str(core),
+            "project_manifest": str(manifest),
+        },
+    )
+    by_id = {artifact.artifact_id: artifact for artifact in artifacts}
+
+    assert by_id["model_3mf"].filename == "model.3mf"
+    assert by_id["bambu_project_3mf"].filename == "model.bambu-p2s.3mf"
+    assert by_id["bambu_project_3mf"].sha256 == sha256_file(project)
+    assert by_id["bambu_project_3mf"].download_url == (
+        f"/api/v1/jobs/{record.job_id}/artifacts/bambu_project_3mf"
+    )
+    assert by_id["bambu_project_validation"].sha256 == sha256_file(validation)
+
+    retained = record.model_copy(
+        update={
+            "summary": WorkflowRunSummary(
+                workflow_id="local-project-artifacts",
+                state=WorkflowState.COMPLETED,
+                source_mode="local",
+                final_stage=WorkflowStage.PROJECT,
+                ready_stages=(WorkflowStage.PROJECT,),
+                metrics={},
+                artifacts={
+                    "model_3mf": str(core),
+                    "project_manifest": str(manifest),
+                },
+                required_checks_passed=True,
+            ),
+            "artifacts": (),
+        }
+    )
+    manager._write_record(retained)
+    manager.refresh()
+    backfilled = manager.get(record.job_id, refresh=False)
+    assert any(artifact.artifact_id == "bambu_project_3mf" for artifact in backfilled.artifacts)
+
+
+def test_bambu_project_manifest_rejects_workspace_escape(
+    web_config: WebAppConfig,
+) -> None:
+    manager = LocalJobManager(web_config)
+    workspace = web_config.workspace_root / "escaping-project-artifacts"
+    project_root = workspace / "project"
+    project_root.mkdir(parents=True)
+    outside = web_config.workspace_root / "outside-project.3mf"
+    outside.parent.mkdir(parents=True, exist_ok=True)
+    outside.write_bytes(b"outside")
+    validation = project_root / "project_validation.json"
+    validation.write_text("{}\n", encoding="utf-8")
+    manifest = project_root / "bambu-tile-project-manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "topoforge-bambu-tile-project-assembly-v1",
+                "required_checks_passed": True,
+                "tile_count": 1,
+                "tiles": [
+                    {
+                        "tile_id": "tile-r0000-c0000",
+                        "required_checks_passed": True,
+                        "files": {"bambu_project_3mf": "../../outside-project.3mf"},
+                        "sha256": {"bambu_project_3mf": sha256_file(outside)},
+                        "validation_path": "project_validation.json",
+                        "validation_sha256": sha256_file(validation),
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    now = utc_now()
+    record = JobRecord(
+        job_id="e" * 32,
+        created_at=now,
+        updated_at=now,
+        state=JobState.COMPLETED,
+        workspace_dir=workspace,
+        expected_stages=(),
+        progress_fraction=1.0,
+        exit_code=0,
+    )
+
+    with pytest.raises(ConfigurationError, match="escapes the workflow workspace"):
+        manager._artifacts(record, {"project_manifest": str(manifest)})
 
 
 def test_isolated_worker_completes_and_publishes_checksum_artifacts(

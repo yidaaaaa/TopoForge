@@ -146,6 +146,7 @@ export default function App() {
   );
   const jobsLoadGeneration = useRef(0);
   const lifecycleMutationInProgress = useRef(false);
+  const selectionClearedByUser = useRef(false);
   const t = useCallback(
     (key: TranslationKey) => translate(language, key),
     [language],
@@ -167,6 +168,9 @@ export default function App() {
       setSelectedJobId((current) => {
         if (current && records.some((job) => job.job_id === current)) {
           return current;
+        }
+        if (selectionClearedByUser.current) {
+          return null;
         }
         return records[0]?.job_id ?? null;
       });
@@ -214,6 +218,11 @@ export default function App() {
     () => jobs.find((job) => job.job_id === selectedJobId) ?? null,
     [jobs, selectedJobId],
   );
+
+  const handleJobSelect = useCallback((jobId: string | null) => {
+    selectionClearedByUser.current = jobId === null;
+    setSelectedJobId(jobId);
+  }, []);
 
   const loadMaintenance = useCallback(
     async (jobId: string) => {
@@ -379,6 +388,7 @@ export default function App() {
       const payload = buildJobRequest(form, health, overlay);
       await validateJob(payload);
       const record = await createJob(payload);
+      selectionClearedByUser.current = false;
       setSelectedJobId(record.job_id);
       setNotice({ tone: "success", text: t("jobQueued") });
       await loadJobs();
@@ -433,6 +443,7 @@ export default function App() {
     try {
       const restored = await restoreBackup(backupId);
       await loadJobs();
+      selectionClearedByUser.current = false;
       setSelectedJobId(restored.job_id);
       setNotice({ tone: "success", text: t("restoreCompleted") });
     } catch (reason) {
@@ -696,7 +707,7 @@ export default function App() {
           jobTrash={jobTrash}
           batchBusy={batchBusy}
           onRefresh={() => void loadJobs()}
-          onSelect={setSelectedJobId}
+          onSelect={handleJobSelect}
           onCancel={(jobId) => void handleCancel(jobId)}
           onBackup={(jobId) => void handleBackup(jobId)}
           onCleanup={(jobId, workflowId) => void handleCleanup(jobId, workflowId)}

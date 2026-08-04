@@ -50,7 +50,7 @@ interface ResultsPanelProps {
   jobTrash: JobTrashRecord[];
   batchBusy: "plan" | "apply" | "restore" | "purge" | null;
   onRefresh: () => void;
-  onSelect: (jobId: string) => void;
+  onSelect: (jobId: string | null) => void;
   onCancel: (jobId: string) => void;
   onPlanBatch: (jobIds: string[], mode: JobBatchDeleteMode) => void;
   onApplyBatch: () => void;
@@ -68,7 +68,27 @@ function metricValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function artifactLabel(role: string): string {
+function artifactLabel(
+  role: string,
+  t: (key: TranslationKey) => string,
+): string {
+  if (role === "model_3mf") {
+    return t("core3mfArtifact");
+  }
+  if (role.startsWith("bambu_project_3mf")) {
+    const tile = role.slice("bambu_project_3mf".length).replace(/^_/, "");
+    return tile
+      ? `${t("bambuProject3mfArtifact")} · ${tile.replaceAll("_", "-")}`
+      : t("bambuProject3mfArtifact");
+  }
+  if (role.startsWith("bambu_project_validation")) {
+    const tile = role
+      .slice("bambu_project_validation".length)
+      .replace(/^_/, "");
+    return tile
+      ? `${t("bambuProjectValidationArtifact")} · ${tile.replaceAll("_", "-")}`
+      : t("bambuProjectValidationArtifact");
+  }
   return role.replaceAll("_", " ");
 }
 
@@ -344,7 +364,15 @@ export function ResultsPanel({
               <button
                 type="button"
                 className="job-row-main"
-                onClick={() => onSelect(job.job_id)}
+                onClick={() =>
+                  onSelect(selectedJob?.job_id === job.job_id ? null : job.job_id)
+                }
+                aria-pressed={selectedJob?.job_id === job.job_id}
+                title={
+                  selectedJob?.job_id === job.job_id
+                    ? t("deselectJob")
+                    : undefined
+                }
               >
                 <div className="job-row-head">
                   <strong>{job.workspace_dir.split("/").at(-1)}</strong>
@@ -474,17 +502,28 @@ export function ResultsPanel({
               <h3>{selectedJob.workspace_dir.split("/").at(-1)}</h3>
               <code>{selectedJob.job_id.slice(0, 12)}</code>
             </div>
-            {["queued", "running", "cancelling"].includes(selectedJob.state) && (
+            <div className="detail-header-actions">
+              {["queued", "running", "cancelling"].includes(selectedJob.state) && (
+                <button
+                  type="button"
+                  className="danger-button"
+                  onClick={() => onCancel(selectedJob.job_id)}
+                  disabled={selectedJob.state === "cancelling"}
+                >
+                  <Square size={15} fill="currentColor" />
+                  {t("cancel")}
+                </button>
+              )}
               <button
                 type="button"
-                className="danger-button"
-                onClick={() => onCancel(selectedJob.job_id)}
-                disabled={selectedJob.state === "cancelling"}
+                className="icon-button"
+                onClick={() => onSelect(null)}
+                title={t("clearJobSelection")}
+                aria-label={t("clearJobSelection")}
               >
-                <Square size={15} fill="currentColor" />
-                {t("cancel")}
+                <X size={16} />
               </button>
-            )}
+            </div>
           </div>
           <dl className="summary-list">
             <div>
@@ -676,10 +715,14 @@ export function ResultsPanel({
                   href={artifact.download_url ?? "#"}
                   target="_blank"
                   rel="noreferrer"
-                  className="artifact-row"
+                  className={`artifact-row${
+                    artifact.artifact_id.startsWith("bambu_project_3mf")
+                      ? " recommended"
+                      : ""
+                  }`}
                 >
                   <span>
-                    <strong>{artifactLabel(artifact.artifact_id)}</strong>
+                    <strong>{artifactLabel(artifact.artifact_id, t)}</strong>
                     <small>{formatBytes(artifact.size_bytes)}</small>
                   </span>
                   <ExternalLink size={15} />

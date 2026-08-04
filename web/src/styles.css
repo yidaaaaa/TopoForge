@@ -1403,6 +1403,13 @@ input:checked + .toggle::after {
   min-width: 0;
 }
 
+.detail-header-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .detail-header h3 {
   overflow: hidden;
   font-size: 14px;
@@ -1606,6 +1613,11 @@ input:checked + .toggle::after {
 .artifact-row:hover {
   color: var(--accent-dark);
   background: #f1f7f5;
+}
+
+.artifact-row.recommended {
+  border-left: 3px solid var(--accent);
+  background: #edf7f4;
 }
 
 .artifact-row span {

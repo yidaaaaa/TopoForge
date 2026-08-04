@@ -137,6 +137,105 @@ def _within(root: Path, path: Path) -> bool:
     return resolved == root or root in resolved.parents
 
 
+def _manifest_relative_file(
+    *,
+    workspace: Path,
+    project_root: Path,
+    relative: Any,
+    role: str,
+) -> Path:
+    if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
+        raise ConfigurationError(f"Bambu project {role} path must be relative")
+    path = (project_root / relative).resolve()
+    if not _within(workspace, path) or not _within(project_root, path):
+        raise ConfigurationError(f"Bambu project {role} escapes the workflow workspace")
+    if not path.is_file():
+        raise ConfigurationError(f"Bambu project {role} is missing: {path}")
+    return path
+
+
+def _bambu_project_artifact_paths(workspace: Path, manifest_path: Path) -> dict[str, Path]:
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ConfigurationError(f"Bambu project manifest is unreadable: {manifest_path}") from exc
+    if not isinstance(manifest, dict):
+        raise ConfigurationError("Bambu project manifest root must be an object")
+    if (
+        manifest.get("schema_version") != "topoforge-bambu-tile-project-assembly-v1"
+        or manifest.get("required_checks_passed") is not True
+    ):
+        raise ConfigurationError("Bambu project manifest has not passed its required checks")
+    tiles = manifest.get("tiles")
+    tile_count = manifest.get("tile_count")
+    if (
+        not isinstance(tiles, list)
+        or not tiles
+        or not isinstance(tile_count, int)
+        or tile_count != len(tiles)
+    ):
+        raise ConfigurationError("Bambu project manifest has an invalid tile set")
+
+    project_root = manifest_path.parent.resolve()
+    resolved: dict[str, Path] = {}
+    seen_tile_ids: set[str] = set()
+    single_tile = tile_count == 1
+    for tile in tiles:
+        if not isinstance(tile, dict) or tile.get("required_checks_passed") is not True:
+            raise ConfigurationError("Bambu project tile has not passed its required checks")
+        tile_id = tile.get("tile_id")
+        if not isinstance(tile_id, str):
+            raise ConfigurationError("Bambu project manifest has an invalid tile id")
+        parts = tile_id.split("-")
+        if (
+            len(parts) != 3
+            or parts[0] != "tile"
+            or len(parts[1]) != 5
+            or not parts[1].startswith("r")
+            or not parts[1][1:].isdigit()
+            or len(parts[2]) != 5
+            or not parts[2].startswith("c")
+            or not parts[2][1:].isdigit()
+            or tile_id in seen_tile_ids
+        ):
+            raise ConfigurationError("Bambu project manifest has an invalid tile id")
+        seen_tile_ids.add(tile_id)
+        files = tile.get("files")
+        hashes = tile.get("sha256")
+        if not isinstance(files, dict) or not isinstance(hashes, dict):
+            raise ConfigurationError(f"Bambu project tile roles are invalid: {tile_id}")
+
+        suffix = "" if single_tile else f"_{tile_id.replace('-', '_')}"
+        project = _manifest_relative_file(
+            workspace=workspace,
+            project_root=project_root,
+            relative=files.get("bambu_project_3mf"),
+            role=f"{tile_id} project 3MF",
+        )
+        expected_project_hash = hashes.get("bambu_project_3mf")
+        if (
+            not isinstance(expected_project_hash, str)
+            or sha256_file(project) != expected_project_hash
+        ):
+            raise ConfigurationError(f"Bambu project checksum mismatch: {tile_id}")
+        resolved[f"bambu_project_3mf{suffix}"] = project
+
+        validation = _manifest_relative_file(
+            workspace=workspace,
+            project_root=project_root,
+            relative=tile.get("validation_path"),
+            role=f"{tile_id} validation",
+        )
+        expected_validation_hash = tile.get("validation_sha256")
+        if (
+            not isinstance(expected_validation_hash, str)
+            or sha256_file(validation) != expected_validation_hash
+        ):
+            raise ConfigurationError(f"Bambu project validation checksum mismatch: {tile_id}")
+        resolved[f"bambu_project_validation{suffix}"] = validation
+    return resolved
+
+
 def _pid_is_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -898,6 +997,25 @@ class LocalJobManager:
             if not self.jobs_dir.exists():
                 return
             for record in self._all_records():
+                if (
+                    record.state is JobState.COMPLETED
+                    and record.summary is not None
+                    and "project_manifest" in record.summary.artifacts
+                    and not any(
+                        artifact.artifact_id.startswith("bambu_project_3mf")
+                        for artifact in record.artifacts
+                    )
+                ):
+                    record = self._write_record(
+                        record.model_copy(
+                            update={
+                                "artifacts": self._artifacts(
+                                    record,
+                                    record.summary.artifacts,
+                                )
+                            }
+                        )
+                    )
                 if record.state not in {JobState.RUNNING, JobState.CANCELLING}:
                     continue
                 record = self._status_update(record)
@@ -988,8 +1106,23 @@ class LocalJobManager:
         values: dict[str, str],
     ) -> tuple[JobArtifact, ...]:
         workspace = record.workspace_dir.resolve()
+        expanded_values = dict(values)
+        raw_manifest = expanded_values.get("project_manifest")
+        if raw_manifest is not None:
+            manifest_path = Path(raw_manifest).resolve()
+            if not _within(workspace, manifest_path):
+                raise ConfigurationError(f"workflow artifact escapes workspace: {manifest_path}")
+            derived = _bambu_project_artifact_paths(workspace, manifest_path)
+            duplicates = sorted(set(expanded_values).intersection(derived))
+            if duplicates:
+                raise ConfigurationError(
+                    "workflow artifact roles collide with Bambu project roles: "
+                    + ", ".join(duplicates)
+                )
+            expanded_values.update({role: str(path) for role, path in derived.items()})
+
         artifacts: list[JobArtifact] = []
-        for role, raw_path in sorted(values.items()):
+        for role, raw_path in sorted(expanded_values.items()):
             path = Path(raw_path).resolve()
             if not _within(workspace, path):
                 raise ConfigurationError(f"workflow artifact escapes workspace: {path}")
