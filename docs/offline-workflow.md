@@ -1,6 +1,6 @@
 # Offline Local Workflow
 
-TopoForge 0.10.2 CLI can configure, run, inspect, back up, restore, resume, and add checksum-bound local overlays without starting the optional Web server. A new global AOI still needs either network access or every required provider request already present in the content-addressed cache.
+TopoForge 0.10.3 CLI can configure, run, inspect, back up, restore, resume, and add checksum-bound local overlays without starting the optional Web server. A new global AOI still needs either network access or every required provider request already present in the content-addressed cache.
 
 ## Prepare the locked environment
 

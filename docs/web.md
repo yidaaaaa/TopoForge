@@ -1,6 +1,6 @@
 # Local Web application
 
-TopoForge 0.10.2 includes a single-user local Web application. It is an adapter over the
+TopoForge 0.10.3 includes a single-user local Web application. It is an adapter over the
 same `WorkflowLaunchConfig` and `execute_workflow_launch()` path used by the CLI. Raster,
 sampling, mesh, tiling, overlay, slicing, validation, and artifact logic remains in the
 Python core.
@@ -140,12 +140,12 @@ wheel retains only the compiled, checksum-bound application inside `topoforge.we
 
 ## Rollback
 
-Stop the 0.10.2 listener, start the retained 0.10.1 CLI environment, and keep existing
+Stop the 0.10.3 listener, start the retained 0.10.2 CLI environment, and keep existing
 workspaces and state directories unchanged:
 
 ```bash
-~/.venvs/topoforge-0.10.1/bin/topoforge doctor
-ln -sfn ~/.venvs/topoforge-0.10.1/bin/topoforge ~/.local/bin/topoforge
+~/.venvs/topoforge-0.10.2/bin/topoforge doctor
+ln -sfn ~/.venvs/topoforge-0.10.2/bin/topoforge ~/.local/bin/topoforge
 ```
 
-For a source checkout exactly at the 0.10.2 release tag, run `scripts/rollback-topoforge-0.10.2.sh --confirm-rollback`; it creates a separate detached 0.10.1 worktree and leaves retained state untouched.
+For a source checkout exactly at the 0.10.3 release tag, run `scripts/rollback-topoforge-0.10.3.sh --confirm-rollback`; it creates a separate detached 0.10.2 worktree and leaves retained state untouched.

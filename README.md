@@ -2,7 +2,7 @@
 
 TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
-**Current release (TopoForge 0.10.2):** this local-use patch adds bilingual job sorting, terminal-job batch selection, deterministic measured deletion previews, recoverable workspace quarantine, optional verified backup before quarantine, seven-day trash retention, restore, and explicitly confirmed permanent purge. Shared workspaces, active jobs, symlinks, path escapes, changed plans, and unselected references are blocked; backups and all local terrain evidence remain outside the public Git tree.
+**Current release (TopoForge 0.10.3):** this local-use manufacturing and usability patch adds a compact six-clearance connector calibration coupon, recessed fit-safe labels, persistent job deselection, explicit Generic Core versus Bambu Studio project artifact roles, and operator-selected connector clearance in the bilingual WebUI. All six 0.10-0.40 mm coupon pairs completed seating on the reported P2S print, but the release intentionally keeps clearance user-selected because machines, materials, orientation, and process settings differ. Generated terrain, local tasks, physical evidence records, and contributor state remain outside the public Git tree.
 
 ![Validated synthetic terrain preview](artifacts/previews/milestone-01-synthetic.png)
 
@@ -483,8 +483,8 @@ SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/primary
 SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/repeat
 uv run python scripts/verify_release.py \
   --primary-dir dist/primary --repeat-dir dist/repeat \
-  --version 0.10.2 --install \
-  --report artifacts/logs/phase11-release-verification.json
+  --version 0.10.3 --install \
+  --report artifacts/logs/topoforge-0.10.3-release-verification.json
 uv run python scripts/verify_reference_regions.py \
   --catalog reference_regions/catalog.yaml --definitions-only \
   --report artifacts/logs/reference-definitions.json
@@ -495,8 +495,8 @@ uv run python scripts/run_benchmarks.py \
 
 The suite covers terrain, CRS/AOI, sampling, orientation, exporters, workflows, Web API
 jobs, bilingual browser layout/WebGL, overlays, tiling/connectors, provider/cache behavior,
-slicers, release archives, reference regions, and benchmark contracts. Phase 11 closes with
-231 Python tests, 23 Vitest tests, 2 applicable Playwright scenarios, strict Web lifecycle
+slicers, release archives, reference regions, and benchmark contracts. TopoForge 0.10.3 closes with
+241 Python tests, 28 Vitest tests, 2 applicable Playwright scenarios, strict Web lifecycle
 HTTP evidence, and byte-identical fixed-epoch archives. The largest deterministic benchmark
 observed 15.364 seconds and 1002.367 MiB RSS for 256 x 320 samples and 327,676 triangles.
 Large DEM, mesh, cache, slicer, and benchmark output files remain outside Git.

@@ -66,7 +66,7 @@ def inspect_sdist(path: Path, version: str) -> dict[str, Any]:
         "benchmarks/baseline.json",
         "pyproject.toml",
         "reference_regions/catalog.yaml",
-        "scripts/rollback-topoforge-0.10.2.sh",
+        "scripts/rollback-topoforge-0.10.3.sh",
         "scripts/run_benchmarks.py",
         "scripts/verify_public_tree.py",
         "scripts/verify_reference_regions.py",
