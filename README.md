@@ -5,9 +5,10 @@ TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevatio
 **Current release (TopoForge 0.10.3):** this local-use manufacturing and usability patch adds a compact six-clearance connector calibration coupon, recessed fit-safe labels, persistent job deselection, explicit Generic Core versus Bambu Studio project artifact roles, and operator-selected connector clearance in the bilingual WebUI. All six 0.10-0.40 mm coupon pairs completed seating on the reported P2S print, but the release intentionally keeps clearance user-selected because machines, materials, orientation, and process settings differ. Generated terrain, local tasks, physical evidence records, and contributor state remain outside the public Git tree.
 
 <p align="center">
-  <img src="artifacts/previews/great-trango-tower-example.jpg" alt="Real Copernicus DEM GLO-30 terrain model of Great Trango Tower" width="595">
+  <img src="artifacts/previews/great-trango-tower-example.jpg" alt="Real Copernicus DEM GLO-30 terrain model of Great Trango Tower" width="47%">
+  <img src="artifacts/previews/topoforge-p2s-physical-print-example.jpg" alt="TopoForge terrain model printing on a Bambu Lab P2S" width="47%">
 </p>
-<p align="center"><em>Real terrain case: Great Trango Tower from Copernicus DEM GLO-30 (2021). The preview records the measured elevation range and North direction; no synthetic terrain or summit sharpening was added.</em></p>
+<p align="center"><em>Real end-to-end cases — left: Great Trango Tower from Copernicus DEM GLO-30 (2021); right: a TopoForge terrain model being printed on a Bambu Lab P2S. Terrain is not synthetically sharpened; physical results remain operator-reported.</em></p>
 
 ## Local bilingual Web application
 
