@@ -104,6 +104,11 @@ jobs:
         run: >-
           uv run python scripts/verify_platform_core.py
           --report artifacts/logs/ci-windows-x64-core.json
+      - name: Run Windows Web lifecycle and recovery acceptance
+        run: >-
+          uv run python scripts/verify_windows_system.py
+          --require-windows
+          --report artifacts/logs/ci-windows-x64-system.json
       - name: Run Python regression suite
         run: uv run pytest
       - name: Retain Windows core evidence
@@ -111,8 +116,55 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: topoforge-windows-x64-core-evidence
-          path: artifacts/logs/ci-windows-x64-core.json
+          path: |
+            artifacts/logs/ci-windows-x64-core.json
+            artifacts/logs/ci-windows-x64-system.json
           if-no-files-found: error
+
+  windows-installed-release:
+    name: Windows x64 installed release
+    needs: windows-core
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.24"
+          enable-cache: true
+      - name: Verify locked dependency graph
+        run: uv lock --check
+      - name: Install locked build and test dependencies
+        run: uv sync --locked --all-groups
+      - id: package-version
+        name: Resolve project version
+        shell: pwsh
+        run: |
+          "version=$(uv version --short)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append
+      - name: Build Windows-hosted release archives
+        run: uv build --no-sources --out-dir dist/windows-release
+      - name: Verify a fresh Windows virtual-environment installation
+        run: >-
+          uv run python scripts/verify_release.py
+          --primary-dir dist/windows-release
+          --version ${{ steps.package-version.outputs.version }}
+          --install
+          --report artifacts/logs/ci-windows-x64-installed-release.json
+      - name: Retain installed-release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: topoforge-windows-x64-installed-release-evidence
+          path: |
+            dist/windows-release/*
+            artifacts/logs/ci-windows-x64-installed-release.json
+          if-no-files-found: error
+          retention-days: 14
 
   windows-portable:
     name: Windows x64 portable candidate

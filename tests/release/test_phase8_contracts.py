@@ -251,10 +251,33 @@ def test_windows_core_ci_contract() -> None:
     assert '"architecture": "x64"' in windows_steps
     assert "uv sync --locked --all-groups" in windows_steps
     assert "scripts/verify_platform_core.py" in windows_steps
+    assert "scripts/verify_windows_system.py" in windows_steps
+    assert "--require-windows" in windows_steps
+    assert "ci-windows-x64-system.json" in windows_steps
     assert "uv run pytest" in windows_steps
     assert "actions/upload-artifact@v4" in windows_steps
     assert "setup-node" not in windows_steps
     assert "playwright" not in windows_steps
+
+
+def test_windows_installed_release_ci_contract() -> None:
+    root = Path(__file__).parents[2]
+    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    job = workflow["jobs"]["windows-installed-release"]
+    steps = json.dumps(job["steps"], sort_keys=True)
+
+    assert job["needs"] == "windows-core"
+    assert job["runs-on"] == "windows-2022"
+    assert '"architecture": "x64"' in steps
+    assert "uv lock --check" in steps
+    assert "uv sync --locked --all-groups" in steps
+    assert "uv build --no-sources --out-dir dist/windows-release" in steps
+    assert "scripts/verify_release.py" in steps
+    assert "--install" in steps
+    assert "ci-windows-x64-installed-release.json" in steps
+    assert "actions/upload-artifact@v4" in steps
+    assert "setup-node" not in steps
+    assert "playwright" not in steps
 
 
 def test_playwright_server_startup_is_platform_neutral() -> None:
