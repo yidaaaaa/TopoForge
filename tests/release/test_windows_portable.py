@@ -381,6 +381,12 @@ def test_windows_portable_ci_contract() -> None:
     assert "--repeat-archive" in steps
     assert "--execute" in steps
     assert "--verify-bambu" not in steps
+    assert "Report Windows portable verification failure" in steps
+    assert "failure() && steps.windows-portable-verification.outcome == 'failure'" in steps
+    assert "::error title=Windows portable verification" in steps
+    assert "Get-FileHash" in steps
+    assert "SHA256SUMS" in steps
+    assert "::notice title=Windows portable SHA-256" in steps
     assert "actions/upload-artifact@v4" in steps
 
 

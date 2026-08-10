@@ -294,7 +294,8 @@ jobs:
           --output-dir dist/windows-repeat
           --version ${{ steps.package-version.outputs.version }}
           --report artifacts/logs/ci-windows-portable-repeat-build.json
-      - name: Verify reproducibility and execute the portable candidate
+      - id: windows-portable-verification
+        name: Verify reproducibility and execute the portable candidate
         run: >-
           uv run python scripts/verify_windows_portable.py
           --archive
@@ -305,6 +306,42 @@ jobs:
           --execute
           --work-root artifacts/windows-portable-acceptance
           --report artifacts/logs/ci-windows-portable-verification.json
+      - name: Report Windows portable verification failure
+        if: failure() && steps.windows-portable-verification.outcome == 'failure'
+        shell: pwsh
+        run: |
+          $reportPath = "artifacts/logs/ci-windows-portable-verification.json"
+          if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
+            Write-Output "::error title=Windows portable verification::failure report was not produced"
+            exit 0
+          }
+          $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+          if ($null -eq $report.error) {
+            Write-Output "::error title=Windows portable verification::failure report has no error details"
+            exit 0
+          }
+          $message = "{0}: {1}" -f $report.error.type, $report.error.message
+          $message = $message.Replace("%", "%25").Replace("`r", "%0D").Replace("`n", "%0A")
+          Write-Output "::error title=Windows portable verification::$message"
+      - name: Publish Windows portable candidate checksum
+        shell: pwsh
+        run: |
+          $archives = @(Get-ChildItem -LiteralPath "dist/windows-primary" -Filter "*.zip" -File)
+          if ($archives.Count -ne 1) {
+            throw "expected exactly one primary Windows portable archive"
+          }
+          $archive = $archives[0]
+          $digest = (Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $report = Get-Content -LiteralPath "artifacts/logs/ci-windows-portable-verification.json" -Raw | ConvertFrom-Json
+          if (-not $report.required_checks_passed -or
+              $digest -ne $report.archive.sha256 -or
+              $digest -ne $report.reproducibility.primary_sha256 -or
+              $digest -ne $report.reproducibility.repeat_sha256) {
+            throw "portable candidate checksum differs from verified reproducible archives"
+          }
+          $line = "$digest  $($archive.Name)"
+          $line | Set-Content -LiteralPath "dist/windows-primary/SHA256SUMS" -Encoding ascii
+          Write-Output "::notice title=Windows portable SHA-256::$line"
       - name: Retain Windows portable candidate and evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -312,6 +349,7 @@ jobs:
           name: topoforge-windows-x64-portable-candidate
           path: |
             dist/windows-primary/*.zip
+            dist/windows-primary/SHA256SUMS
             artifacts/logs/ci-windows-portable-primary-build.json
             artifacts/logs/ci-windows-portable-repeat-build.json
             artifacts/logs/ci-windows-portable-verification.json
