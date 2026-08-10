@@ -611,6 +611,21 @@ def _extract_verified_archive(
     return extracted
 
 
+def _windows_batch_command(
+    comspec: str,
+    path: Path,
+    arguments: list[str],
+    *,
+    cwd: Path,
+) -> list[str]:
+    """Invoke a verified package-root launcher without cmd absolute-path quote ambiguity."""
+    resolved_path = path.resolve()
+    if resolved_path.parent != cwd.resolve():
+        raise ValueError("portable batch launcher must be invoked from its package root")
+    invocation = subprocess.list2cmdline([f".\\{resolved_path.name}", *arguments])
+    return [comspec, "/d", "/s", "/c", invocation]
+
+
 def _run_json(
     command: list[str],
     *,
@@ -701,12 +716,13 @@ def execute_windows_portable(
     commands: list[dict[str, Any]] = []
     comspec = os.environ.get("COMSPEC", "cmd.exe")
 
-    def batch_command(path: Path, arguments: list[str]) -> list[str]:
-        invocation = "call " + subprocess.list2cmdline([str(path), *arguments])
-        return [comspec, "/d", "/s", "/c", invocation]
-
     doctor, doctor_record = _run_json(
-        batch_command(package_root / "topoforge.cmd", ["doctor"]),
+        _windows_batch_command(
+            comspec,
+            package_root / "topoforge.cmd",
+            ["doctor"],
+            cwd=package_root,
+        ),
         cwd=package_root,
         environment=environment,
     )
@@ -718,7 +734,8 @@ def execute_windows_portable(
     input_root = web_root / "input"
     input_root.mkdir(parents=True)
     web, web_record = _run_json(
-        batch_command(
+        _windows_batch_command(
+            comspec,
             package_root / "TopoForge-Web.cmd",
             [
                 "--check",
@@ -730,6 +747,7 @@ def execute_windows_portable(
                 str(input_root),
                 "--no-open",
             ],
+            cwd=package_root,
         ),
         cwd=package_root,
         environment=environment,

@@ -25,6 +25,7 @@ from scripts.verify_windows_portable import (
     _extract_verified_archive,
     _validate_archive_members,
     _validate_manifest_files,
+    _windows_batch_command,
 )
 
 RUNTIME_SHA256 = "18bcc65b17921806b72cdc88bcf000bf67a2c99a8fc381fe1629f2b9ba56858d"
@@ -247,6 +248,36 @@ def test_windows_launchers_use_embedded_isolated_python() -> None:
         assert "-I -X utf8 -m topoforge.cli.app" in launcher
         assert "PYTHONNOUSERSITE=1" in launcher
     assert "-m topoforge.cli.app web %*" in WEB_LAUNCHER
+
+
+def test_windows_batch_command_uses_verified_package_root(tmp_path: Path) -> None:
+    package_root = tmp_path / "portable path with spaces" / "地形" / "TopoForge-Windows-x64"
+
+    doctor = _windows_batch_command(
+        "cmd.exe",
+        package_root / "topoforge.cmd",
+        ["doctor"],
+        cwd=package_root,
+    )
+    assert doctor == ["cmd.exe", "/d", "/s", "/c", r".\topoforge.cmd doctor"]
+
+    web = _windows_batch_command(
+        "cmd.exe",
+        package_root / "TopoForge-Web.cmd",
+        ["--check", "--state-dir", str(package_root / "state path")],
+        cwd=package_root,
+    )
+    assert web[:4] == ["cmd.exe", "/d", "/s", "/c"]
+    assert web[4].startswith(r".\TopoForge-Web.cmd --check --state-dir ")
+    assert f'"{package_root / "state path"}"' in web[4]
+
+    with pytest.raises(ValueError, match="package root"):
+        _windows_batch_command(
+            "cmd.exe",
+            package_root / "topoforge.cmd",
+            ["doctor"],
+            cwd=tmp_path,
+        )
 
 
 def test_portable_official_bambu_acceptance_is_explicit_and_uses_embedded_python() -> None:
