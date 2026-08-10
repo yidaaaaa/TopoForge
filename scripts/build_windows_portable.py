@@ -1056,7 +1056,7 @@ def main() -> int:
         raise
     if args.report is not None:
         _write_report(args.report.resolve(), report)
-    print(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False))
+    print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 
 

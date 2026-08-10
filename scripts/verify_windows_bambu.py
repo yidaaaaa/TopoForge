@@ -385,10 +385,10 @@ def main() -> int:
             "required_checks_passed": False,
         }
         _write_report(args.report, report)
-        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), file=sys.stderr)
+        print(json.dumps(report, indent=2, sort_keys=True), file=sys.stderr)
         return 1
     _write_report(args.report, report)
-    print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+    print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 
 

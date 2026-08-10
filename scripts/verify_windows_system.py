@@ -403,7 +403,7 @@ def main() -> int:
         _write_report(report_path, failure)
         raise
     _write_report(report_path, report)
-    print(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False))
+    print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 
 

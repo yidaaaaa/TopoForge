@@ -203,6 +203,26 @@ def test_packaged_web_assets_are_checkout_byte_exact() -> None:
     assert "src/topoforge/web/static/** -text" in attributes
 
 
+@pytest.mark.parametrize(
+    "relative_path",
+    (
+        "scripts/build_windows_portable.py",
+        "scripts/verify_windows_bambu.py",
+        "scripts/verify_windows_portable.py",
+        "scripts/verify_windows_system.py",
+    ),
+)
+def test_windows_script_console_json_is_ascii_safe(relative_path: str) -> None:
+    root = Path(__file__).parents[2]
+    source = (root / relative_path).read_text(encoding="utf-8")
+    unsafe_lines = [
+        line
+        for line in source.splitlines()
+        if "print(json.dumps" in line and "ensure_ascii=False" in line
+    ]
+    assert unsafe_lines == []
+
+
 def test_ci_release_verification_uses_project_version() -> None:
     root = Path(__file__).parents[2]
     workflow = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
