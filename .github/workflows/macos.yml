@@ -1,0 +1,95 @@
+name: macos-native-arm64-unverified
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-native-arm64-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-arm64:
+    name: ${{ matrix.target }} native CI (support unverified)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macOS Sequoia 15 arm64
+            runner: macos-15
+          - target: macOS Tahoe 26 arm64
+            runner: macos-26
+    runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "15.0"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record native runner identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "arm64"
+          sw_vers
+          uname -a
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: arm64
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.24"
+          enable-cache: true
+      - name: Install the locked development environment
+        run: uv sync --locked --all-groups
+      - name: Verify the frozen support contract
+        run: uv run python scripts/verify_macos_support_matrix.py
+      - name: Exercise native imports and diagnostics
+        run: uv run topoforge doctor
+      - name: Build, reopen, and compare deterministic artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence_root="$RUNNER_TEMP/TopoForge Phase 13/地形"
+          dem="$evidence_root/输入/高程.tif"
+          primary="$evidence_root/构建 primary"
+          repeat="$evidence_root/构建 repeat"
+
+          uv run topoforge synthetic \
+            --output "$dem" \
+            --terrain gaussian-hill \
+            --rows 32 \
+            --columns 40 \
+            --pixel-size-m 20
+          for output in "$primary" "$repeat"; do
+            uv run topoforge build \
+              --dem "$dem" \
+              --output "$output" \
+              --size-mm 40 32 \
+              --base-mm 2 \
+              --max-height-mm 20 \
+              --vertical-scale fit-height \
+              --sampling-mode source-preserving \
+              --max-grid-cells 10000 \
+              --max-estimated-triangles 50000 \
+              --resource-budget-mode strict \
+              --dataset-type dtm
+            uv run topoforge preview "$output"
+            uv run topoforge inspect "$output/model.3mf"
+            uv run topoforge validate "$output/model.stl"
+          done
+
+          cmp "$primary/model.stl" "$repeat/model.stl"
+          cmp "$primary/model.3mf" "$repeat/model.3mf"
+          cmp "$primary/preview.glb" "$repeat/preview.glb"
+      - name: Check the packaged local Web application with macOS defaults
+        run: uv run topoforge web --check --no-open --input-root "$GITHUB_WORKSPACE"
+      - name: Run Python quality and regression gates
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pyright
+          uv run pytest
