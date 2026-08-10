@@ -64,22 +64,33 @@ def inspect_sdist(path: Path, version: str) -> dict[str, Any]:
         "README.md",
         "THIRD_PARTY_NOTICES.md",
         "benchmarks/baseline.json",
+        "packaging/MPL-2.0.txt",
+        "packaging/windows-x64-runtime.json",
         "pyproject.toml",
         "reference_regions/catalog.yaml",
+        "scripts/build_windows_portable.py",
         "scripts/rollback-topoforge-0.10.3.sh",
         "scripts/run_benchmarks.py",
+        "scripts/run_playwright_server.py",
         "scripts/verify_public_tree.py",
         "scripts/verify_reference_regions.py",
         "scripts/verify_phase11_lifecycle.py",
+        "scripts/verify_platform_core.py",
         "scripts/verify_release.py",
+        "scripts/verify_windows_portable.py",
         "src/topoforge/__init__.py",
+        "src/topoforge/platforms.py",
+        "src/topoforge/web/processes.py",
         "src/topoforge/web/static/asset-manifest.json",
         "src/topoforge/web/static/index.html",
         "tests/release/test_phase8_contracts.py",
         "tests/release/test_public_tree.py",
+        "tests/release/test_windows_portable.py",
+        "tests/unit/test_platforms.py",
         "tests/web/test_api.py",
         "tests/web/test_jobs.py",
         "tests/web/test_map_tiles.py",
+        "tests/web/test_processes.py",
         "uv.lock",
         "web/package-lock.json",
         "web/package.json",
@@ -192,7 +203,7 @@ def inspect_wheel(path: Path, version: str) -> dict[str, Any]:
     expected_metadata = {
         "Name": "topoforge",
         "Version": version,
-        "Requires-Python": "<3.13,>=3.12",
+        "Requires-Python": "<3.15,>=3.11",
         "License-Expression": "Apache-2.0",
     }
     for key, expected in expected_metadata.items():
@@ -233,6 +244,8 @@ def _run_command(
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     record = {
         "command": command,
@@ -246,6 +259,19 @@ def _run_command(
     return record
 
 
+def _venv_executable(
+    environment_dir: Path,
+    name: str,
+    *,
+    windows: bool | None = None,
+) -> Path:
+    """Resolve one virtual-environment executable on POSIX or Windows."""
+    is_windows = os.name == "nt" if windows is None else windows
+    directory = "Scripts" if is_windows else "bin"
+    executable = f"{name}.exe" if is_windows else name
+    return environment_dir / directory / executable
+
+
 def installed_smoke(
     wheel: Path,
     *,
@@ -255,7 +281,8 @@ def installed_smoke(
 ) -> dict[str, Any]:
     """Install the wheel in a fresh venv and run outside the source checkout."""
     with tempfile.TemporaryDirectory(prefix="topoforge-release-") as raw_temp:
-        root = Path(raw_temp).resolve()
+        root = Path(raw_temp).resolve() / "release path with spaces" / "地形"
+        root.mkdir(parents=True)
         environment_dir = root / "venv"
         work_dir = root / "work"
         work_dir.mkdir()
@@ -263,8 +290,8 @@ def installed_smoke(
         commands.append(
             _run_command(["uv", "venv", "--python", "3.12", str(environment_dir)], cwd=root)
         )
-        python = environment_dir / "bin" / "python"
-        cli = environment_dir / "bin" / "topoforge"
+        python = _venv_executable(environment_dir, "python")
+        cli = _venv_executable(environment_dir, "topoforge")
         install_command = ["uv", "pip", "install", "--python", str(python)]
         if wheelhouse is not None:
             install_command.extend(["--offline", "--find-links", str(wheelhouse.resolve())])
@@ -273,6 +300,8 @@ def installed_smoke(
         smoke_env = os.environ.copy()
         smoke_env["PYTHONNOUSERSITE"] = "1"
         smoke_env["PYTHONPATH"] = ""
+        smoke_env["PYTHONUTF8"] = "1"
+        smoke_env["PYTHONIOENCODING"] = "utf-8"
         import_record = _run_command(
             [
                 str(python),
@@ -382,6 +411,12 @@ def installed_smoke(
             "repository_import_leakage": False,
             "installed_version": version,
             "installed_origin": str(origin),
+            "path_contract": {
+                "root": str(root),
+                "contains_spaces": " " in str(root),
+                "contains_non_ascii": any(ord(character) > 127 for character in str(root)),
+                "required_checks_passed": True,
+            },
             "doctor": doctor_payload,
             "web": web_payload,
             "build_required_checks_passed": True,

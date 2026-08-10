@@ -13,7 +13,11 @@ import yaml
 from scripts.run_benchmarks import terrain_triangle_count
 from scripts.verify_platform_core import _absolute_python_executable
 from scripts.verify_reference_regions import verify_reference_catalog
-from scripts.verify_release import inspect_sdist, inspect_wheel
+from scripts.verify_release import (
+    _venv_executable,
+    inspect_sdist,
+    inspect_wheel,
+)
 
 VERSION = "0.10.3"
 
@@ -27,22 +31,33 @@ def _required_sdist_files() -> set[str]:
         "README.md",
         "THIRD_PARTY_NOTICES.md",
         "benchmarks/baseline.json",
+        "packaging/MPL-2.0.txt",
+        "packaging/windows-x64-runtime.json",
         "pyproject.toml",
         "reference_regions/catalog.yaml",
+        "scripts/build_windows_portable.py",
         "scripts/rollback-topoforge-0.10.3.sh",
         "scripts/run_benchmarks.py",
+        "scripts/run_playwright_server.py",
         "scripts/verify_public_tree.py",
         "scripts/verify_reference_regions.py",
         "scripts/verify_phase11_lifecycle.py",
+        "scripts/verify_platform_core.py",
         "scripts/verify_release.py",
+        "scripts/verify_windows_portable.py",
         "src/topoforge/__init__.py",
+        "src/topoforge/platforms.py",
+        "src/topoforge/web/processes.py",
         "src/topoforge/web/static/asset-manifest.json",
         "src/topoforge/web/static/index.html",
         "tests/release/test_phase8_contracts.py",
         "tests/release/test_public_tree.py",
+        "tests/release/test_windows_portable.py",
+        "tests/unit/test_platforms.py",
         "tests/web/test_api.py",
         "tests/web/test_jobs.py",
         "tests/web/test_map_tiles.py",
+        "tests/web/test_processes.py",
         "uv.lock",
         "web/package-lock.json",
         "web/package.json",
@@ -75,7 +90,7 @@ def _write_wheel(path: Path) -> None:
         "Metadata-Version: 2.4\n"
         "Name: topoforge\n"
         f"Version: {VERSION}\n"
-        "Requires-Python: <3.13,>=3.12\n"
+        "Requires-Python: <3.15,>=3.11\n"
         "License-Expression: Apache-2.0\n"
     )
     with zipfile.ZipFile(path, "w") as archive:
@@ -165,6 +180,16 @@ def test_platform_core_preserves_virtual_environment_interpreter_path(
 
     assert _absolute_python_executable(executable) == executable.absolute()
     assert _absolute_python_executable(executable) != target.absolute()
+
+
+def test_release_virtual_environment_paths_are_platform_aware(tmp_path: Path) -> None:
+    environment = tmp_path / "environment with spaces" / "地形"
+    assert _venv_executable(environment, "python", windows=False) == (
+        environment / "bin" / "python"
+    )
+    assert _venv_executable(environment, "topoforge", windows=True) == (
+        environment / "Scripts" / "topoforge.exe"
+    )
 
 
 def test_ci_release_verification_uses_project_version() -> None:
