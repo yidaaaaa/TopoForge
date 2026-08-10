@@ -49,6 +49,11 @@ from topoforge.overlays import (
     read_overlay_config,
     verify_overlay_bundle,
 )
+from topoforge.platforms import (
+    default_web_input_roots,
+    default_web_state_dir,
+    default_web_workspace_root,
+)
 from topoforge.provenance import write_json
 from topoforge.providers import (
     CachingHttpClient,
@@ -93,6 +98,9 @@ from topoforge.workflow import (
     write_workflow_report,
     write_workflow_storage_estimate,
 )
+
+_DEFAULT_WEB_STATE_DIR = default_web_state_dir()
+_DEFAULT_WEB_WORKSPACE_ROOT = default_web_workspace_root()
 
 app = typer.Typer(
     name="topoforge",
@@ -1860,11 +1868,11 @@ def web_application(
     workspace_root: Annotated[
         Path,
         typer.Option(help="Parent directory for Web-created workflow workspaces."),
-    ] = Path("topoforge-workspaces"),
+    ] = _DEFAULT_WEB_WORKSPACE_ROOT,
     state_dir: Annotated[
         Path,
         typer.Option(help="Durable local job records and worker logs."),
-    ] = Path("~/.topoforge/web"),
+    ] = _DEFAULT_WEB_STATE_DIR,
     input_root: Annotated[
         list[Path] | None,
         typer.Option(help="Repeat to expose explicit local input directories."),
@@ -1905,7 +1913,7 @@ def web_application(
         config = WebAppConfig(
             state_dir=state_dir,
             workspace_root=workspace_root,
-            input_roots=tuple(input_root or (Path.cwd(),)),
+            input_roots=tuple(input_root) if input_root else default_web_input_roots(),
             max_concurrent_jobs=max_concurrent_jobs,
             bambu_studio_executable=bambu_studio_executable,
             bambu_machine_profile=bambu_machine_profile,

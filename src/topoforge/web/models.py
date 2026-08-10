@@ -10,6 +10,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from topoforge.platforms import (
+    default_web_input_roots,
+    default_web_state_dir,
+    default_web_workspace_root,
+)
 from topoforge.workflow import (
     WorkflowCleanupPlan,
     WorkflowLaunchConfig,
@@ -349,9 +354,9 @@ class WebAppConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    state_dir: Path = Path("~/.topoforge/web")
-    workspace_root: Path = Path("topoforge-workspaces")
-    input_roots: tuple[Path, ...] = (Path.cwd(),)
+    state_dir: Path = Field(default_factory=default_web_state_dir)
+    workspace_root: Path = Field(default_factory=default_web_workspace_root)
+    input_roots: tuple[Path, ...] = Field(default_factory=default_web_input_roots)
     max_concurrent_jobs: int = Field(default=1, ge=1, le=4)
     bambu_studio_executable: Path | None = None
     bambu_machine_profile: Path | None = None

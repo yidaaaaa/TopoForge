@@ -27,6 +27,7 @@ from topoforge.web.models import (
     WebAppConfig,
     utc_now,
 )
+from topoforge.web.processes import terminate_process_tree, worker_process_options
 from topoforge.web.server import is_loopback_host
 from topoforge.workflow import WorkflowRunSummary, WorkflowStage, WorkflowState
 
@@ -55,7 +56,7 @@ class SlowJobManager(LocalJobManager):
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True,
+            **worker_process_options(),
         )
         self._processes[record.job_id] = process
         self._write_record(
@@ -453,6 +454,41 @@ def test_running_and_queued_jobs_cancel_without_touching_other_records(
         assert manager.get(queued.job_id).state is JobState.CANCELLED
     finally:
         manager.close()
+
+
+def test_running_job_recovers_and_cancels_after_manager_restart(
+    web_config: WebAppConfig,
+) -> None:
+    first = SlowJobManager(web_config)
+    recovered: LocalJobManager | None = None
+    process: subprocess.Popen[bytes] | None = None
+    first.start()
+    try:
+        submitted = first.submit(make_job_request(web_config, name="restart-recovery"))
+        process = first._processes[submitted.job_id]
+        assert first.get(submitted.job_id).state is JobState.RUNNING
+        first.close()
+
+        recovered = LocalJobManager(web_config)
+        recovered.start()
+        running = recovered.get(submitted.job_id)
+        assert running.state is JobState.RUNNING
+        assert running.pid == process.pid
+
+        cancelling = recovered.cancel(submitted.job_id)
+        assert cancelling.state is JobState.CANCELLING
+        cancelled = wait_for_terminal(recovered, submitted.job_id, timeout_seconds=15)
+        assert cancelled.state is JobState.CANCELLED
+        assert cancelled.cancellation_requested is True
+        assert cancelled.pid is None
+    finally:
+        if recovered is not None:
+            recovered.close()
+        first.close()
+        if process is not None:
+            if process.poll() is None:
+                terminate_process_tree(process.pid)
+            process.wait(timeout=10)
 
 
 def test_terminal_job_deletion_protects_shared_workspaces_and_backups(

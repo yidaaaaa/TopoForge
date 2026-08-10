@@ -9,15 +9,13 @@ import json
 import mimetypes
 import os
 import shutil
-import signal
 import subprocess
 import sys
 import threading
-import time
 from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -61,6 +59,11 @@ from topoforge.web.models import (
     WorkflowBackupRecord,
     WorkflowRestoreRequest,
     utc_now,
+)
+from topoforge.web.processes import (
+    process_is_alive,
+    terminate_process_tree,
+    worker_process_options,
 )
 from topoforge.workflow import (
     LocalWorkflowStatus,
@@ -234,16 +237,6 @@ def _bambu_project_artifact_paths(workspace: Path, manifest_path: Path) -> dict[
             raise ConfigurationError(f"Bambu project validation checksum mismatch: {tile_id}")
         resolved[f"bambu_project_validation{suffix}"] = validation
     return resolved
-
-
-def _pid_is_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
 
 
 def _progress(expected: tuple[WorkflowStage, ...], ready: tuple[WorkflowStage, ...]) -> float:
@@ -942,14 +935,17 @@ class LocalJobManager:
             str(self._result_path(record.job_id)),
         ]
         with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
-            process = subprocess.Popen(
-                command,
-                cwd=self.config.workspace_root,
-                env=env,
-                stdin=subprocess.DEVNULL,
-                stdout=stdout,
-                stderr=stderr,
-                start_new_session=True,
+            process = cast(
+                "subprocess.Popen[bytes]",
+                subprocess.Popen(
+                    command,
+                    cwd=self.config.workspace_root,
+                    env=env,
+                    stdin=subprocess.DEVNULL,
+                    stdout=stdout,
+                    stderr=stderr,
+                    **worker_process_options(),
+                ),
             )
         self._processes[record.job_id] = process
         self._write_record(
@@ -1023,7 +1019,7 @@ class LocalJobManager:
                 running = (
                     process.poll() is None
                     if process is not None
-                    else record.pid is not None and _pid_is_alive(record.pid)
+                    else record.pid is not None and process_is_alive(record.pid)
                 )
                 if running:
                     continue
@@ -1696,17 +1692,7 @@ class LocalJobManager:
 
     @staticmethod
     def _terminate_process(pid: int) -> None:
-        try:
-            os.killpg(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            return
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
-            if not _pid_is_alive(pid):
-                return
-            time.sleep(0.05)
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(pid, signal.SIGKILL)
+        terminate_process_tree(pid)
 
     def artifact_path(self, job_id: str, artifact_id: str) -> tuple[Path, JobArtifact]:
         """Reopen and checksum one file artifact before exposing it."""
