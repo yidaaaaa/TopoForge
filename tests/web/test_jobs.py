@@ -391,7 +391,7 @@ def test_isolated_worker_completes_and_publishes_checksum_artifacts(
     try:
         submitted = manager.submit(make_job_request(web_config, name="complete"))
         completed = wait_for_terminal(manager, submitted.job_id)
-        assert completed.state is JobState.COMPLETED
+        assert completed.state is JobState.COMPLETED, completed.error
         assert completed.exit_code == 0
         assert completed.progress_fraction == 1.0
         assert completed.summary is not None

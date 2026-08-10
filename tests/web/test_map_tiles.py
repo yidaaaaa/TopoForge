@@ -94,7 +94,7 @@ def test_completed_job_map_tiles_cache_and_assembly_contract(
         assert submitted.status_code == 201
         job_id = submitted.json()["job_id"]
         completed = _wait_for_completion(client, job_id)
-        assert completed["state"] == "completed"
+        assert completed["state"] == "completed", completed.get("error")
         assert completed["exit_code"] == 0
 
         manifest_response = client.get(f"/api/v1/jobs/{job_id}/map/manifest")

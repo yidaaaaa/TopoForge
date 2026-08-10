@@ -398,7 +398,7 @@ def test_completed_job_maintenance_routes_backup_restore_and_cleanup(
                 break
             time.sleep(0.05)
         assert completed is not None
-        assert completed["state"] == "completed"
+        assert completed["state"] == "completed", completed.get("error")
         workspace = Path(str(completed["workspace_dir"]))
         stale = workspace / "stages" / "99-unused" / "api-stale"
         stale.mkdir(parents=True)
