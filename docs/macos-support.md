@@ -5,9 +5,10 @@ Frozen: 2026-08-10
 ## Current truth
 
 TopoForge does **not** currently claim macOS support. Linux x86_64 remains the only verified
-platform, Windows Phase 12 is unfinished, and the native macOS CI, clean-system, application,
-Gatekeeper, signing/notarization, recovery, and Bambu Studio gates have not passed. The
-machine-readable contract is [`macos-support-matrix.json`](macos-support-matrix.json).
+platform and Windows Phase 12 is unfinished. Native hosted macOS core CI has passed on both frozen
+arm64 runner labels, but clean-system, application-package, Gatekeeper, signing/notarization,
+first-launch, and Bambu Studio gates have not passed. The machine-readable contract is
+[`macos-support-matrix.json`](macos-support-matrix.json).
 
 This document freezes Phase 13 release candidates; it does not widen README or package support
 metadata.
@@ -16,8 +17,8 @@ metadata.
 
 | Target | Phase 13A | Phase 13B | Clean-system capacity | Public status |
 | --- | --- | --- | --- | --- |
-| macOS Sequoia 15.7.9, Apple Silicon arm64 | planned, unverified | planned, unverified | not provisioned | unsupported today |
-| macOS Tahoe 26.6.1, Apple Silicon arm64 | planned, unverified | planned, unverified | not provisioned | unsupported today |
+| macOS Sequoia 15.7.9, Apple Silicon arm64 | hosted core passed; overall unverified | planned, unverified | not provisioned | unsupported today |
+| macOS Tahoe 26.6.1, Apple Silicon arm64 | hosted core passed; overall unverified | planned, unverified | not provisioned | unsupported today |
 
 The exact patch versions are the current Apple security releases at the freeze date. Later patch
 versions do not inherit support automatically; the matrix and matching evidence must be updated.
@@ -25,9 +26,10 @@ versions do not inherit support automatically; the matrix and matching evidence 
 Tahoe 26.6.1 on 2026-08-06.
 
 The application deployment target is macOS 15.0. The locked CPython 3.12 dependency set contains
-arm64 wheels compatible with that target. This is dependency-resolution evidence only, not proof
-that native imports, GDAL/PROJ data lookup, lib3mf, Web workers, cancellation/recovery, or packaged
-launch behavior work.
+arm64 wheels compatible with that target. Resolution alone was only feasibility evidence. The
+retained hosted run described below now proves native imports, doctor, source-tree Web behavior,
+deterministic model generation, and worker recovery on the two hosted runner labels; it does not
+prove a clean installation or packaged application.
 
 ## Explicitly excluded
 
@@ -64,6 +66,17 @@ details, not the support contract, and runner images can use patch versions diff
 clean-system targets. GitHub also states that nested virtualization is unavailable on arm64 macOS
 runners, so hosted CI cannot create the required clean-system or Gatekeeper evidence.
 
+[Native macOS core CI run 31419016599](https://github.com/yidaaaaa/TopoForge/actions/runs/31419016599)
+completed successfully at commit `5df03c40536363d63678f0b23b69b228ee008e6a` on both `macos-15`
+and `macos-26`. It verified native arm64 identity, the locked all-groups environment, all direct
+native dependency imports, doctor, deterministic STL/3MF/GLB generation and reopen checks, the
+packaged local Web check, Ruff, formatting, Pyright, all 273 Python tests, and recovered-worker
+cancellation. The retained artifacts are `macos-macos-15-runtime-evidence` and
+`macos-macos-26-runtime-evidence`.
+
+This closes only the hosted native core portion of Phase 13A. Hosted runner labels and their image
+patch versions remain implementation evidence, not public support targets.
+
 Phase 13 therefore still requires clean Apple Silicon installations at Sequoia 15.7.9 and Tahoe
 26.6.1. No such capacity, Developer ID signing identity, notarization credentials, quarantine
 download path, or normal first-launch record is currently provisioned.
@@ -90,11 +103,13 @@ reopen/reslice on both advertised targets.
 
 ## Gates before any support claim
 
-For each target, one release candidate must still pass locked installation, doctor, deterministic
-synthetic STL/3MF/GLB generation, strict 3MF reopen, measured orientation/topology, packaged Web
-checks, worker start/cancel/forced termination/recovery, paths with spaces and non-ASCII text,
-backup/restore, native `TopoForge.app`, signed/notarized distribution, quarantine, and normal
-Gatekeeper first launch. Phase 13B then adds the complete official Bambu workflow.
+Hosted CI now passes the locked source environment, doctor, deterministic synthetic STL/3MF/GLB
+generation and reopen, source-tree Web checks, worker recovery, and the full Python regression
+suite on both runner labels. For each literal clean-system target, one release candidate must still
+pass application-data and temporary-path behavior, paths with spaces and non-ASCII text,
+backup/restore, native `TopoForge.app`, signed/notarized distribution, quarantine, normal
+Gatekeeper first launch, and packaged worker/browser behavior. Phase 13B then adds the complete
+official Bambu workflow.
 
 Until every matching report exists, README and release metadata must continue to say macOS is
 unverified.
