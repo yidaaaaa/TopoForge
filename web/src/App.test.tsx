@@ -137,7 +137,7 @@ const failedJob = {
   ...completedJob,
   job_id: "b".repeat(32),
   state: "failed",
-  workspace_dir: "/tmp/workspaces/failed-project",
+  workspace_dir: "C:\\Users\\Maker\\TopoForge Projects\\failed-project",
   progress_fraction: 0.2,
   current_stage: "source",
   ready_stages: [],

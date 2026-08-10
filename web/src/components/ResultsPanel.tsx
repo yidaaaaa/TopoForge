@@ -93,6 +93,11 @@ function artifactLabel(
 }
 
 
+function workspaceBasename(path: string): string {
+  const normalized = path.replaceAll("\\", "/").replace(/\/+$/, "");
+  return normalized.split("/").at(-1) || path;
+}
+
 type JobStatusFilter = "all" | "active" | "completed" | "failed" | "cancelled";
 type JobSort = "newest" | "oldest" | "name" | "status";
 
@@ -162,16 +167,16 @@ export function ResultsPanel({
       if (!query) {
         return true;
       }
-      const workspaceName = job.workspace_dir.split("/").at(-1) ?? job.workspace_dir;
-      return `${workspaceName} ${job.job_id}`.toLocaleLowerCase(language).includes(query);
+      const name = workspaceBasename(job.workspace_dir);
+      return `${name} ${job.job_id}`.toLocaleLowerCase(language).includes(query);
     });
     return [...visible].sort((left, right) => {
       if (jobSort === "oldest") {
         return Date.parse(left.created_at) - Date.parse(right.created_at);
       }
       if (jobSort === "name") {
-        const leftName = left.workspace_dir.split("/").at(-1) ?? left.workspace_dir;
-        const rightName = right.workspace_dir.split("/").at(-1) ?? right.workspace_dir;
+        const leftName = workspaceBasename(left.workspace_dir);
+        const rightName = workspaceBasename(right.workspace_dir);
         return leftName.localeCompare(rightName, language) || left.job_id.localeCompare(right.job_id);
       }
       if (jobSort === "status") {
@@ -357,7 +362,7 @@ export function ResultsPanel({
                     type="checkbox"
                     checked={selectedBatchJobIds.has(job.job_id)}
                     onChange={() => toggleBatchJob(job.job_id)}
-                    aria-label={`${t("selectJobForBatch")}: ${job.workspace_dir.split("/").at(-1)}`}
+                    aria-label={`${t("selectJobForBatch")}: ${workspaceBasename(job.workspace_dir)}`}
                   />
                 </label>
               )}
@@ -375,7 +380,7 @@ export function ResultsPanel({
                 }
               >
                 <div className="job-row-head">
-                  <strong>{job.workspace_dir.split("/").at(-1)}</strong>
+                  <strong>{workspaceBasename(job.workspace_dir)}</strong>
                   <span className={`state-badge ${job.state}`}>
                     {t(jobStateKey(job.state))}
                   </span>
@@ -499,7 +504,7 @@ export function ResultsPanel({
         <div className="job-detail">
           <div className="detail-header">
             <div>
-              <h3>{selectedJob.workspace_dir.split("/").at(-1)}</h3>
+              <h3>{workspaceBasename(selectedJob.workspace_dir)}</h3>
               <code>{selectedJob.job_id.slice(0, 12)}</code>
             </div>
             <div className="detail-header-actions">

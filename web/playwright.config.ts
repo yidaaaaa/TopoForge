@@ -5,13 +5,8 @@ export default defineConfig({
   outputDir: "./test-results",
   reporter: [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
   webServer: {
-    command:
-      "cd .. && (test -f /tmp/topoforge-playwright-input-v0.10.1.tif || " +
-      "uv run topoforge synthetic --output /tmp/topoforge-playwright-input-v0.10.1.tif " +
-      "--terrain saddle --rows 12 --columns 16 --pixel-size-m 20) && " +
-      "uv run topoforge web --host 127.0.0.1 --port 8771 " +
-      "--state-dir /tmp/topoforge-playwright-state " +
-      "--workspace-root /tmp/topoforge-playwright-workspaces --input-root /tmp --no-open",
+    command: "uv run python scripts/run_playwright_server.py --port 8771",
+    cwd: "..",
     url: "http://127.0.0.1:8771/api/v1/health",
     reuseExistingServer: true,
     timeout: 120_000,

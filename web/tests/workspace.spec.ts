@@ -1,6 +1,15 @@
 import { expect, test } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+
+const playwrightRuntimeRoot =
+  process.env.TOPOFORGE_PLAYWRIGHT_ROOT ??
+  join(tmpdir(), "topoforge-playwright-v0.11");
+const playwrightWorkspaceRoot = join(playwrightRuntimeRoot, "workspaces");
+const playwrightInput = join(
+  playwrightRuntimeRoot, "input", "topoforge-playwright-input.tif",
+);
 
 async function nonBlankCanvas(page: import("@playwright/test").Page, selector: string) {
   return page.locator(selector).evaluate((canvas: HTMLCanvasElement) => {
@@ -152,13 +161,13 @@ async function createCompletedLifecycleJob(
   page: import("@playwright/test").Page,
 ): Promise<CompletedJob> {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
-  const workspace = `/tmp/topoforge-playwright-workspaces/phase11-${suffix}`;
+  const workspace = join(playwrightWorkspaceRoot, `phase12-${suffix}`);
   const response = await page.request.post("/api/v1/jobs", {
     data: {
       launch: {
         workspace_dir: workspace,
         build: {
-          dem_path: "/tmp/topoforge-playwright-input-v0.10.1.tif",
+          dem_path: playwrightInput,
           output_dir: workspace,
           model_width_mm: 64,
           model_depth_mm: null,

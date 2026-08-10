@@ -157,6 +157,22 @@ def test_ci_release_verification_uses_project_version() -> None:
     assert "--version 0.8.0" not in workflow
 
 
+def test_playwright_server_startup_is_platform_neutral() -> None:
+    root = Path(__file__).parents[2]
+    config = (root / "web/playwright.config.ts").read_text(encoding="utf-8")
+    scenario = (root / "web/tests/workspace.spec.ts").read_text(encoding="utf-8")
+
+    assert "scripts/run_playwright_server.py" in config
+    assert 'cwd: ".."' in config
+    assert "/tmp" not in config
+    assert "cd .." not in config
+    assert "&&" not in config
+    assert 'from "node:os"' in scenario
+    assert "tmpdir()" in scenario
+    assert "playwrightWorkspaceRoot" in scenario
+    assert "playwrightInput" in scenario
+
+
 def test_github_release_workflow_contract() -> None:
     root = Path(__file__).parents[2]
     path = root / ".github/workflows/release.yml"
