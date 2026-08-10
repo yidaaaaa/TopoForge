@@ -52,7 +52,15 @@ def test_native_macos_ci_uses_only_frozen_arm64_runner_labels() -> None:
     assert step_runs["Run Ruff lint gate"] == "uv run ruff check ."
     assert step_runs["Run Ruff format gate"] == "uv run ruff format --check ."
     assert step_runs["Run Pyright gate"] == "uv run pyright"
-    assert step_runs["Run Python regression suite"] == "uv run pytest"
+    assert step_runs["Run release regression suite"] == "uv run pytest tests/release"
+    assert step_runs["Run slicer regression suite"] == "uv run pytest tests/slicer"
+    assert step_runs["Run unit regression suite"] == "uv run pytest tests/unit"
+    assert step_runs["Run Web regression suite"] == "uv run pytest tests/web"
+    assert step_runs["Run CLI, geometry, and property regression suite"] == (
+        "uv run pytest tests/cli tests/geometry tests/property"
+    )
+    assert step_runs["Run provider regression suite"] == "uv run pytest tests/providers"
+    assert step_runs["Run integration regression suite"] == "uv run pytest tests/integration"
     assert "macos-latest" not in workflow_text
     assert 'test "$(uname -m)" = "arm64"' in workflow_text
     assert "scripts/verify_macos_support_matrix.py" in workflow_text
