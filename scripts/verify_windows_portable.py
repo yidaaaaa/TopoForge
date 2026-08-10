@@ -739,6 +739,30 @@ def execute_windows_portable(
     )
     if core.get("required_checks_passed") is not True:
         raise ValueError("portable full core acceptance did not pass")
+
+    repository_root = Path(__file__).resolve().parents[1]
+    system_report_path = work_root / "windows system acceptance.json"
+    system, system_record = _run_json(
+        [
+            str(python),
+            "-I",
+            "-X",
+            "utf8",
+            str(repository_root / "scripts" / "verify_windows_system.py"),
+            "--work-root",
+            str(work_root / "full Web system acceptance"),
+            "--require-windows",
+            "--report",
+            str(system_report_path),
+        ],
+        cwd=package_root,
+        environment=environment,
+    )
+    commands.append(system_record)
+    if system.get("required_checks_passed") is not True:
+        raise ValueError("portable native Web lifecycle acceptance did not pass")
+    if system.get("platform", {}).get("native_windows_verified") is not True:
+        raise ValueError("portable native Web lifecycle did not verify Windows")
     return {
         "platform": {
             "system": platform.system(),
@@ -753,6 +777,7 @@ def execute_windows_portable(
         "cli_launcher": doctor,
         "web_launcher": web,
         "core": core,
+        "system": system,
         "commands": commands,
         "required_checks_passed": True,
     }

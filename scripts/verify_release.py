@@ -78,6 +78,7 @@ def inspect_sdist(path: Path, version: str) -> dict[str, Any]:
         "scripts/verify_platform_core.py",
         "scripts/verify_release.py",
         "scripts/verify_windows_portable.py",
+        "scripts/verify_windows_system.py",
         "src/topoforge/__init__.py",
         "src/topoforge/platforms.py",
         "src/topoforge/web/processes.py",
@@ -86,6 +87,7 @@ def inspect_sdist(path: Path, version: str) -> dict[str, Any]:
         "tests/release/test_phase8_contracts.py",
         "tests/release/test_public_tree.py",
         "tests/release/test_windows_portable.py",
+        "tests/release/test_windows_system.py",
         "tests/unit/test_platforms.py",
         "tests/web/test_api.py",
         "tests/web/test_jobs.py",
@@ -406,6 +408,37 @@ def installed_smoke(
         inspection_payload = json.loads(inspection["stdout"])
         if inspection_payload.get("strict_warning_count") != 0:
             raise ValueError("installed CLI strict 3MF inspection reported warnings")
+
+        system_command = [
+            str(python),
+            "-I",
+            "-X",
+            "utf8",
+            str(repository_root / "scripts" / "verify_windows_system.py"),
+            "--work-root",
+            str(root / "installed Web system acceptance"),
+        ]
+        if os.name == "nt":
+            system_command.append("--require-windows")
+        system_command.extend(
+            [
+                "--report",
+                str(root / "installed-system-verification.json"),
+            ]
+        )
+        system_record = _run_command(
+            system_command,
+            cwd=work_dir,
+            env=smoke_env,
+        )
+        commands.append(system_record)
+        system_payload = json.loads(system_record["stdout"])
+        if system_payload.get("required_checks_passed") is not True:
+            raise ValueError("installed Web lifecycle acceptance did not pass")
+        if os.name == "nt" and (
+            system_payload.get("platform", {}).get("native_windows_verified") is not True
+        ):
+            raise ValueError("installed Web lifecycle did not verify native Windows")
         return {
             "isolated_environment": True,
             "repository_import_leakage": False,
@@ -421,6 +454,7 @@ def installed_smoke(
             "web": web_payload,
             "build_required_checks_passed": True,
             "three_mf_warning_count": 0,
+            "system": system_payload,
             "commands": commands,
         }
 
