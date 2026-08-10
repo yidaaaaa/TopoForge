@@ -6,7 +6,7 @@ import json
 import platform
 import shutil
 import sys
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -101,6 +101,94 @@ from topoforge.workflow import (
 
 _DEFAULT_WEB_STATE_DIR = default_web_state_dir()
 _DEFAULT_WEB_WORKSPACE_ROOT = default_web_workspace_root()
+
+
+@dataclass(frozen=True, slots=True)
+class _BambuConfiguration:
+    executable: Path | None
+    machine_profile: Path | None
+    process_profile: Path | None
+    filament_profile: Path | None
+    manifest_path: Path | None
+    detail: str | None = None
+
+
+def _prepare_bambu_configuration(
+    *,
+    executable: Path | None,
+    profiles_root: Path | None,
+    cache_root: Path,
+    machine_profile: Path | None,
+    process_profile: Path | None,
+    filament_profile: Path | None,
+    optional: bool = False,
+) -> _BambuConfiguration:
+    from topoforge.validation.slicers import BambuStudioAdapter
+    from topoforge.validation.slicers._bambu_profiles import prepare_bambu_profiles
+    from topoforge.validation.slicers._bambu_windows import discover_bambu_profiles_root
+
+    adapter = BambuStudioAdapter() if executable is None else BambuStudioAdapter(executable)
+    discovered_executable = getattr(adapter, "executable", executable)
+    resolved_executable = None if discovered_executable is None else Path(discovered_executable)
+    configured_profiles = (machine_profile, process_profile, filament_profile)
+    if any(path is not None for path in configured_profiles):
+        if not all(path is not None for path in configured_profiles):
+            raise ValueError(
+                "Bambu Studio requires machine, process, and filament profiles together"
+            )
+        if profiles_root is not None:
+            raise ValueError(
+                "--bambu-profiles-root cannot be combined with resolved Bambu profile files"
+            )
+        return _BambuConfiguration(
+            executable=resolved_executable,
+            machine_profile=machine_profile,
+            process_profile=process_profile,
+            filament_profile=filament_profile,
+            manifest_path=None,
+        )
+
+    discovered_root = discover_bambu_profiles_root(
+        resolved_executable,
+        explicit=profiles_root,
+    )
+    if profiles_root is not None and discovered_root is None:
+        raise ValueError(
+            "--bambu-profiles-root must contain machine, process, and filament directories"
+        )
+    if discovered_root is None:
+        return _BambuConfiguration(
+            executable=resolved_executable,
+            machine_profile=None,
+            process_profile=None,
+            filament_profile=None,
+            manifest_path=None,
+        )
+    try:
+        prepared = prepare_bambu_profiles(
+            discovered_root,
+            cache_root,
+            executable=resolved_executable,
+        )
+    except (OSError, ValueError) as exc:
+        if not optional:
+            raise
+        return _BambuConfiguration(
+            executable=resolved_executable,
+            machine_profile=None,
+            process_profile=None,
+            filament_profile=None,
+            manifest_path=None,
+            detail=str(exc),
+        )
+    return _BambuConfiguration(
+        executable=resolved_executable,
+        machine_profile=prepared.machine_profile,
+        process_profile=prepared.process_profile,
+        filament_profile=prepared.filament_profile,
+        manifest_path=prepared.manifest_path,
+    )
+
 
 app = typer.Typer(
     name="topoforge",
@@ -1885,6 +1973,10 @@ def web_application(
         Path | None,
         typer.Option(help="Official Bambu Studio executable used by Web workers."),
     ] = None,
+    bambu_profiles_root: Annotated[
+        Path | None,
+        typer.Option(help="Official Bambu Studio resources/profiles/BBL directory."),
+    ] = None,
     bambu_machine_profile: Annotated[
         Path | None,
         typer.Option(help="Resolved official Bambu P2S machine profile JSON."),
@@ -1910,7 +2002,7 @@ def web_application(
     try:
         from topoforge.web import WebAppConfig, run_web_server, verify_web_installation
 
-        config = WebAppConfig(
+        base_config = WebAppConfig(
             state_dir=state_dir,
             workspace_root=workspace_root,
             input_roots=tuple(input_root) if input_root else default_web_input_roots(),
@@ -1920,8 +2012,39 @@ def web_application(
             bambu_process_profile=bambu_process_profile,
             bambu_filament_profile=bambu_filament_profile,
         )
+        prepared_bambu = _prepare_bambu_configuration(
+            executable=bambu_studio_executable,
+            profiles_root=bambu_profiles_root,
+            cache_root=base_config.resolved().state_dir / "bambu-profiles",
+            machine_profile=bambu_machine_profile,
+            process_profile=bambu_process_profile,
+            filament_profile=bambu_filament_profile,
+            optional=bambu_profiles_root is None,
+        )
+        config = WebAppConfig.model_validate(
+            {
+                **base_config.model_dump(),
+                "bambu_studio_executable": prepared_bambu.executable,
+                "bambu_machine_profile": prepared_bambu.machine_profile,
+                "bambu_process_profile": prepared_bambu.process_profile,
+                "bambu_filament_profile": prepared_bambu.filament_profile,
+            }
+        )
         if check:
-            _emit(verify_web_installation(config))
+            verification = verify_web_installation(config)
+            if prepared_bambu.manifest_path is not None:
+                verification["bambu_profile_bundle"] = {
+                    "manifest": str(prepared_bambu.manifest_path),
+                    "sha256": sha256_file(prepared_bambu.manifest_path),
+                    "required_checks_passed": True,
+                }
+            elif prepared_bambu.detail is not None:
+                verification["bambu_profile_bundle"] = {
+                    "status": "unconfigured",
+                    "detail": prepared_bambu.detail,
+                    "required_checks_passed": False,
+                }
+            _emit(verification)
             return
         run_web_server(
             config,
@@ -1936,6 +2059,12 @@ def web_application(
 @app.command()
 def doctor() -> None:
     """Report the exact local runtime and external manufacturing tools."""
+    from topoforge.validation.slicers import BambuStudioAdapter
+    from topoforge.validation.slicers._bambu_windows import discover_bambu_profiles_root
+
+    bambu_adapter = BambuStudioAdapter()
+    bambu_info = bambu_adapter.probe()
+    bambu_profiles_root = discover_bambu_profiles_root(bambu_adapter.executable)
     slicers = {
         name: shutil.which(name)
         for name in (
@@ -1956,6 +2085,13 @@ def doctor() -> None:
             "gdal": rasterio.__gdal_version__,
             "proj": rasterio.__proj_version__,
             "slicers": slicers,
+            "bambu_studio": {
+                **bambu_info.model_dump(mode="json"),
+                "profiles_root": (
+                    None if bambu_profiles_root is None else str(bambu_profiles_root)
+                ),
+                "installation_discovered": bambu_info.executable is not None,
+            },
         }
     )
 
@@ -1988,6 +2124,14 @@ def slice(
     filament_profile: Annotated[
         Path | None, typer.Option("--filament-profile", help="Resolved filament preset JSON.")
     ] = None,
+    bambu_studio_executable: Annotated[
+        Path | None,
+        typer.Option("--bambu-studio-executable", help="Official Bambu Studio executable."),
+    ] = None,
+    bambu_profiles_root: Annotated[
+        Path | None,
+        typer.Option(help="Official Bambu Studio resources/profiles/BBL directory."),
+    ] = None,
     slicer: Annotated[
         str,
         typer.Option(
@@ -2007,10 +2151,64 @@ def slice(
             select_slicer,
         )
 
+        prepared_manifest: Path | None = None
         settings = tuple(
             path for path in (machine_profile, process_profile, profile) if path is not None
         )
         filaments = () if filament_profile is None else (filament_profile,)
+        if slicer == "bambu-studio":
+            if profile is None:
+                prepared = _prepare_bambu_configuration(
+                    executable=bambu_studio_executable,
+                    profiles_root=bambu_profiles_root,
+                    cache_root=default_web_state_dir().expanduser().resolve() / "bambu-profiles",
+                    machine_profile=machine_profile,
+                    process_profile=process_profile,
+                    filament_profile=filament_profile,
+                )
+                settings = tuple(
+                    path
+                    for path in (prepared.machine_profile, prepared.process_profile)
+                    if path is not None
+                )
+                filaments = (
+                    () if prepared.filament_profile is None else (prepared.filament_profile,)
+                )
+                adapter = (
+                    BambuStudioAdapter()
+                    if prepared.executable is None
+                    else BambuStudioAdapter(prepared.executable)
+                )
+                prepared_manifest = prepared.manifest_path
+            else:
+                if bambu_profiles_root is not None:
+                    raise ValueError(
+                        "--bambu-profiles-root cannot be combined with legacy --profile"
+                    )
+                adapter = (
+                    BambuStudioAdapter()
+                    if bambu_studio_executable is None
+                    else BambuStudioAdapter(bambu_studio_executable)
+                )
+            if (settings or filaments) and (len(settings) != 2 or len(filaments) != 1):
+                raise ValueError(
+                    "Bambu Studio slicing requires one machine, one process, and one "
+                    "filament profile; provide resolved files or --bambu-profiles-root"
+                )
+        elif slicer == "auto":
+            if bambu_profiles_root is not None:
+                raise ValueError("--bambu-profiles-root requires --slicer bambu-studio")
+            adapter = select_slicer(bambu_executable=bambu_studio_executable)
+        elif slicer == "orca":
+            if bambu_studio_executable is not None or bambu_profiles_root is not None:
+                raise ValueError("Bambu options require --slicer bambu-studio or auto")
+            adapter = OrcaSlicerAdapter()
+        elif slicer == "prusa":
+            if bambu_studio_executable is not None or bambu_profiles_root is not None:
+                raise ValueError("Bambu options require --slicer bambu-studio or auto")
+            adapter = PrusaSlicerAdapter()
+        else:
+            raise ValueError("--slicer must be bambu-studio, orca, prusa, or auto")
         slicer_profile = SlicerProfile(
             name=(
                 "Bambu Lab P2S 0.4 / 0.20mm Standard / Bambu PLA Basic"
@@ -2020,19 +2218,11 @@ def slice(
             settings=settings,
             filaments=filaments,
         )
-        adapters = {
-            "bambu-studio": BambuStudioAdapter,
-            "orca": OrcaSlicerAdapter,
-            "prusa": PrusaSlicerAdapter,
-        }
-        if slicer == "auto":
-            adapter = select_slicer()
-        elif slicer in adapters:
-            adapter = adapters[slicer]()
-        else:
-            raise ValueError("--slicer must be bambu-studio, orca, prusa, or auto")
         result = adapter.slice(model, output, profile=slicer_profile)
         serialized_result = result.model_dump(mode="json")
+        if prepared_manifest is not None:
+            serialized_result["bambu_profile_manifest"] = str(prepared_manifest)
+            serialized_result["bambu_profile_manifest_sha256"] = sha256_file(prepared_manifest)
         if (
             result.status is SliceStatus.SUCCEEDED
             and (model.parent / "build_manifest.json").is_file()

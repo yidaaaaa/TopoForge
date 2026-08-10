@@ -22,6 +22,8 @@ def _write(path: Path, payload: dict) -> None:
 
 def test_resolver_merges_parent_then_include_then_child(tmp_path: Path) -> None:
     root = tmp_path / "BBL"
+    (root / "process").mkdir(parents=True)
+    (root / "filament").mkdir()
     _write(root / "machine" / "parent.json", {"name": "parent", "a": 1, "shared": "parent"})
     _write(root / "machine" / "fragment.json", {"name": "fragment", "b": 2, "shared": "include"})
     _write(

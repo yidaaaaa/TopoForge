@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import platform
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -16,7 +17,7 @@ from pydantic import BaseModel, ConfigDict
 
 from topoforge.exporters.three_mf import inspect_3mf
 from topoforge.validation.manufacturing import evaluate_bambu_p2s_release_gate
-from topoforge.validation.slicers import parse_gcode_metrics
+from topoforge.validation.slicers import parse_gcode_generator, parse_gcode_metrics
 from topoforge.validation.slicers.base import CommandExecution, run_command
 
 SCHEMA_VERSION = "topoforge-bambu-tile-project-assembly-v1"
@@ -98,20 +99,30 @@ def result_passed(value: dict[str, Any]) -> bool:
     )
 
 
-def release_gate(gcode: Path, *, stdout: str, stderr: str) -> tuple[dict[str, Any], dict[str, Any]]:
+def release_gate(
+    gcode: Path,
+    *,
+    stdout: str,
+    stderr: str,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, str]]:
+    gcode_text = gcode.read_text(encoding="utf-8", errors="replace")
+    generator = parse_gcode_generator(gcode_text)
+    if generator is None:
+        raise RuntimeError(f"Bambu G-code does not identify its generator and version: {gcode}")
+    slicer = {"name": generator[0], "version": generator[1]}
     metrics = parse_gcode_metrics(
-        gcode.read_text(encoding="utf-8", errors="replace"),
+        gcode_text,
         diagnostics="\n".join((stdout, stderr)),
     )
     payload = {
-        "slicer": {"name": "BambuStudio", "version": "02.07.01.62"},
+        "slicer": slicer,
         "status": "succeeded",
         "exit_code": 0,
         "gcode_generated": True,
         "metrics": metrics.model_dump(mode="json"),
     }
     gate = evaluate_bambu_p2s_release_gate(payload, printer_profile_id="bambu-p2s-0.4")
-    return metrics.model_dump(mode="json"), gate
+    return metrics.model_dump(mode="json"), gate, slicer
 
 
 def archive_evidence(project: Path, primary_gcode: Path) -> dict[str, Any]:
@@ -161,15 +172,49 @@ def profile_paths(slice_root: Path, manifest: dict[str, Any]) -> tuple[list[Path
     return settings, filaments
 
 
-def isolated_environment(runtime: Path) -> dict[str, str]:
+def isolated_environment(
+    runtime: Path,
+    *,
+    system: str | None = None,
+    environ: dict[str, str] | None = None,
+) -> dict[str, str]:
+    system_name = platform.system() if system is None else system
     home = runtime / "home"
+    environment = dict(os.environ if environ is None else environ)
+    if system_name == "Windows":
+        for key in (
+            "APPIMAGE_EXTRACT_AND_RUN",
+            "XDG_CACHE_HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_RUNTIME_DIR",
+        ):
+            environment.pop(key, None)
+        roaming = home / "AppData" / "Roaming"
+        local = home / "AppData" / "Local"
+        temporary = runtime / "temp"
+        for path in (home, roaming, local, temporary):
+            path.mkdir(parents=True, exist_ok=True)
+        environment.update(
+            {
+                "APPDATA": str(roaming),
+                "HOME": str(home),
+                "LOCALAPPDATA": str(local),
+                "TEMP": str(temporary),
+                "TMP": str(temporary),
+                "USERPROFILE": str(home),
+            }
+        )
+        drive, tail = os.path.splitdrive(str(home))
+        if drive:
+            environment.update({"HOMEDRIVE": drive, "HOMEPATH": tail})
+        return environment
+
     config = home / ".config"
     cache = home / ".cache"
     xdg_runtime = runtime / "xdg-runtime"
     for path in (home, config, cache, xdg_runtime):
         path.mkdir(parents=True, exist_ok=True)
     xdg_runtime.chmod(0o700)
-    environment = dict(os.environ)
     environment.update(
         {
             "APPIMAGE_EXTRACT_AND_RUN": "1",
@@ -275,7 +320,10 @@ def verify_output(
         != sha256(print_root / "print-tile-assembly-manifest.json")
         or manifest.get("source_slice_manifest_sha256")
         != sha256(slice_root / "tile-slice-manifest.json")
+        or manifest.get("bambu_studio_path") != str(executable)
         or manifest.get("bambu_studio_sha256") != sha256(executable)
+        or not isinstance(manifest.get("bambu_studio_version"), str)
+        or not manifest["bambu_studio_version"]
     ):
         raise RuntimeError("Bambu tile project root identities changed")
     records = manifest.get("tiles")
@@ -308,12 +356,12 @@ def verify_output(
         archive = archive_evidence(project, primary)
         if archive != validation.get("project_archive"):
             raise RuntimeError(f"Bambu project archive evidence changed: {record['tile_id']}")
-        build_metrics, build_gate = release_gate(
+        build_metrics, build_gate, build_slicer = release_gate(
             primary,
             stdout=resolve_relative(root, files["build_stdout"]).read_text(errors="replace"),
             stderr=resolve_relative(root, files["build_stderr"]).read_text(errors="replace"),
         )
-        reopen_metrics, reopen_gate = release_gate(
+        reopen_metrics, reopen_gate, reopen_slicer = release_gate(
             reopened,
             stdout=resolve_relative(root, files["reopen_stdout"]).read_text(errors="replace"),
             stderr=resolve_relative(root, files["reopen_stderr"]).read_text(errors="replace"),
@@ -323,6 +371,12 @@ def verify_output(
             or reopen_metrics != validation.get("reopen_metrics")
             or build_gate != validation.get("primary_release_gate")
             or reopen_gate != validation.get("reopen_release_gate")
+            or build_slicer != validation.get("primary_slicer")
+            or reopen_slicer != validation.get("reopen_slicer")
+            or build_slicer != reopen_slicer
+            or build_slicer["name"] != "BambuStudio"
+            or build_slicer["version"] != manifest["bambu_studio_version"]
+            or reopen_slicer["version"] != manifest["bambu_studio_version"]
             or not validation.get("required_checks_passed")
         ):
             raise RuntimeError(f"Bambu project validation changed: {record['tile_id']}")
@@ -366,6 +420,7 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
     try:
         settings, filaments, profile_records = copy_profiles(staging, slice_root, slice_manifest)
         records: list[dict[str, Any]] = []
+        slicer_versions: set[str] = set()
         for tile_id in sorted(tile_by_id):
             source_record = tile_by_id[tile_id]
             source_slice = slice_by_id[tile_id]
@@ -446,12 +501,16 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
             shutil.copyfile(reopen_result_path, tile_dir / "reopen_result.json")
             (tile_dir / "reopen.stdout.log").write_text(reopen_execution.stdout, encoding="utf-8")
             (tile_dir / "reopen.stderr.log").write_text(reopen_execution.stderr, encoding="utf-8")
-            primary_metrics, primary_gate = release_gate(
+            primary_metrics, primary_gate, primary_slicer = release_gate(
                 primary_gcode, stdout=build_execution.stdout, stderr=build_execution.stderr
             )
-            reopen_metrics, reopen_gate = release_gate(
+            reopen_metrics, reopen_gate, reopen_slicer = release_gate(
                 reopen_gcode, stdout=reopen_execution.stdout, stderr=reopen_execution.stderr
             )
+            slicer_identity_ok = (
+                primary_slicer == reopen_slicer and primary_slicer["name"] == "BambuStudio"
+            )
+            slicer_versions.add(primary_slicer["version"])
             build_object = object_measurement(build_result)
             reopen_object = object_measurement(reopen_result)
             archive = archive_evidence(project_path, primary_gcode)
@@ -473,6 +532,7 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
                 and archive["embedded_gcode_matches_primary"]
                 and primary_gate["release_gate_passed"]
                 and reopen_gate["release_gate_passed"]
+                and slicer_identity_ok
                 and dimensions_ok
                 and triangles_ok
             )
@@ -495,6 +555,8 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
                 "project_archive": archive,
                 "primary_metrics": primary_metrics,
                 "reopen_metrics": reopen_metrics,
+                "primary_slicer": primary_slicer,
+                "reopen_slicer": reopen_slicer,
                 "primary_release_gate": primary_gate,
                 "reopen_release_gate": reopen_gate,
                 "external_profiles_loaded_on_reopen": False,
@@ -532,6 +594,11 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
                 }
             )
         shutil.rmtree(runtime_root, ignore_errors=True)
+        if len(slicer_versions) != 1:
+            raise RuntimeError(
+                f"Bambu project evidence has inconsistent versions: {slicer_versions}"
+            )
+        bambu_studio_version = next(iter(slicer_versions))
         manifest = {
             "schema_version": SCHEMA_VERSION,
             "layout_id": print_manifest["layout_id"],
@@ -541,7 +608,7 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
             "source_slice_manifest_sha256": sha256(slice_root / "tile-slice-manifest.json"),
             "bambu_studio_path": str(executable),
             "bambu_studio_sha256": sha256(executable),
-            "bambu_studio_version": "02.07.01.62",
+            "bambu_studio_version": bambu_studio_version,
             "printer_profile_id": "bambu-p2s-0.4",
             "profile_files": profile_records,
             "tile_grid_shape": print_manifest["tile_grid_shape"],

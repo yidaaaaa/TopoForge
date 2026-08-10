@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Sequence
 from pathlib import Path
 
-from topoforge.validation.slicers.base import SlicerProfile
+from topoforge.validation.slicers._bambu_windows import discover_windows_bambu_studio
+from topoforge.validation.slicers.base import CommandRunner, SlicerProfile, run_command
 from topoforge.validation.slicers.orca import OrcaSlicerAdapter
 
 
@@ -16,6 +18,23 @@ class BambuStudioAdapter(OrcaSlicerAdapter):
     display_name = "BambuStudio"
     executable_candidates = ("bambu-studio", "BambuStudio")
     environment_keys = ("TOPOFORGE_BAMBU_STUDIO", "BAMBU_STUDIO")
+
+    def __init__(
+        self,
+        executable: str | Path | None = None,
+        *,
+        runner: CommandRunner = run_command,
+    ) -> None:
+        super().__init__(executable, runner=runner)
+        configured_override = executable is not None or any(
+            os.environ.get(key) for key in self.environment_keys
+        )
+        if self.executable is not None or configured_override:
+            return
+        discovered = discover_windows_bambu_studio()
+        if discovered is not None:
+            self.executable = discovered
+            self._resolution_detail = None
 
     def _version_from_output(self, output: str) -> str | None:
         match = re.search(r"BambuStudio-([0-9][0-9.]*)", output, re.IGNORECASE)
