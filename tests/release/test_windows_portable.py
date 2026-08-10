@@ -247,6 +247,21 @@ def test_windows_launchers_use_embedded_isolated_python() -> None:
     assert "-m topoforge.cli.app web %*" in WEB_LAUNCHER
 
 
+def test_portable_official_bambu_acceptance_is_explicit_and_uses_embedded_python() -> None:
+    source = (_repository_root() / "scripts" / "verify_windows_portable.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'parser.add_argument("--verify-bambu", action="store_true")' in source
+    assert '"--verify-bambu requires --execute"' in source
+    assert '"--verify-bambu requires --work-root to retain native evidence"' in source
+    assert 'str(python),\n            "-I",\n            "-X",\n            "utf8"' in source
+    assert '"scripts" / "verify_windows_bambu.py"' in source
+    assert '"--require-windows"' in source
+    assert 'project.get("all_projects_reopened") is not True' in source
+    assert 'project.get("external_profiles_loaded_on_reopen") is not False' in source
+
+
 def test_verified_archive_publication_preserves_previous_candidate_on_failure(
     tmp_path: Path,
 ) -> None:
@@ -330,6 +345,7 @@ def test_windows_portable_ci_contract() -> None:
     assert "scripts/verify_windows_portable.py" in steps
     assert "--repeat-archive" in steps
     assert "--execute" in steps
+    assert "--verify-bambu" not in steps
     assert "actions/upload-artifact@v4" in steps
 
 

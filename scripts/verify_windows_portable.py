@@ -616,6 +616,7 @@ def _run_json(
     *,
     cwd: Path,
     environment: dict[str, str],
+    timeout_seconds: float = 600.0,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     completed = subprocess.run(
         command,
@@ -626,6 +627,7 @@ def _run_json(
         text=True,
         encoding="utf-8",
         errors="replace",
+        timeout=timeout_seconds,
     )
     record: dict[str, Any] = {
         "command": command,
@@ -654,6 +656,9 @@ def execute_windows_portable(
     config_path: Path,
     expected_version: str,
     work_root: Path,
+    verify_bambu: bool = False,
+    bambu_studio_executable: Path | None = None,
+    bambu_profiles_root: Path | None = None,
 ) -> dict[str, Any]:
     """Extract and execute launchers plus full manufacturing/Web acceptance on Windows."""
     if platform.system() != "Windows":
@@ -763,6 +768,46 @@ def execute_windows_portable(
         raise ValueError("portable native Web lifecycle acceptance did not pass")
     if system.get("platform", {}).get("native_windows_verified") is not True:
         raise ValueError("portable native Web lifecycle did not verify Windows")
+
+    bambu: dict[str, Any] | None = None
+    if verify_bambu:
+        bambu_report_path = work_root / "windows official Bambu acceptance.json"
+        bambu_command = [
+            str(python),
+            "-I",
+            "-X",
+            "utf8",
+            str(repository_root / "scripts" / "verify_windows_bambu.py"),
+            "--work-root",
+            str(work_root / "full official Bambu acceptance"),
+            "--require-windows",
+            "--report",
+            str(bambu_report_path),
+        ]
+        if bambu_studio_executable is not None:
+            bambu_command.extend(
+                ("--bambu-studio-executable", str(bambu_studio_executable.resolve()))
+            )
+        if bambu_profiles_root is not None:
+            bambu_command.extend(("--bambu-profiles-root", str(bambu_profiles_root.resolve())))
+        bambu, bambu_record = _run_json(
+            bambu_command,
+            cwd=package_root,
+            environment=environment,
+            timeout_seconds=3600.0,
+        )
+        commands.append(bambu_record)
+        if bambu.get("required_checks_passed") is not True:
+            raise ValueError("portable official Bambu acceptance did not pass")
+        if bambu.get("platform", {}).get("native_windows_verified") is not True:
+            raise ValueError("portable official Bambu acceptance did not verify Windows")
+        project = _json_object(bambu.get("official_project"), "bambu.official_project")
+        if (
+            project.get("all_projects_reopened") is not True
+            or project.get("all_release_gates_passed") is not True
+            or project.get("external_profiles_loaded_on_reopen") is not False
+        ):
+            raise ValueError("portable official Bambu project/reopen contract did not pass")
     return {
         "platform": {
             "system": platform.system(),
@@ -778,6 +823,7 @@ def execute_windows_portable(
         "web_launcher": web,
         "core": core,
         "system": system,
+        "bambu": bambu,
         "commands": commands,
         "required_checks_passed": True,
     }
@@ -799,11 +845,22 @@ def main() -> int:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--expected-version")
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--verify-bambu", action="store_true")
+    parser.add_argument("--bambu-studio-executable", type=Path)
+    parser.add_argument("--bambu-profiles-root", type=Path)
     parser.add_argument("--work-root", type=Path)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
     report_path = args.report.resolve()
     try:
+        if args.verify_bambu and not args.execute:
+            raise ValueError("--verify-bambu requires --execute")
+        if args.verify_bambu and args.work_root is None:
+            raise ValueError("--verify-bambu requires --work-root to retain native evidence")
+        if not args.verify_bambu and (
+            args.bambu_studio_executable is not None or args.bambu_profiles_root is not None
+        ):
+            raise ValueError("Bambu overrides require --verify-bambu")
         inspection = inspect_windows_portable(
             args.archive,
             config_path=args.config,
@@ -834,6 +891,9 @@ def main() -> int:
                     config_path=args.config,
                     expected_version=version,
                     work_root=args.work_root,
+                    verify_bambu=args.verify_bambu,
+                    bambu_studio_executable=args.bambu_studio_executable,
+                    bambu_profiles_root=args.bambu_profiles_root,
                 )
             else:
                 with tempfile.TemporaryDirectory(
