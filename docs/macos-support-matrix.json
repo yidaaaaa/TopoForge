@@ -11,9 +11,9 @@
       "architecture": "arm64",
       "deployment_target": "15.0",
       "ci_runner": "macos-15",
-      "ci_status": "configured-unverified",
+      "ci_status": "passed-hosted-core-unverified",
       "clean_system_status": "not-provisioned",
-      "phase13a_status": "planned-unverified",
+      "phase13a_status": "in-progress-unverified",
       "phase13b_status": "planned-unverified"
     },
     {
@@ -23,9 +23,9 @@
       "architecture": "arm64",
       "deployment_target": "15.0",
       "ci_runner": "macos-26",
-      "ci_status": "configured-unverified",
+      "ci_status": "passed-hosted-core-unverified",
       "clean_system_status": "not-provisioned",
-      "phase13a_status": "planned-unverified",
+      "phase13a_status": "in-progress-unverified",
       "phase13b_status": "planned-unverified"
     }
   ],
@@ -107,7 +107,7 @@
     ]
   },
   "ci_capacity": {
-    "status": "available-configured-unverified",
+    "status": "passed-hosted-core-unverified",
     "arm64_runner_labels": [
       "macos-15",
       "macos-26"
@@ -115,6 +115,46 @@
     "runner_labels_are_public_support_contract": false,
     "nested_virtualization_available": false,
     "limitation": "Hosted CI can establish native arm64 core behavior but cannot replace clean-system, quarantine, Gatekeeper, signing, notarization, or first-launch evidence."
+  },
+  "hosted_ci_evidence": {
+    "status": "passed-hosted-core-unverified",
+    "run_id": 31419016599,
+    "run_url": "https://github.com/yidaaaaa/TopoForge/actions/runs/31419016599",
+    "head_sha": "5df03c40536363d63678f0b23b69b228ee008e6a",
+    "conclusion": "success",
+    "completed_at": "2026-08-10T18:28:14Z",
+    "targets": [
+      {
+        "id": "macos-15-arm64",
+        "runner": "macos-15",
+        "job_id": 93554980176,
+        "job_conclusion": "success",
+        "artifact_name": "macos-macos-15-runtime-evidence",
+        "artifact_size_bytes": 1071
+      },
+      {
+        "id": "macos-26-arm64",
+        "runner": "macos-26",
+        "job_id": 93554980175,
+        "job_conclusion": "success",
+        "artifact_name": "macos-macos-26-runtime-evidence",
+        "artifact_size_bytes": 1069
+      }
+    ],
+    "verified_scope": [
+      "native Apple Silicon runner identity and frozen macOS major",
+      "locked all-groups installation and direct native dependency imports",
+      "doctor diagnostics",
+      "deterministic synthetic STL, 3MF, and GLB build and reopen checks",
+      "packaged local Web check with macOS defaults",
+      "Ruff, format, Pyright, and all 273 Python tests",
+      "recovered worker cancellation after manager restart"
+    ],
+    "limitations": [
+      "The hosted runner patch version is not proof of the literal frozen clean-system patch version.",
+      "Hosted CI is not clean-system, application-package, signing, notarization, quarantine, Gatekeeper, first-launch, or Bambu Studio evidence.",
+      "The runtime evidence artifacts are retained for 30 days and do not widen the public support contract."
+    ]
   },
   "clean_system_capacity": {
     "status": "not-provisioned",

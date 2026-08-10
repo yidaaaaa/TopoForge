@@ -16,6 +16,9 @@ def test_frozen_macos_matrix_matches_repository_identities() -> None:
     assert report["required_checks_passed"] is True
     assert report["public_support_status"] == "unverified"
     assert report["target_ids"] == ["macos-15-arm64", "macos-26-arm64"]
+    assert report["hosted_ci_status"] == "passed-hosted-core-unverified"
+    assert report["hosted_ci_run_id"] == 31419016599
+    assert report["hosted_ci_head_sha"] == ("5df03c40536363d63678f0b23b69b228ee008e6a")
 
 
 def test_matrix_keeps_targets_unverified_and_exclusions_explicit() -> None:
@@ -24,16 +27,33 @@ def test_matrix_keeps_targets_unverified_and_exclusions_explicit() -> None:
 
     assert all(target["architecture"] == "arm64" for target in matrix["phase13a_targets"])
     assert all(
-        target["phase13a_status"] == "planned-unverified"
+        target["ci_status"] == "passed-hosted-core-unverified"
+        and target["phase13a_status"] == "in-progress-unverified"
         and target["phase13b_status"] == "planned-unverified"
         for target in matrix["phase13a_targets"]
     )
+    hosted_ci = matrix["hosted_ci_evidence"]
+    assert hosted_ci["run_id"] == 31419016599
+    assert hosted_ci["head_sha"] == "5df03c40536363d63678f0b23b69b228ee008e6a"
+    assert hosted_ci["conclusion"] == "success"
+    assert {
+        item["id"]: (
+            item["runner"],
+            item["job_conclusion"],
+            item["artifact_name"],
+        )
+        for item in hosted_ci["targets"]
+    } == {
+        "macos-15-arm64": ("macos-15", "success", "macos-macos-15-runtime-evidence"),
+        "macos-26-arm64": ("macos-26", "success", "macos-macos-26-runtime-evidence"),
+    }
     exclusions = {target["id"]: target["disposition"] for target in matrix["excluded_targets"]}
     assert exclusions == {
         "macos-14-arm64": "unsupported-for-0.12.x",
         "macos-intel-x86-64": "unsupported-for-0.12.x",
         "macos-27-beta-arm64": "unsupported-preview",
     }
+    assert matrix["ci_capacity"]["status"] == "passed-hosted-core-unverified"
     assert matrix["clean_system_capacity"]["status"] == "not-provisioned"
     assert matrix["bambu_studio"]["phase13b_status"] == "unverified"
 
@@ -94,6 +114,9 @@ def test_documentation_does_not_promote_macos_support() -> None:
     documentation = (root / "docs/macos-support.md").read_text(encoding="utf-8")
 
     assert "does **not** currently claim macOS support" in documentation
+    assert "Native hosted macOS core CI has passed" in documentation
+    assert "actions/runs/31419016599" in documentation
+    assert "This closes only the hosted native core portion of Phase 13A" in documentation
     assert "unsupported today" in documentation
     assert "Intel x86_64 is unsupported for 0.12.x" in documentation
     assert "README and release metadata must continue to say macOS is" in documentation

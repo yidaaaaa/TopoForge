@@ -15,10 +15,28 @@ EXPECTED_TARGETS = {
     "macos-15-arm64": ("15.7.9", "arm64", "macos-15"),
     "macos-26-arm64": ("26.6.1", "arm64", "macos-26"),
 }
-EXPECTED_UNVERIFIED_STATUSES = {
-    "configured-unverified",
-    "not-provisioned",
-    "planned-unverified",
+EXPECTED_CI_STATUS = "passed-hosted-core-unverified"
+EXPECTED_PHASE13A_STATUS = "in-progress-unverified"
+EXPECTED_HOSTED_CI_RUN = (
+    31419016599,
+    "5df03c40536363d63678f0b23b69b228ee008e6a",
+    "success",
+)
+EXPECTED_HOSTED_CI_TARGETS = {
+    "macos-15-arm64": (
+        "macos-15",
+        93554980176,
+        "success",
+        "macos-macos-15-runtime-evidence",
+        1071,
+    ),
+    "macos-26-arm64": (
+        "macos-26",
+        93554980175,
+        "success",
+        "macos-macos-26-runtime-evidence",
+        1069,
+    ),
 }
 
 
@@ -65,9 +83,14 @@ def verify_macos_support_matrix(
             target.get("ci_runner"),
         ) != (version, architecture, runner):
             problems.append(f"{target_id} OS, architecture, or CI identity changed")
-        for key in ("ci_status", "clean_system_status", "phase13a_status", "phase13b_status"):
-            if target.get(key) not in EXPECTED_UNVERIFIED_STATUSES:
-                problems.append(f"{target_id} {key} must remain explicitly unverified")
+        if target.get("ci_status") != EXPECTED_CI_STATUS:
+            problems.append(f"{target_id} hosted CI status is not the retained passing result")
+        if target.get("clean_system_status") != "not-provisioned":
+            problems.append(f"{target_id} clean-system status must remain not-provisioned")
+        if target.get("phase13a_status") != EXPECTED_PHASE13A_STATUS:
+            problems.append(f"{target_id} Phase 13A status must remain in progress and unverified")
+        if target.get("phase13b_status") != "planned-unverified":
+            problems.append(f"{target_id} Phase 13B status must remain planned and unverified")
 
     excluded = payload.get("excluded_targets")
     exclusions = (
@@ -113,6 +136,40 @@ def verify_macos_support_matrix(
     if clean_system.get("quarantine_gatekeeper_status") != "not-run":
         problems.append("Gatekeeper must remain not-run until clean-system evidence exists")
 
+    ci_capacity = payload.get("ci_capacity", {})
+    if ci_capacity.get("status") != EXPECTED_CI_STATUS:
+        problems.append("CI capacity does not record the retained hosted core success")
+
+    hosted_ci = payload.get("hosted_ci_evidence", {})
+    if (
+        hosted_ci.get("run_id"),
+        hosted_ci.get("head_sha"),
+        hosted_ci.get("conclusion"),
+    ) != EXPECTED_HOSTED_CI_RUN:
+        problems.append("hosted CI run identity differs from the retained passing evidence")
+    if hosted_ci.get("status") != EXPECTED_CI_STATUS:
+        problems.append("hosted CI evidence status is not passed-hosted-core-unverified")
+
+    raw_hosted_targets = hosted_ci.get("targets")
+    hosted_targets = (
+        {item.get("id"): item for item in raw_hosted_targets if isinstance(item, dict)}
+        if isinstance(raw_hosted_targets, list)
+        else {}
+    )
+    if set(hosted_targets) != set(EXPECTED_HOSTED_CI_TARGETS):
+        problems.append("hosted CI target evidence differs from the frozen target set")
+    for target_id, expected in EXPECTED_HOSTED_CI_TARGETS.items():
+        evidence = hosted_targets.get(target_id, {})
+        actual = (
+            evidence.get("runner"),
+            evidence.get("job_id"),
+            evidence.get("job_conclusion"),
+            evidence.get("artifact_name"),
+            evidence.get("artifact_size_bytes"),
+        )
+        if actual != expected:
+            problems.append(f"{target_id} hosted CI job or artifact evidence changed")
+
     return {
         "schema_version": SCHEMA_VERSION,
         "matrix_path": str(path),
@@ -120,6 +177,9 @@ def verify_macos_support_matrix(
         "public_support_status": payload.get("public_support_status"),
         "target_ids": sorted(targets),
         "uv_lock_sha256": lock_sha256,
+        "hosted_ci_status": hosted_ci.get("status"),
+        "hosted_ci_run_id": hosted_ci.get("run_id"),
+        "hosted_ci_head_sha": hosted_ci.get("head_sha"),
         "problems": problems,
         "required_checks_passed": not problems,
     }
