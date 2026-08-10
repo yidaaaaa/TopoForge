@@ -8,6 +8,8 @@ import stat
 from collections.abc import Mapping
 from pathlib import Path
 
+from topoforge.platform_paths import macos_application_data_root
+
 _FILE_ATTRIBUTE_REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
 
 
@@ -48,8 +50,11 @@ def default_web_state_dir(
     home: Path | None = None,
 ) -> Path:
     """Return the durable Web state default without creating directories."""
-    if _system_name(system) == "Windows":
+    system_name = _system_name(system)
+    if system_name == "Windows":
         return windows_application_data_root(environ=environ, home=home) / "state"
+    if system_name == "Darwin":
+        return macos_application_data_root(home=home) / "state"
     return Path("~/.topoforge/web")
 
 
@@ -60,8 +65,11 @@ def default_web_workspace_root(
     home: Path | None = None,
 ) -> Path:
     """Return the workflow workspace default without creating directories."""
-    if _system_name(system) == "Windows":
+    system_name = _system_name(system)
+    if system_name == "Windows":
         return windows_application_data_root(environ=environ, home=home) / "workspaces"
+    if system_name == "Darwin":
+        return macos_application_data_root(home=home) / "workspaces"
     return Path("topoforge-workspaces")
 
 
