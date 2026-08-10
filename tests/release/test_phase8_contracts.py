@@ -264,6 +264,9 @@ def test_windows_core_ci_contract() -> None:
     assert "::error title=Windows core acceptance" in windows_steps
     assert "ci-windows-x64-core.json" in windows_steps
     assert "scripts/verify_windows_system.py" in windows_steps
+    assert "Report Windows system acceptance failure" in windows_steps
+    assert "::error title=Windows system acceptance" in windows_steps
+    assert "steps.windows-system.outcome == 'failure'" in windows_steps
     assert "--require-windows" in windows_steps
     assert "ci-windows-x64-system.json" in windows_steps
     assert "uv run pytest" in windows_steps

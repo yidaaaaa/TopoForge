@@ -121,11 +121,29 @@ jobs:
           $message = "{0}: {1}" -f $report.error.type, $report.error.message
           $message = $message.Replace("%", "%25").Replace("`r", "%0D").Replace("`n", "%0A")
           Write-Output "::error title=Windows core acceptance::$message"
-      - name: Run Windows Web lifecycle and recovery acceptance
+      - id: windows-system
+        name: Run Windows Web lifecycle and recovery acceptance
         run: >-
           uv run python scripts/verify_windows_system.py
           --require-windows
           --report artifacts/logs/ci-windows-x64-system.json
+      - name: Report Windows system acceptance failure
+        if: steps.windows-system.outcome == 'failure'
+        shell: pwsh
+        run: |
+          $reportPath = "artifacts/logs/ci-windows-x64-system.json"
+          if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
+            Write-Output "::error title=Windows system acceptance::failure report was not produced"
+            exit 0
+          }
+          $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+          if ($null -eq $report.error) {
+            Write-Output "::error title=Windows system acceptance::failure report has no error details"
+            exit 0
+          }
+          $message = "{0}: {1}" -f $report.error.type, $report.error.message
+          $message = $message.Replace("%", "%25").Replace("`r", "%0D").Replace("`n", "%0A")
+          Write-Output "::error title=Windows system acceptance::$message"
       - name: Run Python regression suite
         run: uv run pytest
       - name: Retain Windows core evidence
