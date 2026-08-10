@@ -106,8 +106,12 @@ jobs:
         run: uv run pytest tests/unit
       - name: Run Web API regression suite
         run: uv run pytest tests/web/test_api.py
-      - name: Run Web job regression suite
-        run: uv run pytest tests/web/test_jobs.py
+      - name: Run recovered Web job cancellation regression
+        run: >-
+          uv run pytest tests/web/test_jobs.py::test_running_job_recovers_and_cancels_after_manager_restart
+      - name: Run remaining Web job regressions
+        run: >-
+          uv run pytest tests/web/test_jobs.py -k "not running_job_recovers_and_cancels_after_manager_restart"
       - name: Run Web map tile regression suite
         run: uv run pytest tests/web/test_map_tiles.py
       - name: Run Web process regression suite
