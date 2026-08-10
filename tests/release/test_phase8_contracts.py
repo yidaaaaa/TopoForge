@@ -196,6 +196,13 @@ def test_release_virtual_environment_paths_are_platform_aware(tmp_path: Path) ->
     )
 
 
+def test_packaged_web_assets_are_checkout_byte_exact() -> None:
+    root = Path(__file__).parents[2]
+    attributes = (root / ".gitattributes").read_text(encoding="utf-8").splitlines()
+
+    assert "src/topoforge/web/static/** -text" in attributes
+
+
 def test_ci_release_verification_uses_project_version() -> None:
     root = Path(__file__).parents[2]
     workflow = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")

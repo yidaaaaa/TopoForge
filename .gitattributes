@@ -1,3 +1,5 @@
 artifacts/patches/*.patch -whitespace
+# The Web manifest binds generated asset bytes; checkout must never translate them.
+src/topoforge/web/static/** -text
 src/topoforge/web/static/assets/*.css -whitespace
 src/topoforge/web/static/assets/*.js -whitespace
