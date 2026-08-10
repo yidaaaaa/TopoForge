@@ -1,0 +1,167 @@
+{
+  "schema_version": "topoforge-macos-support-matrix-v1",
+  "frozen_at": "2026-08-10",
+  "public_support_status": "unverified",
+  "support_claim": "Only the retained Linux x86_64 baseline is currently verified. This matrix defines Phase 13 release candidates and does not advertise macOS support.",
+  "phase13a_targets": [
+    {
+      "id": "macos-15-arm64",
+      "os_name": "macOS Sequoia",
+      "os_version": "15.7.9",
+      "architecture": "arm64",
+      "deployment_target": "15.0",
+      "ci_runner": "macos-15",
+      "ci_status": "configured-unverified",
+      "clean_system_status": "not-provisioned",
+      "phase13a_status": "planned-unverified",
+      "phase13b_status": "planned-unverified"
+    },
+    {
+      "id": "macos-26-arm64",
+      "os_name": "macOS Tahoe",
+      "os_version": "26.6.1",
+      "architecture": "arm64",
+      "deployment_target": "15.0",
+      "ci_runner": "macos-26",
+      "ci_status": "configured-unverified",
+      "clean_system_status": "not-provisioned",
+      "phase13a_status": "planned-unverified",
+      "phase13b_status": "planned-unverified"
+    }
+  ],
+  "excluded_targets": [
+    {
+      "id": "macos-14-arm64",
+      "os_name": "macOS Sonoma",
+      "os_version": "14.8.9",
+      "architecture": "arm64",
+      "disposition": "unsupported-for-0.12.x",
+      "reason": "The macOS 14 GitHub runner is already in its deprecation period and is scheduled to become unsupported on 2026-11-02; no separate clean-system capacity is provisioned."
+    },
+    {
+      "id": "macos-intel-x86-64",
+      "os_name": "macOS",
+      "os_version": "all",
+      "architecture": "x86_64",
+      "disposition": "unsupported-for-0.12.x",
+      "reason": "The locked dependency set has wheel feasibility and hosted Intel runners exist, but no clean Intel system, application-package, Gatekeeper, recovery, or Bambu automation evidence is available. TopoForge 0.12.x will therefore ship an arm64-specific application rather than a universal package."
+    },
+    {
+      "id": "macos-27-beta-arm64",
+      "os_name": "macOS 27 beta",
+      "os_version": "27 beta",
+      "architecture": "arm64",
+      "disposition": "unsupported-preview",
+      "reason": "Preview operating systems are outside the release contract, and the current official Bambu Studio release explicitly excludes macOS 27 and later from one macOS network-plugin fix."
+    }
+  ],
+  "runtime": {
+    "python_requirement": ">=3.12,<3.13",
+    "python_abi": "cp312",
+    "official_macos_installer": {
+      "version": "3.12.10",
+      "kind": "universal2",
+      "availability_status": "available-not-run"
+    },
+    "embedded_application_runtime": {
+      "status": "not-selected-unverified",
+      "release_gate": true,
+      "requirement": "The final arm64 runtime version, origin, archive hash, Mach-O architecture, and minimum deployment target must be recorded before application packaging can pass."
+    }
+  },
+  "dependencies": {
+    "lock_sha256": "4db256ba2e4ffd8127d63b90afa00bb68224658e6a0dff39466151631e24c7e0",
+    "runtime_package_count": 53,
+    "all_groups_package_count": 67,
+    "minimum_arm64_wheel_platform": "macOS 14.0",
+    "arm64_runtime_wheel_only_dry_run": {
+      "status": "passed-resolver-only-not-runtime",
+      "command": "env MACOSX_DEPLOYMENT_TARGET=15.0 uv sync --dry-run --frozen --no-build --no-dev --no-install-project --python-platform aarch64-apple-darwin"
+    },
+    "arm64_all_groups_wheel_only_dry_run": {
+      "status": "passed-resolver-only-not-runtime",
+      "command": "env MACOSX_DEPLOYMENT_TARGET=15.0 uv sync --dry-run --frozen --no-build --all-groups --no-install-project --python-platform aarch64-apple-darwin"
+    },
+    "x86_64_runtime_wheel_only_dry_run": {
+      "status": "passed-feasibility-only-unsupported-target",
+      "command": "env MACOSX_DEPLOYMENT_TARGET=15.0 uv sync --dry-run --frozen --no-build --no-dev --no-install-project --python-platform x86_64-apple-darwin"
+    }
+  },
+  "bambu_studio": {
+    "version": "02.07.01.62",
+    "release_status": "official-public-release",
+    "asset_name": "Bambu_Studio_mac-v02.07.01.62-20260616174358.dmg",
+    "asset_size_bytes": 283034195,
+    "asset_sha256": "1e54c25aefc5249d56b63711cf773bed56f14430aafcc34340cd4894aef15896",
+    "availability_status": "official-asset-available-not-run",
+    "phase13b_status": "unverified",
+    "discovery_paths": [
+      "/Applications/BambuStudio.app/Contents/MacOS/BambuStudio",
+      "~/Applications/BambuStudio.app/Contents/MacOS/BambuStudio"
+    ],
+    "remaining_gates": [
+      "download and verify the DMG on every advertised target",
+      "record the installed application signature and executable Mach-O slices",
+      "resolve and hash official P2S machine, process, and filament profiles",
+      "complete normative slice, project export, no-external-profile reopen, and reslice"
+    ]
+  },
+  "ci_capacity": {
+    "status": "available-configured-unverified",
+    "arm64_runner_labels": [
+      "macos-15",
+      "macos-26"
+    ],
+    "runner_labels_are_public_support_contract": false,
+    "nested_virtualization_available": false,
+    "limitation": "Hosted CI can establish native arm64 core behavior but cannot replace clean-system, quarantine, Gatekeeper, signing, notarization, or first-launch evidence."
+  },
+  "clean_system_capacity": {
+    "status": "not-provisioned",
+    "required_targets": [
+      "macOS Sequoia 15.7.9 arm64",
+      "macOS Tahoe 26.6.1 arm64"
+    ],
+    "package_first_launch_status": "not-run",
+    "quarantine_gatekeeper_status": "not-run",
+    "signing_notarization_status": "not-configured",
+    "release_effect": "Phase 13A and Phase 13B remain open and no macOS support claim is permitted."
+  },
+  "sources": [
+    {
+      "title": "Apple security releases",
+      "url": "https://support.apple.com/100100",
+      "accessed_at": "2026-08-10"
+    },
+    {
+      "title": "GitHub-hosted runners reference",
+      "url": "https://docs.github.com/en/actions/reference/runners/github-hosted-runners",
+      "accessed_at": "2026-08-10"
+    },
+    {
+      "title": "GitHub Actions runner images",
+      "url": "https://github.com/actions/runner-images",
+      "accessed_at": "2026-08-10"
+    },
+    {
+      "title": "Python 3.12.10",
+      "url": "https://www.python.org/downloads/release/python-31210/",
+      "accessed_at": "2026-08-10"
+    },
+    {
+      "title": "Bambu Studio 02.07.01.62 release",
+      "url": "https://github.com/bambulab/BambuStudio/releases/tag/v02.07.01.62",
+      "accessed_at": "2026-08-10"
+    },
+    {
+      "title": "Bambu Studio download requirements",
+      "url": "https://bambulab.com/download/studio",
+      "accessed_at": "2026-08-10"
+    },
+    {
+      "title": "Bambu Studio command-line usage",
+      "url": "https://github.com/bambulab/BambuStudio/wiki/Command-Line-Usage",
+      "accessed_at": "2026-08-10"
+    }
+  ]
+}
