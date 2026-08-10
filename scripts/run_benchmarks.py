@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import resource
 import tempfile
 import time
 from pathlib import Path
@@ -29,6 +28,13 @@ def terrain_triangle_count(rows: int, columns: int) -> int:
 
 
 def _peak_rss_mb() -> float:
+    try:
+        import resource
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "Peak RSS benchmark measurement requires POSIX resource support. "
+            "Run the bounded release benchmark on Linux or macOS."
+        ) from exc
     return float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) / 1024.0
 
 
