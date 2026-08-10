@@ -98,8 +98,20 @@ jobs:
         run: uv run ruff format --check .
       - name: Run Pyright gate
         run: uv run pyright
-      - name: Run Python regression suite
-        run: uv run pytest
+      - name: Run release regression suite
+        run: uv run pytest tests/release
+      - name: Run slicer regression suite
+        run: uv run pytest tests/slicer
+      - name: Run unit regression suite
+        run: uv run pytest tests/unit
+      - name: Run Web regression suite
+        run: uv run pytest tests/web
+      - name: Run CLI, geometry, and property regression suite
+        run: uv run pytest tests/cli tests/geometry tests/property
+      - name: Run provider regression suite
+        run: uv run pytest tests/providers
+      - name: Run integration regression suite
+        run: uv run pytest tests/integration
       - name: Retain bounded native runtime evidence
         if: always()
         uses: actions/upload-artifact@v4
