@@ -114,6 +114,77 @@ jobs:
           path: artifacts/logs/ci-windows-x64-core.json
           if-no-files-found: error
 
+  windows-portable:
+    name: Windows x64 portable candidate
+    needs: windows-core
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      SOURCE_DATE_EPOCH: "1580601600"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.24"
+          enable-cache: true
+      - name: Install locked build and test dependencies
+        run: uv sync --locked --all-groups
+      - name: Build packaged Web application
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+      - id: package-version
+        name: Resolve project version
+        shell: pwsh
+        run: |
+          "version=$(uv version --short)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append
+      - name: Build primary Windows x64 portable candidate
+        run: >-
+          uv run python scripts/build_windows_portable.py
+          --output-dir dist/windows-primary
+          --version ${{ steps.package-version.outputs.version }}
+          --report artifacts/logs/ci-windows-portable-primary-build.json
+      - name: Build repeat Windows x64 portable candidate
+        run: >-
+          uv run python scripts/build_windows_portable.py
+          --output-dir dist/windows-repeat
+          --version ${{ steps.package-version.outputs.version }}
+          --report artifacts/logs/ci-windows-portable-repeat-build.json
+      - name: Verify reproducibility and execute the portable candidate
+        run: >-
+          uv run python scripts/verify_windows_portable.py
+          --archive
+          dist/windows-primary/topoforge-${{ steps.package-version.outputs.version }}-windows-x64-portable.zip
+          --repeat-archive
+          dist/windows-repeat/topoforge-${{ steps.package-version.outputs.version }}-windows-x64-portable.zip
+          --expected-version ${{ steps.package-version.outputs.version }}
+          --execute
+          --work-root artifacts/windows-portable-acceptance
+          --report artifacts/logs/ci-windows-portable-verification.json
+      - name: Retain Windows portable candidate and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: topoforge-windows-x64-portable-candidate
+          path: |
+            dist/windows-primary/*.zip
+            artifacts/logs/ci-windows-portable-primary-build.json
+            artifacts/logs/ci-windows-portable-repeat-build.json
+            artifacts/logs/ci-windows-portable-verification.json
+          if-no-files-found: error
+          retention-days: 14
+
   release:
     needs: quality
     runs-on: ubuntu-22.04

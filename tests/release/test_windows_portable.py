@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import zipfile
 from pathlib import Path
 
 import pytest
+import yaml
 from scripts.build_windows_portable import (
     CLI_LAUNCHER,
     WEB_LAUNCHER,
@@ -311,6 +313,24 @@ def test_platform_core_reports_missing_explicit_interpreter(tmp_path: Path) -> N
             tmp_path / "acceptance",
             python_executable=missing,
         )
+
+
+def test_windows_portable_ci_contract() -> None:
+    root = _repository_root()
+    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    job = workflow["jobs"]["windows-portable"]
+    steps = json.dumps(job["steps"], sort_keys=True)
+
+    assert job["needs"] == "windows-core"
+    assert job["runs-on"] == "windows-2022"
+    assert "actions/setup-python@v5" in steps
+    assert '"architecture": "x64"' in steps
+    assert "actions/setup-node@v4" in steps
+    assert steps.count("scripts/build_windows_portable.py") == 2
+    assert "scripts/verify_windows_portable.py" in steps
+    assert "--repeat-archive" in steps
+    assert "--execute" in steps
+    assert "actions/upload-artifact@v4" in steps
 
 
 def test_public_release_does_not_publish_candidate_before_clean_vm_gates() -> None:
