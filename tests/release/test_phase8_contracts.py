@@ -62,9 +62,11 @@ def _required_sdist_files() -> set[str]:
         "docs/macos-support-matrix.json",
         "docs/macos-support.md",
         f"scripts/rollback-topoforge-{VERSION}.sh",
+        "scripts/collect_macos_ci_evidence.py",
         "scripts/verify_macos_support_matrix.py",
         "src/topoforge/platform_paths.py",
         "tests/release/test_phase13_macos_contracts.py",
+        "tests/release/test_macos_ci_evidence.py",
         "tests/slicer/test_bambu_macos.py",
         "tests/unit/test_platform_paths.py",
     }

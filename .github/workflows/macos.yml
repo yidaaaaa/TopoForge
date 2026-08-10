@@ -47,6 +47,11 @@ jobs:
         run: uv sync --locked --all-groups
       - name: Verify the frozen support contract
         run: uv run python scripts/verify_macos_support_matrix.py
+      - name: Record bounded native runtime evidence
+        run: >-
+          uv run python scripts/collect_macos_ci_evidence.py
+          --runner-label "${{ matrix.runner }}"
+          --report "artifacts/logs/macos-${{ matrix.runner }}-runtime.json"
       - name: Exercise native imports and diagnostics
         run: uv run topoforge doctor
       - name: Build, reopen, and compare deterministic artifacts
@@ -93,3 +98,11 @@ jobs:
           uv run ruff format --check .
           uv run pyright
           uv run pytest
+      - name: Retain bounded native runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.runner }}-runtime-evidence
+          path: artifacts/logs/macos-${{ matrix.runner }}-runtime.json
+          if-no-files-found: warn
+          retention-days: 30

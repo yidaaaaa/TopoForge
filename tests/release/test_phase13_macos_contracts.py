@@ -51,6 +51,10 @@ def test_native_macos_ci_uses_only_frozen_arm64_runner_labels() -> None:
     assert "macos-latest" not in workflow_text
     assert 'test "$(uname -m)" = "arm64"' in workflow_text
     assert "scripts/verify_macos_support_matrix.py" in workflow_text
+    assert "scripts/collect_macos_ci_evidence.py" in workflow_text
+    assert "actions/upload-artifact@v4" in workflow_text
+    assert "if: always()" in workflow_text
+    assert "runtime-evidence" in workflow_text
     assert "topoforge web --check --no-open" in workflow_text
     assert "TopoForge Phase 13/地形" in workflow_text
     assert workflow_text.count('cmp "') == 3
