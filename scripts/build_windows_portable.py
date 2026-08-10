@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -714,6 +715,36 @@ def _write_reproducible_zip(
         raise
 
 
+def _replace_across_filesystems(source: Path, destination: Path) -> None:
+    """Copy to the destination filesystem, then publish with one atomic replace."""
+    temporary_destination: Path | None = None
+    source_size = source.stat().st_size
+    source_sha256 = _sha256(source)
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            dir=destination.parent,
+            delete=False,
+        ) as target:
+            temporary_destination = Path(target.name)
+            with source.open("rb") as payload:
+                shutil.copyfileobj(payload, target, length=1024 * 1024)
+            target.flush()
+            os.fsync(target.fileno())
+        if temporary_destination.stat().st_size != source_size:
+            raise OSError("cross-filesystem archive copy changed the byte count")
+        if _sha256(temporary_destination) != source_sha256:
+            raise OSError("cross-filesystem archive copy changed the SHA-256")
+        os.replace(temporary_destination, destination)
+        temporary_destination = None
+        source.unlink()
+    finally:
+        if temporary_destination is not None:
+            temporary_destination.unlink(missing_ok=True)
+
+
 def _publish_verified_archive(
     staged_archive: Path,
     destination: Path,
@@ -730,7 +761,12 @@ def _publish_verified_archive(
         raise FileExistsError(
             f"portable archive already exists: {destination}. Use --force to replace this file."
         )
-    os.replace(staged_archive, destination)
+    try:
+        os.replace(staged_archive, destination)
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            raise
+        _replace_across_filesystems(staged_archive, destination)
 
 
 def build_windows_portable(

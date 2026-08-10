@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import copy
+import errno
 import hashlib
 import json
+import os
 import zipfile
 from pathlib import Path
 
@@ -299,6 +301,39 @@ def test_verified_archive_publication_atomically_replaces_after_success(
 
     assert not staged.exists()
     assert destination.read_bytes() == b"verified candidate"
+
+
+def test_verified_archive_publication_is_atomic_across_filesystems(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    staged_directory = tmp_path / "staging"
+    destination_directory = tmp_path / "destination"
+    staged_directory.mkdir()
+    destination_directory.mkdir()
+    staged = staged_directory / "staged.zip"
+    destination = destination_directory / "candidate.zip"
+    staged.write_bytes(b"verified cross-filesystem candidate")
+    destination.write_bytes(b"previous candidate")
+    real_replace = os.replace
+
+    def replace(source: str | Path, target: str | Path) -> None:
+        if Path(source) == staged and Path(target) == destination:
+            raise OSError(errno.EXDEV, "simulated cross-device replace")
+        real_replace(source, target)
+
+    monkeypatch.setattr("scripts.build_windows_portable.os.replace", replace)
+
+    _publish_verified_archive(
+        staged,
+        destination,
+        verification={"required_checks_passed": True},
+        overwrite=True,
+    )
+
+    assert not staged.exists()
+    assert destination.read_bytes() == b"verified cross-filesystem candidate"
+    assert list(destination_directory.glob(".candidate.zip.*.tmp")) == []
 
 
 def test_verified_extraction_rechecks_open_archive_identity(tmp_path: Path) -> None:
