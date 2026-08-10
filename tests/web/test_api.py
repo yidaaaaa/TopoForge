@@ -14,6 +14,11 @@ from topoforge.overlays import (
     OverlaySourceConfig,
     write_overlay_config,
 )
+from topoforge.validation.slicers import (
+    BambuStudioAdapter,
+    SlicerAvailability,
+    SlicerInfo,
+)
 from topoforge.web.api import create_app, verify_static_assets
 from topoforge.web.jobs import LocalJobManager
 from topoforge.web.models import JobRecord, JobState, WebAppConfig, utc_now
@@ -95,12 +100,31 @@ def test_bambu_validation_requires_and_reuses_server_tool_configuration(
     web_config: WebAppConfig,
     web_static_dir: Path,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    executable = tmp_path / "BambuStudio.AppImage"
-    executable.write_text(
-        "#!/bin/sh\nprintf 'BambuStudio-02.07.01.62:\\n'\n",
-        encoding="utf-8",
-    )
+    def fake_probe(
+        adapter: BambuStudioAdapter,
+        *,
+        refresh: bool = False,
+    ) -> SlicerInfo:
+        del refresh
+        if adapter.executable is None:
+            return SlicerInfo(
+                name=adapter.name,
+                status=SlicerAvailability.UNAVAILABLE,
+                detail="test executable is not configured",
+            )
+        return SlicerInfo(
+            name=adapter.name,
+            version="02.07.01.62",
+            executable=adapter.executable,
+            status=SlicerAvailability.AVAILABLE,
+        )
+
+    monkeypatch.setattr(BambuStudioAdapter, "probe", fake_probe)
+
+    executable = tmp_path / "bambu-studio-test-executable"
+    executable.write_bytes(b"fixture")
     executable.chmod(0o755)
     machine = tmp_path / "machine.json"
     process = tmp_path / "process.json"

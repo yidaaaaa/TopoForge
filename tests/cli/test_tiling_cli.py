@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -55,8 +56,9 @@ def test_tile_plan_and_extract_cli_publish_verified_artifacts(tmp_path: Path) ->
     layout = read_tile_layout(layout_path)
     assert layout.tile_grid_shape == (1, 2)
     assert layout.tile_count == 2
-    assert '"status": "planned"' in result.output
-    assert str(layout_path.resolve()) in result.output
+    planned = json.loads(result.output)
+    assert planned["status"] == "planned"
+    assert Path(planned["output"]) == layout_path.resolve()
 
     tile_output = tmp_path / "tile-set"
     extraction = runner.invoke(
@@ -77,9 +79,12 @@ def test_tile_plan_and_extract_cli_publish_verified_artifacts(tmp_path: Path) ->
     assert evidence["required_checks_passed"] is True
     assert evidence["seam_count"] == 1
     assert evidence["terrain_seam_status"] == "passed"
-    assert '"status": "extracted"' in extraction.output
-    assert str((tile_output / "assembly_manifest.json").resolve()) in extraction.output
-    assert str((tile_output / "seam_report.json").resolve()) in extraction.output
+    extracted = json.loads(extraction.output)
+    assert extracted["status"] == "extracted"
+    assert (
+        Path(extracted["assembly_manifest"]) == (tile_output / "assembly_manifest.json").resolve()
+    )
+    assert Path(extracted["seam_report"]) == (tile_output / "seam_report.json").resolve()
 
     mesh_output = tmp_path / "tile-mesh-set"
     meshed = runner.invoke(
@@ -100,9 +105,13 @@ def test_tile_plan_and_extract_cli_publish_verified_artifacts(tmp_path: Path) ->
     assert mesh_evidence["mesh_seam_count"] == 1
     assert mesh_evidence["mesh_seam_status"] == "passed"
     assert mesh_evidence["required_checks_passed"] is True
-    assert '"status": "meshed"' in meshed.output
-    assert str((mesh_output / "tile-mesh-assembly-manifest.json").resolve()) in meshed.output
-    assert str((mesh_output / "tile-coverage.png").resolve()) in meshed.output
+    meshed_payload = json.loads(meshed.output)
+    assert meshed_payload["status"] == "meshed"
+    assert (
+        Path(meshed_payload["assembly_manifest"])
+        == (mesh_output / "tile-mesh-assembly-manifest.json").resolve()
+    )
+    assert Path(meshed_payload["coverage_image"]) == (mesh_output / "tile-coverage.png").resolve()
 
     print_output = tmp_path / "print-tile-set"
     connected = runner.invoke(
@@ -126,6 +135,12 @@ def test_tile_plan_and_extract_cli_publish_verified_artifacts(tmp_path: Path) ->
     assert print_evidence["connector_fit_status"] == "passed"
     assert print_evidence["collision_status"] == "passed"
     assert print_evidence["required_checks_passed"] is True
-    assert '"status": "connected"' in connected.output
-    assert str((print_output / "connector-plan.json").resolve()) in connected.output
-    assert str((print_output / "connector-map.png").resolve()) in connected.output
+    connected_payload = json.loads(connected.output)
+    assert connected_payload["status"] == "connected"
+    assert (
+        Path(connected_payload["connector_plan"])
+        == (print_output / "connector-plan.json").resolve()
+    )
+    assert (
+        Path(connected_payload["connector_map"]) == (print_output / "connector-map.png").resolve()
+    )

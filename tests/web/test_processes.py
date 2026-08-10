@@ -46,12 +46,16 @@ def test_posix_termination_escalates_one_isolated_process_group(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _, probe = _alive_sequence((True, True, False))
-    signals: list[tuple[int, signal.Signals]] = []
+    signals: list[tuple[int, int]] = []
+    sigterm = int(signal.SIGTERM)
+    sigkill = int(getattr(signal, "SIGKILL", 9))
     monkeypatch.setattr(processes, "process_is_alive", probe)
+    monkeypatch.setattr(processes.signal, "SIGKILL", sigkill, raising=False)
     monkeypatch.setattr(
         processes.os,
         "killpg",
-        lambda pid, sent_signal: signals.append((pid, sent_signal)),
+        lambda pid, sent_signal: signals.append((pid, int(sent_signal))),
+        raising=False,
     )
 
     terminate_process_tree(
@@ -61,7 +65,7 @@ def test_posix_termination_escalates_one_isolated_process_group(
         platform_family=ProcessPlatform.POSIX,
     )
 
-    assert signals == [(43210, signal.SIGTERM), (43210, signal.SIGKILL)]
+    assert signals == [(43210, sigterm), (43210, sigkill)]
 
 
 def test_windows_termination_uses_new_group_then_taskkill_tree(

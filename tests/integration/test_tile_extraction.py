@@ -309,9 +309,10 @@ def test_verify_tile_set_reopens_legacy_assembly_without_seam_report(tmp_path: P
     payload = json.loads(result.assembly_manifest_path.read_text(encoding="utf-8"))
     payload.pop("seam_report_path")
     payload.pop("seam_report_sha256")
-    result.assembly_manifest_path.write_text(
-        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
-        encoding="utf-8",
+    result.assembly_manifest_path.write_bytes(
+        (
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode("utf-8")
     )
     result.seam_report_path.unlink()
 
