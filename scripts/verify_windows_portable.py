@@ -623,7 +623,7 @@ def _windows_batch_command(
     if resolved_path.parent != cwd.resolve():
         raise ValueError("portable batch launcher must be invoked from its package root")
     invocation = subprocess.list2cmdline([f".\\{resolved_path.name}", *arguments])
-    return [comspec, "/d", "/s", "/c", invocation]
+    return [comspec, "/d", "/c", invocation]
 
 
 def _run_json(
@@ -682,6 +682,7 @@ def execute_windows_portable(
         )
     if platform.machine().casefold() not in {"amd64", "x86_64"}:
         raise RuntimeError("--execute requires an x64 Windows host")
+    work_root = work_root.resolve()
     resolved_archive = archive_path.resolve()
     resolved_config = config_path.resolve()
     inspection = inspect_windows_portable(
