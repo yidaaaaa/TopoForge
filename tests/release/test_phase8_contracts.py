@@ -57,7 +57,17 @@ def test_release_evidence_workflows_pin_every_action_to_a_full_sha() -> None:
 
 
 def _required_sdist_files() -> set[str]:
-    return set(REQUIRED_SDIST_FILES) | {f"scripts/rollback-topoforge-{VERSION}.sh"}
+    return set(REQUIRED_SDIST_FILES) | {
+        ".github/workflows/macos.yml",
+        "docs/macos-support-matrix.json",
+        "docs/macos-support.md",
+        f"scripts/rollback-topoforge-{VERSION}.sh",
+        "scripts/verify_macos_support_matrix.py",
+        "src/topoforge/platform_paths.py",
+        "tests/release/test_phase13_macos_contracts.py",
+        "tests/slicer/test_bambu_macos.py",
+        "tests/unit/test_platform_paths.py",
+    }
 
 
 def _write_sdist(
