@@ -253,6 +253,9 @@ def test_windows_core_ci_contract() -> None:
     assert '"architecture": "x64"' in windows_steps
     assert "uv sync --locked --all-groups" in windows_steps
     assert "scripts/verify_platform_core.py" in windows_steps
+    assert "Report Windows core acceptance failure" in windows_steps
+    assert "::error title=Windows core acceptance" in windows_steps
+    assert "ci-windows-x64-core.json" in windows_steps
     assert "scripts/verify_windows_system.py" in windows_steps
     assert "--require-windows" in windows_steps
     assert "ci-windows-x64-system.json" in windows_steps
