@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
+import os
 import re
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from topoforge.validation.slicers.base import SlicerProfile
+from topoforge.validation.slicers.base import CommandRunner, SlicerProfile, run_command
 from topoforge.validation.slicers.orca import OrcaSlicerAdapter
+
+
+def macos_bambu_executable_candidates(
+    *,
+    home: Path | None = None,
+    applications_root: Path = Path("/Applications"),
+) -> tuple[Path, ...]:
+    """Return standard official Bambu Studio executable locations on macOS."""
+    resolved_home = Path.home() if home is None else home
+    bundle_executable = Path("BambuStudio.app/Contents/MacOS/BambuStudio")
+    return (
+        applications_root / bundle_executable,
+        resolved_home / "Applications" / bundle_executable,
+    )
 
 
 class BambuStudioAdapter(OrcaSlicerAdapter):
@@ -16,6 +32,32 @@ class BambuStudioAdapter(OrcaSlicerAdapter):
     display_name = "BambuStudio"
     executable_candidates = ("bambu-studio", "BambuStudio")
     environment_keys = ("TOPOFORGE_BAMBU_STUDIO", "BAMBU_STUDIO")
+
+    def __init__(
+        self,
+        executable: str | Path | None = None,
+        *,
+        runner: CommandRunner = run_command,
+        platform_name: str | None = None,
+        home: Path | None = None,
+        applications_root: Path = Path("/Applications"),
+    ) -> None:
+        """Resolve explicit/env settings before scanning standard macOS app bundles."""
+        resolved_platform = sys.platform if platform_name is None else platform_name
+        has_environment_override = any(os.environ.get(key) for key in self.environment_keys)
+        if executable is None and resolved_platform == "darwin" and not has_environment_override:
+            executable = next(
+                (
+                    candidate
+                    for candidate in macos_bambu_executable_candidates(
+                        home=home,
+                        applications_root=applications_root,
+                    )
+                    if candidate.is_file() and os.access(candidate, os.X_OK)
+                ),
+                None,
+            )
+        super().__init__(executable, runner=runner)
 
     def _version_from_output(self, output: str) -> str | None:
         match = re.search(r"BambuStudio-([0-9][0-9.]*)", output, re.IGNORECASE)
