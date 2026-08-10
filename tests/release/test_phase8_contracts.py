@@ -4,12 +4,14 @@ import hashlib
 import io
 import json
 import tarfile
+import tomllib
 import zipfile
 from pathlib import Path
 
 import pytest
 import yaml
 from scripts.run_benchmarks import terrain_triangle_count
+from scripts.verify_platform_core import _absolute_python_executable
 from scripts.verify_reference_regions import verify_reference_catalog
 from scripts.verify_release import inspect_sdist, inspect_wheel
 
@@ -148,6 +150,23 @@ def test_benchmark_triangle_contract(rows: int, columns: int, triangles: int) ->
     assert terrain_triangle_count(rows, columns) == triangles
 
 
+def test_platform_core_preserves_virtual_environment_interpreter_path(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "managed-python"
+    target.write_bytes(b"python")
+    environment = tmp_path / "environment with spaces"
+    environment.mkdir()
+    executable = environment / "python"
+    try:
+        executable.symlink_to(target)
+    except OSError:
+        pytest.skip("host cannot create a test interpreter symlink")
+
+    assert _absolute_python_executable(executable) == executable.absolute()
+    assert _absolute_python_executable(executable) != target.absolute()
+
+
 def test_ci_release_verification_uses_project_version() -> None:
     root = Path(__file__).parents[2]
     workflow = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
@@ -155,6 +174,60 @@ def test_ci_release_verification_uses_project_version() -> None:
     assert "uv version --short" in workflow
     assert "--version ${{ steps.package-version.outputs.version }}" in workflow
     assert "--version 0.8.0" not in workflow
+
+
+def test_python_community_support_contract() -> None:
+    root = Path(__file__).parents[2]
+    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert project["project"]["requires-python"] == ">=3.11,<3.15"
+    classifiers = project["project"]["classifiers"]
+    for version in ("3.11", "3.12", "3.13", "3.14"):
+        assert f"Programming Language :: Python :: {version}" in classifiers
+    assert "manifold3d>=3.5,<4" in project["project"]["dependencies"]
+    assert project["tool"]["ruff"]["target-version"] == "py311"
+    assert project["tool"]["pyright"]["pythonVersion"] == "3.11"
+
+
+def test_python_compatibility_ci_contract() -> None:
+    root = Path(__file__).parents[2]
+    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    compatibility = workflow["jobs"]["python-compatibility"]
+    steps = json.dumps(compatibility["steps"], sort_keys=True)
+
+    assert compatibility["runs-on"] == "ubuntu-22.04"
+    assert compatibility["strategy"]["matrix"]["python-version"] == [
+        "3.11",
+        "3.13",
+        "3.14",
+    ]
+    assert "uv lock --check" in steps
+    assert "uv sync --locked --all-groups" in steps
+    assert "scripts/verify_platform_core.py" in steps
+    assert "uv run pytest" in steps
+    assert "actions/upload-artifact@v4" in steps
+    assert "setup-node" not in steps
+    assert "playwright" not in steps
+
+
+def test_windows_core_ci_contract() -> None:
+    root = Path(__file__).parents[2]
+    workflow_text = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    workflow = yaml.safe_load(workflow_text)
+    jobs = workflow["jobs"]
+    windows = jobs["windows-core"]
+    windows_steps = json.dumps(windows["steps"], sort_keys=True)
+
+    assert jobs["quality"]["runs-on"] == "ubuntu-22.04"
+    assert jobs["release"]["needs"] == "quality"
+    assert windows["runs-on"] == "windows-2022"
+    assert '"architecture": "x64"' in windows_steps
+    assert "uv sync --locked --all-groups" in windows_steps
+    assert "scripts/verify_platform_core.py" in windows_steps
+    assert "uv run pytest" in windows_steps
+    assert "actions/upload-artifact@v4" in windows_steps
+    assert "setup-node" not in windows_steps
+    assert "playwright" not in windows_steps
 
 
 def test_playwright_server_startup_is_platform_neutral() -> None:

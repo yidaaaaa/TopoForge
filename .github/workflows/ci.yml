@@ -43,6 +43,77 @@ jobs:
       - run: uv run pyright
       - run: uv run pytest
 
+  python-compatibility:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.24"
+          enable-cache: true
+      - name: Verify universal locked dependency graph
+        run: uv lock --check
+      - name: Install locked dependencies
+        run: uv sync --locked --all-groups
+      - name: Verify public source boundary
+        run: uv run python scripts/verify_public_tree.py
+      - name: Run deterministic core and Web acceptance
+        run: >-
+          uv run python scripts/verify_platform_core.py
+          --report artifacts/logs/ci-python-${{ matrix.python-version }}.json
+      - name: Run Python regression suite
+        run: uv run pytest
+      - name: Retain compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: topoforge-python-${{ matrix.python-version }}-evidence
+          path: artifacts/logs/ci-python-${{ matrix.python-version }}.json
+          if-no-files-found: error
+
+  windows-core:
+    name: Windows x64 core
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.24"
+          enable-cache: true
+      - name: Verify locked dependency graph
+        run: uv lock --check
+      - name: Install locked core and test dependencies
+        run: uv sync --locked --all-groups
+      - name: Verify public source boundary
+        run: uv run python scripts/verify_public_tree.py
+      - name: Run Windows x64 core acceptance
+        run: >-
+          uv run python scripts/verify_platform_core.py
+          --report artifacts/logs/ci-windows-x64-core.json
+      - name: Run Python regression suite
+        run: uv run pytest
+      - name: Retain Windows core evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: topoforge-windows-x64-core-evidence
+          path: artifacts/logs/ci-windows-x64-core.json
+          if-no-files-found: error
+
   release:
     needs: quality
     runs-on: ubuntu-22.04
