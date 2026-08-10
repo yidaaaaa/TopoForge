@@ -128,7 +128,7 @@ jobs:
           --require-windows
           --report artifacts/logs/ci-windows-x64-system.json
       - name: Report Windows system acceptance failure
-        if: steps.windows-system.outcome == 'failure'
+        if: failure() && steps.windows-system.outcome == 'failure'
         shell: pwsh
         run: |
           $reportPath = "artifacts/logs/ci-windows-x64-system.json"
