@@ -1,6 +1,6 @@
 # TopoForge
 
-TopoForge is a Python 3.12 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
+TopoForge is a Python 3.11–3.14 CLI-first engine that converts georeferenced elevation rasters into dimensionally controlled terrain solids for additive manufacturing. It preserves CRS, terrain semantics, vertical-datum status, source checksums, NoData masks, interpolation fractions, physical scale, and validation evidence.
 
 **Current release (TopoForge 0.10.3):** this local-use manufacturing and usability patch adds a compact six-clearance connector calibration coupon, recessed fit-safe labels, persistent job deselection, explicit Generic Core versus Bambu Studio project artifact roles, and operator-selected connector clearance in the bilingual WebUI. All six 0.10-0.40 mm coupon pairs completed seating on the reported P2S print, but the release intentionally keeps clearance user-selected because machines, materials, orientation, and process settings differ. Generated terrain, local tasks, physical evidence records, and contributor state remain outside the public Git tree.
 
@@ -165,17 +165,54 @@ The local road, river, coast, label, and GPX files in `artifacts/phase7-inputs` 
 For source development:
 
 ```bash
-python3.12 -m pip install uv
+python3 -m pip install uv
 uv sync --locked --all-groups
 uv run topoforge doctor
 ```
 
-For local release use, install the verified wheel into a dedicated Python 3.12
-environment. The Phase 8 verifier installs outside the checkout, clears `PYTHONPATH`,
+For local release use, install the wheel into a dedicated CPython 3.11–3.14
+environment. The reference release verifier uses Python 3.12 outside the checkout, clears `PYTHONPATH`,
 runs `topoforge doctor`, creates a synthetic DEM, builds a complete model bundle, and
 strict-reads the installed 3MF. A disconnected workstation needs a same-platform
 wheelhouse containing all dependencies; the TopoForge wheel alone is insufficient. See
 [`docs/release.md`](docs/release.md).
+
+### Windows x64 portable candidate (Phase 12)
+
+Phase 12 builds one self-contained Windows x64 ZIP with an embedded CPython 3.12.13
+runtime; end users do not need administrator access, a system Python installation, or a
+`PATH` change. The archive contains `TopoForge-Web.cmd`, `topoforge.cmd`, the
+packaged bilingual Web application, all locked Windows wheels, licenses, and a
+per-file SHA-256 manifest. Its runtime URL, source commit, byte count, and SHA-256 are
+pinned in [`packaging/windows-x64-runtime.json`](packaging/windows-x64-runtime.json).
+
+Maintainers can build and cross-host inspect the candidate with:
+
+```bash
+uv run python scripts/build_windows_portable.py \
+  --output-dir dist/windows-primary \
+  --report artifacts/logs/windows-portable-primary-build.json
+uv run python scripts/verify_windows_portable.py \
+  --archive dist/windows-primary/topoforge-0.10.3-windows-x64-portable.zip \
+  --expected-version 0.10.3 \
+  --report artifacts/logs/windows-portable-verification.json
+```
+
+CI independently builds the ZIP twice, requires byte-identical archives, extracts it
+under a path containing spaces and non-ASCII characters, exercises both batch
+launchers, and runs the deterministic manufacturing/Web acceptance suite with the
+embedded interpreter. This remains a release candidate and is deliberately absent from
+the public release workflow until the same archive passes the declared clean Windows
+10 22H2 x64 and Windows 11 x64 install, launch, job, restart/recovery, and artifact
+reopen gates. Bambu Studio discovery and automation are a separate support claim.
+
+For Phase 12B clean-host testing, the optional portable verifier can invoke the
+installed official Bambu Studio through the archive's embedded Python with
+`--execute --verify-bambu --work-root PATH`. It requires normative P2S slicing,
+project export, no-external-profile reopen, and reslice evidence. Hosted CI deliberately
+does not run this gate because it has no official binary; see
+[`docs/release.md`](docs/release.md) for the Win10/Win11 evidence commands and claim
+boundary.
 
 ## Build a local GeoTIFF
 

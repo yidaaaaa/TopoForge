@@ -21,6 +21,79 @@ dependencies are platform-specific. An offline wheelhouse must match the offline
 workstation's OS, CPU architecture, Python minor version, and compatible libc. Linux
 ARM64 and other unverified targets require separate dependency-wheel and release tests.
 
+## Phase 12 development boundary
+
+The community package metadata accepts CPython 3.11 through 3.14. The universal
+`uv.lock` resolves each supported minor explicitly, and CI runs the public-tree audit,
+deterministic core/Web acceptance, and full Python regression suite on 3.11, 3.12, 3.13,
+and 3.14. Python 3.12 remains the reference release-verifier interpreter; it is not the
+only accepted community interpreter.
+
+The Windows x64 portable candidate embeds CPython 3.12.13 from the immutable
+python-build-standalone 20260807 artifact declared in
+`packaging/windows-x64-runtime.json`. The builder accepts only the pinned byte count
+and SHA-256, installs locked `win_amd64` wheels without source builds, removes
+host-specific generated scripts, bundles dependency/runtime licenses and provenance,
+and emits a fixed-timestamp ZIP with a complete file-hash manifest. The verifier
+rejects traversal, links, Windows case collisions, unsupported compression, expansion
+overruns, metadata drift, wheel/install divergence, and any content not covered by the
+manifest.
+
+Hosted Windows CI builds the candidate twice and executes it natively, but does not
+replace clean Windows 10 22H2 x64 and Windows 11 x64 VM evidence. The candidate is not
+published by `.github/workflows/release.yml` until both clean-system gates close.
+
+### Phase 12B official Bambu Studio acceptance
+
+Official Bambu Studio integration remains a separate, unpublished candidate. TopoForge
+can discover `bambu-studio.exe` in the standard 64-bit Program Files installation or
+the user's Local AppData Programs directory. It then locates the sibling
+`resources/profiles/BBL` tree, strictly resolves the P2S machine, 0.20 mm Standard
+process, and Bambu PLA Basic inheritance graphs, and stores a content-addressed bundle
+with exact selected-source, resolved-profile, and executable hashes. The acceptance
+verifier additionally records the measured Bambu Studio version. Both the CLI and Web
+entry points retain manual executable and profile-root overrides.
+
+The hosted `windows-bambu-contracts` job intentionally has no official Bambu Studio
+binary. It tests only discovery, profile, path, and verifier contracts and is not
+release evidence. On each clean Windows target, run the official tool gate separately
+with a new work root:
+
+```powershell
+uv run python scripts/verify_windows_bambu.py `
+  --work-root artifacts/windows-bambu-acceptance `
+  --require-windows `
+  --report artifacts/logs/windows-bambu-acceptance.json
+```
+
+If standard discovery is unavailable, add
+`--bambu-studio-executable "C:\Program Files\Bambu Studio\bambu-studio.exe"` and
+`--bambu-profiles-root "C:\Program Files\Bambu Studio\resources\profiles\BBL"`.
+The verifier creates a synthetic terrain below a path containing spaces and non-ASCII
+characters, runs normative P2S slicing, exports the Bambu project, reopens it without
+external profiles, reslices it, checks every manufacturing parameter gate, and binds
+the OS build, Python, TopoForge, executable, profiles, workflow, and artifacts by
+SHA-256.
+
+To prove the packaged application rather than the source environment, add the opt-in
+gate to native portable verification. `--work-root` is mandatory so the evidence is
+retained:
+
+```powershell
+uv run python scripts/verify_windows_portable.py `
+  --archive dist/windows-primary/topoforge-0.10.3-windows-x64-portable.zip `
+  --expected-version 0.10.3 `
+  --execute `
+  --verify-bambu `
+  --work-root artifacts/windows-portable-bambu-acceptance `
+  --report artifacts/logs/windows-portable-bambu-verification.json
+```
+
+Run both commands for the identical release candidate on clean Windows 10 22H2 x64
+and Windows 11 x64 hosts and retain separate reports. Neither hosted CI, the successful
+Linux official-Bambu regression, nor one Windows version may substitute for the other;
+do not publish a Windows or Bambu support claim until both reports pass.
+
 ## Build and verify a release
 
 ```bash
