@@ -1,0 +1,42 @@
+{
+  "schema_version": "topoforge-windows-runtime-config-v1",
+  "package_root": "TopoForge-Windows-x64",
+  "target": {
+    "os": "Windows",
+    "architecture": "x86_64",
+    "python_platform": "x86_64-pc-windows-msvc",
+    "candidate_os_versions": [
+      "Windows 10 22H2 x64",
+      "Windows 11 x64"
+    ]
+  },
+  "python_runtime": {
+    "implementation": "CPython",
+    "version": "3.12.13",
+    "abi": "cp312",
+    "provider": "python-build-standalone",
+    "provider_release": "20260807",
+    "provider_license": "MPL-2.0",
+    "provider_license_file": "MPL-2.0.txt",
+    "provider_source_url": "https://github.com/astral-sh/python-build-standalone/tree/00c8a06113f11220667c3bcf5fab1672ff9e78ef",
+    "archive_name": "cpython-3.12.13+20260807-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.12.13%2B20260807-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "sha256": "18bcc65b17921806b72cdc88bcf000bf67a2c99a8fc381fe1629f2b9ba56858d",
+    "bytes": 21962247,
+    "member_count": 3338,
+    "uncompressed_bytes": 63276851,
+    "archive_root": "python"
+  },
+  "bounds": {
+    "runtime_archive_max_bytes": 25000000,
+    "runtime_member_max_bytes": 10000000,
+    "runtime_member_count_max": 4000,
+    "runtime_uncompressed_max_bytes": 70000000,
+    "portable_archive_max_bytes": 250000000,
+    "portable_member_max_bytes": 268435456,
+    "portable_member_count_max": 20000,
+    "portable_uncompressed_max_bytes": 800000000,
+    "manifest_max_bytes": 4000000
+  },
+  "source_date_epoch": 1580601600
+}

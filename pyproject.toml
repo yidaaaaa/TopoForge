@@ -61,6 +61,7 @@ include = [
   "/benchmarks",
   "/docs",
   "/examples",
+  "/packaging",
   "/printer_profiles",
   "/reference_regions",
   "/scripts",
