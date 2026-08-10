@@ -254,26 +254,27 @@ def test_windows_batch_command_uses_verified_package_root(tmp_path: Path) -> Non
     package_root = tmp_path / "portable path with spaces" / "地形" / "TopoForge-Windows-x64"
 
     doctor = _windows_batch_command(
-        "cmd.exe",
         package_root / "topoforge.cmd",
         ["doctor"],
         cwd=package_root,
     )
-    assert doctor == ["cmd.exe", "/d", "/c", r".\topoforge.cmd doctor"]
+    assert doctor == [str((package_root / "topoforge.cmd").resolve()), "doctor"]
 
+    state = package_root / "state & path"
     web = _windows_batch_command(
-        "cmd.exe",
         package_root / "TopoForge-Web.cmd",
-        ["--check", "--state-dir", str(package_root / "state path")],
+        ["--check", "--state-dir", str(state)],
         cwd=package_root,
     )
-    assert web[:3] == ["cmd.exe", "/d", "/c"]
-    assert web[3].startswith(r".\TopoForge-Web.cmd --check --state-dir ")
-    assert f'"{package_root / "state path"}"' in web[3]
+    assert web == [
+        str((package_root / "TopoForge-Web.cmd").resolve()),
+        "--check",
+        "--state-dir",
+        str(state),
+    ]
 
     with pytest.raises(ValueError, match="package root"):
         _windows_batch_command(
-            "cmd.exe",
             package_root / "topoforge.cmd",
             ["doctor"],
             cwd=tmp_path,
@@ -289,6 +290,7 @@ def test_portable_official_bambu_acceptance_is_explicit_and_uses_embedded_python
     assert '"--verify-bambu requires --execute"' in source
     assert '"--verify-bambu requires --work-root to retain native evidence"' in source
     assert "work_root = work_root.resolve()" in source
+    assert source.count("shell=True") == 2
     assert 'str(python),\n            "-I",\n            "-X",\n            "utf8"' in source
     assert '"scripts" / "verify_windows_bambu.py"' in source
     assert '"--require-windows"' in source

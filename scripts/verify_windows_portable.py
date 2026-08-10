@@ -612,18 +612,16 @@ def _extract_verified_archive(
 
 
 def _windows_batch_command(
-    comspec: str,
     path: Path,
     arguments: list[str],
     *,
     cwd: Path,
 ) -> list[str]:
-    """Invoke a verified package-root launcher without cmd absolute-path quote ambiguity."""
+    """Return discrete arguments for a verified package-root batch launcher."""
     resolved_path = path.resolve()
     if resolved_path.parent != cwd.resolve():
         raise ValueError("portable batch launcher must be invoked from its package root")
-    invocation = subprocess.list2cmdline([f".\\{resolved_path.name}", *arguments])
-    return [comspec, "/d", "/c", invocation]
+    return [str(resolved_path), *arguments]
 
 
 def _run_json(
@@ -631,6 +629,7 @@ def _run_json(
     *,
     cwd: Path,
     environment: dict[str, str],
+    shell: bool = False,
     timeout_seconds: float = 600.0,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     completed = subprocess.run(
@@ -638,6 +637,7 @@ def _run_json(
         cwd=cwd,
         env=environment,
         check=False,
+        shell=shell,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -647,6 +647,7 @@ def _run_json(
     record: dict[str, Any] = {
         "command": command,
         "cwd": str(cwd),
+        "shell": shell,
         "exit_code": completed.returncode,
         "stdout": completed.stdout,
         "stderr": completed.stderr,
@@ -715,17 +716,16 @@ def execute_windows_portable(
         }
     )
     commands: list[dict[str, Any]] = []
-    comspec = os.environ.get("COMSPEC", "cmd.exe")
 
     doctor, doctor_record = _run_json(
         _windows_batch_command(
-            comspec,
             package_root / "topoforge.cmd",
             ["doctor"],
             cwd=package_root,
         ),
         cwd=package_root,
         environment=environment,
+        shell=True,
     )
     commands.append(doctor_record)
     if doctor.get("topoforge") != expected_version:
@@ -736,7 +736,6 @@ def execute_windows_portable(
     input_root.mkdir(parents=True)
     web, web_record = _run_json(
         _windows_batch_command(
-            comspec,
             package_root / "TopoForge-Web.cmd",
             [
                 "--check",
@@ -752,6 +751,7 @@ def execute_windows_portable(
         ),
         cwd=package_root,
         environment=environment,
+        shell=True,
     )
     commands.append(web_record)
     if web.get("required_checks_passed") is not True:
