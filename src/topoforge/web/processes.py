@@ -7,6 +7,7 @@ import ctypes
 import os
 import signal
 import subprocess
+import sys
 import time
 from enum import StrEnum
 from pathlib import Path
@@ -41,7 +42,28 @@ def worker_process_options(
     return {"start_new_session": True}
 
 
+def _darwin_process_is_alive(pid: int) -> bool | None:
+    completed = subprocess.run(
+        ["/bin/ps", "-o", "stat=", "-p", str(pid)],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    state = completed.stdout.strip()
+    if completed.returncode == 0 and state:
+        return not state.startswith("Z")
+    if completed.returncode == 1 and not state:
+        return False
+    return None
+
+
 def _posix_process_is_alive(pid: int) -> bool:
+    if sys.platform == "darwin":
+        darwin_alive = _darwin_process_is_alive(pid)
+        if darwin_alive is not None:
+            return darwin_alive
     proc_root = Path("/proc")
     if proc_root.is_dir():
         try:

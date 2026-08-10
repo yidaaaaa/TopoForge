@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import signal
 import subprocess
 from collections.abc import Iterator
@@ -40,6 +41,51 @@ def test_process_liveness_rejects_nonpositive_pid() -> None:
     assert process_is_alive(0, platform_family=ProcessPlatform.POSIX) is False
     with pytest.raises(ValueError, match="positive"):
         terminate_process_tree(0, platform_family=ProcessPlatform.POSIX)
+
+
+@pytest.mark.parametrize(
+    ("returncode", "state", "expected"),
+    [
+        (0, "S+\n", True),
+        (0, "Z+\n", False),
+        (1, "", False),
+    ],
+)
+def test_darwin_posix_liveness_uses_ps_state(
+    monkeypatch: pytest.MonkeyPatch,
+    returncode: int,
+    state: str,
+    expected: bool,
+) -> None:
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, returncode, stdout=state, stderr="")
+
+    monkeypatch.setattr(processes.sys, "platform", "darwin")
+    monkeypatch.setattr(processes.subprocess, "run", fake_run)
+
+    assert process_is_alive(43210, platform_family=ProcessPlatform.POSIX) is expected
+    assert calls[0][0] == ["/bin/ps", "-o", "stat=", "-p", "43210"]
+    assert calls[0][1] == {
+        "check": False,
+        "capture_output": True,
+        "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+    }
+
+
+def test_non_darwin_posix_liveness_skips_ps(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(processes.sys, "platform", "linux")
+    monkeypatch.setattr(
+        processes.subprocess,
+        "run",
+        lambda *args, **kwargs: pytest.fail("non-Darwin POSIX must not invoke ps"),
+    )
+
+    assert process_is_alive(os.getpid(), platform_family=ProcessPlatform.POSIX) is True
 
 
 def test_posix_termination_escalates_one_isolated_process_group(
