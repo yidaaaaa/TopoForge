@@ -2,6 +2,7 @@
 /.agent/
 /.agents/
 /.codex/
+/.worktreeinclude
 /AGENTS.md
 /.ruff_cache/
 /.pytest_cache/
