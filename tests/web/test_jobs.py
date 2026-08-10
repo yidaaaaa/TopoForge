@@ -890,7 +890,7 @@ def test_completed_job_maintenance_backup_cleanup_and_restore(
     try:
         submitted = manager.submit(make_job_request(web_config, name="maintained"))
         completed = wait_for_terminal(manager, submitted.job_id)
-        assert completed.state is JobState.COMPLETED
+        assert completed.state is JobState.COMPLETED, completed.error
         assert completed.summary is not None
 
         unused = completed.workspace_dir / "stages" / "99-unused" / "stale"
