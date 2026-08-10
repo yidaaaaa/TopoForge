@@ -7,7 +7,7 @@ import json
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Self, TypeVar
 
 import numpy as np
 import rasterio
@@ -28,6 +28,7 @@ _TILE_ARTIFACT_SCHEMA_VERSION = "topoforge-tile-artifact-v1"
 _ASSEMBLY_SCHEMA_VERSION = "topoforge-assembly-manifest-v1"
 _COVERAGE_SCHEMA_VERSION = "topoforge-tile-coverage-v1"
 Sha256Hex = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+_ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 
 class TileValidation(BaseModel):
@@ -229,7 +230,7 @@ def _write_canonical_json(path: Path, value: BaseModel | dict[str, Any]) -> None
     path.write_bytes(_canonical_json_bytes(value))
 
 
-def _read_canonical_json[ModelT: BaseModel](path: Path, model: type[ModelT]) -> ModelT:
+def _read_canonical_json(path: Path, model: type[_ModelT]) -> _ModelT:
     value = model.model_validate_json(path.read_text(encoding="utf-8"))
     if path.read_bytes() != _canonical_json_bytes(value):
         raise ConfigurationError(f"JSON artifact is not canonical: {path}")

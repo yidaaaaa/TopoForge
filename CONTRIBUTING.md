@@ -1,7 +1,7 @@
 # Contributing
 
 1. Read `AGENTS.md` and `.agent/{PLANS,STATE,DECISIONS,ISSUES}.md`.
-2. Install with `uv sync --locked --all-groups` on Python 3.12.
+2. Install with `uv sync --locked --all-groups` on CPython 3.11–3.14.
 3. Keep units in names and preserve CRS, vertical-datum, NoData, license, and attribution fields.
 4. Add measured tests for every geometry, raster, provider, slicer, release, or benchmark behavior.
 5. Run the static, test, release archive, reference-region, and benchmark gates from the README.

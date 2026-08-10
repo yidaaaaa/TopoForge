@@ -9,19 +9,23 @@ description = "Reproducible, provenance-aware terrain models for additive manufa
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "DATA_LICENSES.md", "THIRD_PARTY_NOTICES.md"]
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.11,<3.15"
 authors = [{ name = "TopoForge contributors" }]
 keywords = ["3d-printing", "dem", "gis", "terrain"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Environment :: Console",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Scientific/Engineering :: GIS",
 ]
 dependencies = [
   "fastapi>=0.116,<1",
   "lib3mf==2.5.0",
+  "manifold3d>=3.5,<4",
   "numpy>=2.1,<2.5",
   "pillow>=11,<12",
   "pydantic>=2.10,<3",
@@ -91,7 +95,7 @@ markers = [
 ]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py311"
 line-length = 100
 src = ["src", "tests"]
 
@@ -102,7 +106,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 "tests/**/*.py" = ["S101"]
 
 [tool.pyright]
-pythonVersion = "3.12"
+pythonVersion = "3.11"
 typeCheckingMode = "standard"
 include = ["src"]
 reportMissingTypeStubs = false

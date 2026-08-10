@@ -8,7 +8,7 @@ import math
 import threading
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Literal, Self, TypeVar
 
 import numpy as np
 import numpy.typing as npt
@@ -40,6 +40,7 @@ _WEB_MERCATOR_MAX_LATITUDE = 85.05112878
 Sha256Hex = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 BoundsWgs84 = tuple[float, float, float, float]
 BoundsMm = tuple[float, float, float, float, float, float]
+_ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 
 class MapTileStyle(StrEnum):
@@ -191,7 +192,7 @@ def _canonical_bytes(value: BaseModel | dict[str, Any]) -> bytes:
     ).encode("utf-8")
 
 
-def _read_canonical[ModelT: BaseModel](path: Path, model_type: type[ModelT]) -> ModelT:
+def _read_canonical(path: Path, model_type: type[_ModelT]) -> _ModelT:
     try:
         value = model_type.model_validate_json(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:

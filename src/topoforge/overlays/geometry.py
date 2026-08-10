@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
 
 import numpy as np
 import numpy.typing as npt
@@ -35,7 +35,7 @@ from topoforge.models import ScalingResult
 from topoforge.overlays.models import OverlayKind, OverlaySourceConfig
 from topoforge.overlays.sources import ParsedOverlayFeature
 
-type FloatArray = npt.NDArray[np.float64]
+FloatArray: TypeAlias = npt.NDArray[np.float64]
 
 
 @dataclass(frozen=True, slots=True)

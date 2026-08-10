@@ -15,7 +15,7 @@ import threading
 from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -88,6 +88,7 @@ _SELECTABLE_SUFFIXES = {
     ".yaml",
     ".yml",
 }
+_ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 
 def expected_workflow_stages(request: JobCreateRequest) -> tuple[WorkflowStage, ...]:
@@ -128,7 +129,7 @@ def _atomic_write(path: Path, value: BaseModel | dict[str, Any]) -> None:
     temporary.replace(path)
 
 
-def _read_model[ModelT: BaseModel](path: Path, model_type: type[ModelT]) -> ModelT:
+def _read_model(path: Path, model_type: type[_ModelT]) -> _ModelT:
     try:
         return model_type.model_validate_json(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:

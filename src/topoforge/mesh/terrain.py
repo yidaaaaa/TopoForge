@@ -8,14 +8,14 @@ exactly the same edges.
 
 from __future__ import annotations
 
-from typing import cast
+from typing import TypeAlias, cast
 
 import numpy as np
 import numpy.typing as npt
 import trimesh
 
-type FloatArray = npt.NDArray[np.float64]
-type IntArray = npt.NDArray[np.int64]
+FloatArray: TypeAlias = npt.NDArray[np.float64]
+IntArray: TypeAlias = npt.NDArray[np.int64]
 
 
 def build_rectangular_terrain_mesh(
