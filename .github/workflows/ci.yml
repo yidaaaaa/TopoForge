@@ -144,8 +144,26 @@ jobs:
           $message = "{0}: {1}" -f $report.error.type, $report.error.message
           $message = $message.Replace("%", "%25").Replace("`r", "%0D").Replace("`n", "%0A")
           Write-Output "::error title=Windows system acceptance::$message"
-      - name: Run Python regression suite
-        run: uv run pytest
+      - id: windows-pytest
+        name: Run Python regression suite
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "artifacts/logs" | Out-Null
+          uv run pytest -q --tb=short 2>&1 |
+            Tee-Object -FilePath "artifacts/logs/ci-windows-x64-pytest.log"
+          exit $LASTEXITCODE
+      - name: Report Windows Python regression failure
+        if: failure() && steps.windows-pytest.outcome == 'failure'
+        shell: pwsh
+        run: |
+          $logPath = "artifacts/logs/ci-windows-x64-pytest.log"
+          if (-not (Test-Path -LiteralPath $logPath -PathType Leaf)) {
+            Write-Output "::error title=Windows pytest::failure log was not produced"
+            exit 0
+          }
+          $message = (Get-Content -LiteralPath $logPath -Tail 160) -join "`n"
+          $message = $message.Replace("%", "%25").Replace("`r", "%0D").Replace("`n", "%0A")
+          Write-Output "::error title=Windows pytest::$message"
       - name: Retain Windows core evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -154,6 +172,7 @@ jobs:
           path: |
             artifacts/logs/ci-windows-x64-core.json
             artifacts/logs/ci-windows-x64-system.json
+            artifacts/logs/ci-windows-x64-pytest.log
           if-no-files-found: error
 
   windows-bambu-contracts:

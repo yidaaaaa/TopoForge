@@ -289,7 +289,12 @@ def test_windows_core_ci_contract() -> None:
     assert "failure() && steps.windows-system.outcome == 'failure'" in windows_steps
     assert "--require-windows" in windows_steps
     assert "ci-windows-x64-system.json" in windows_steps
-    assert "uv run pytest" in windows_steps
+    assert "uv run pytest -q --tb=short" in windows_steps
+    assert "Tee-Object" in windows_steps
+    assert "ci-windows-x64-pytest.log" in windows_steps
+    assert "Report Windows Python regression failure" in windows_steps
+    assert "failure() && steps.windows-pytest.outcome == 'failure'" in windows_steps
+    assert "::error title=Windows pytest" in windows_steps
     assert "actions/upload-artifact@v4" in windows_steps
     assert "setup-node" not in windows_steps
     assert "playwright" not in windows_steps
