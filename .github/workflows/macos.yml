@@ -92,12 +92,14 @@ jobs:
           cmp "$primary/preview.glb" "$repeat/preview.glb"
       - name: Check the packaged local Web application with macOS defaults
         run: uv run topoforge web --check --no-open --input-root "$GITHUB_WORKSPACE"
-      - name: Run Python quality and regression gates
-        run: |
-          uv run ruff check .
-          uv run ruff format --check .
-          uv run pyright
-          uv run pytest
+      - name: Run Ruff lint gate
+        run: uv run ruff check .
+      - name: Run Ruff format gate
+        run: uv run ruff format --check .
+      - name: Run Pyright gate
+        run: uv run pyright
+      - name: Run Python regression suite
+        run: uv run pytest
       - name: Retain bounded native runtime evidence
         if: always()
         uses: actions/upload-artifact@v4

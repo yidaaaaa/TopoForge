@@ -45,9 +45,14 @@ def test_native_macos_ci_uses_only_frozen_arm64_runner_labels() -> None:
     workflow = yaml.safe_load(workflow_text)
     job = workflow["jobs"]["native-arm64"]
     runners = {item["runner"] for item in job["strategy"]["matrix"]["include"]}
+    step_runs = {step.get("name"): step.get("run") for step in job["steps"]}
 
     assert runners == {"macos-15", "macos-26"}
     assert job["env"]["MACOSX_DEPLOYMENT_TARGET"] == "15.0"
+    assert step_runs["Run Ruff lint gate"] == "uv run ruff check ."
+    assert step_runs["Run Ruff format gate"] == "uv run ruff format --check ."
+    assert step_runs["Run Pyright gate"] == "uv run pyright"
+    assert step_runs["Run Python regression suite"] == "uv run pytest"
     assert "macos-latest" not in workflow_text
     assert 'test "$(uname -m)" = "arm64"' in workflow_text
     assert "scripts/verify_macos_support_matrix.py" in workflow_text
