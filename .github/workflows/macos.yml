@@ -104,8 +104,14 @@ jobs:
         run: uv run pytest tests/slicer
       - name: Run unit regression suite
         run: uv run pytest tests/unit
-      - name: Run Web regression suite
-        run: uv run pytest tests/web
+      - name: Run Web API regression suite
+        run: uv run pytest tests/web/test_api.py
+      - name: Run Web job regression suite
+        run: uv run pytest tests/web/test_jobs.py
+      - name: Run Web map tile regression suite
+        run: uv run pytest tests/web/test_map_tiles.py
+      - name: Run Web process regression suite
+        run: uv run pytest tests/web/test_processes.py
       - name: Run CLI, geometry, and property regression suite
         run: uv run pytest tests/cli tests/geometry tests/property
       - name: Run provider regression suite

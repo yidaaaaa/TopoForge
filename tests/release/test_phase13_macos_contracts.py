@@ -55,7 +55,15 @@ def test_native_macos_ci_uses_only_frozen_arm64_runner_labels() -> None:
     assert step_runs["Run release regression suite"] == "uv run pytest tests/release"
     assert step_runs["Run slicer regression suite"] == "uv run pytest tests/slicer"
     assert step_runs["Run unit regression suite"] == "uv run pytest tests/unit"
-    assert step_runs["Run Web regression suite"] == "uv run pytest tests/web"
+    assert step_runs["Run Web API regression suite"] == "uv run pytest tests/web/test_api.py"
+    assert step_runs["Run Web job regression suite"] == "uv run pytest tests/web/test_jobs.py"
+    assert (
+        step_runs["Run Web map tile regression suite"]
+        == "uv run pytest tests/web/test_map_tiles.py"
+    )
+    assert (
+        step_runs["Run Web process regression suite"] == "uv run pytest tests/web/test_processes.py"
+    )
     assert step_runs["Run CLI, geometry, and property regression suite"] == (
         "uv run pytest tests/cli tests/geometry tests/property"
     )
