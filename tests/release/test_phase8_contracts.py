@@ -54,7 +54,7 @@ def _required_sdist_files() -> set[str]:
         "src/topoforge/web/static/index.html",
         "tests/release/test_phase8_contracts.py",
         "tests/release/test_public_tree.py",
-        "tests/release/test_windows_bambu.py",
+        "tests/release/test_windows_bambu_acceptance.py",
         "tests/release/test_windows_portable.py",
         "tests/release/test_windows_system.py",
         "tests/unit/test_platforms.py",
@@ -260,6 +260,25 @@ def test_windows_core_ci_contract() -> None:
     assert "actions/upload-artifact@v4" in windows_steps
     assert "setup-node" not in windows_steps
     assert "playwright" not in windows_steps
+
+
+def test_windows_bambu_ci_is_explicitly_contract_only() -> None:
+    root = Path(__file__).parents[2]
+    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    job = workflow["jobs"]["windows-bambu-contracts"]
+    steps = json.dumps(job["steps"], sort_keys=True)
+
+    assert job["name"] == "Windows x64 Bambu contracts (no official binary)"
+    assert job["needs"] == "windows-core"
+    assert job["runs-on"] == "windows-2022"
+    assert '"architecture": "x64"' in steps
+    assert "tests/slicer/test_bambu_windows.py" in steps
+    assert "tests/unit/test_bambu_profiles.py" in steps
+    assert "tests/cli/test_windows_bambu.py" in steps
+    assert "tests/release/test_windows_bambu_acceptance.py" in steps
+    assert "scripts/verify_windows_bambu.py --help" in steps
+    assert "--require-windows" not in steps
+    assert "upload-artifact" not in steps
 
 
 def test_windows_installed_release_ci_contract() -> None:

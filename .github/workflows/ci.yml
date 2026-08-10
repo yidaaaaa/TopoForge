@@ -121,6 +121,33 @@ jobs:
             artifacts/logs/ci-windows-x64-system.json
           if-no-files-found: error
 
+  windows-bambu-contracts:
+    name: Windows x64 Bambu contracts (no official binary)
+    needs: windows-core
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.24"
+          enable-cache: true
+      - name: Install locked core and test dependencies
+        run: uv sync --locked --all-groups
+      - name: Run Windows Bambu discovery and acceptance contracts
+        run: >-
+          uv run pytest -q
+          tests/slicer/test_bambu_windows.py
+          tests/unit/test_bambu_profiles.py
+          tests/cli/test_windows_bambu.py
+          tests/release/test_windows_bambu_acceptance.py
+      - name: Verify native Bambu acceptance command surface
+        run: uv run python scripts/verify_windows_bambu.py --help
+
   windows-installed-release:
     name: Windows x64 installed release
     needs: windows-core

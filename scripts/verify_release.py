@@ -87,7 +87,7 @@ def inspect_sdist(path: Path, version: str) -> dict[str, Any]:
         "src/topoforge/web/static/index.html",
         "tests/release/test_phase8_contracts.py",
         "tests/release/test_public_tree.py",
-        "tests/release/test_windows_bambu.py",
+        "tests/release/test_windows_bambu_acceptance.py",
         "tests/release/test_windows_portable.py",
         "tests/release/test_windows_system.py",
         "tests/unit/test_platforms.py",
