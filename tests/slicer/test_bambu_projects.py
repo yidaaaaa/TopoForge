@@ -5,8 +5,10 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import shutil
 import stat
+import struct
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -119,6 +121,7 @@ def test_probe_record_is_version_parsed_and_hash_bound(
     monkeypatch.setattr(bambu_projects_module, "run_command", runner)
     executable = tmp_path / "BambuStudio"
     executable.write_bytes(b"test executable identity\n")
+    executable.chmod(0o755)
 
     report = probe_bambu_studio(
         executable,
@@ -340,6 +343,102 @@ def test_central_directory_limits_fail_before_archive_reads(
         )
 
 
+@pytest.mark.parametrize(
+    ("case", "message"),
+    [
+        ("classic_count", "member count"),
+        ("classic_size", "central directory size"),
+        ("actual_count", "entry count does not match"),
+        ("zip64_count", "member count"),
+    ],
+)
+def test_zip_metadata_limits_fail_before_zipfile_construction(
+    case: str,
+    message: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "metadata-only.3mf"
+    primary = tmp_path / "primary.gcode"
+    primary.write_bytes(b"; BambuStudio 02.07.01.62\n")
+    excessive_entries = bambu_projects_module._PROJECT_MAX_MEMBERS + 1
+    if case == "classic_count":
+        payload = struct.pack(
+            "<4sHHHHIIH",
+            b"PK\x05\x06",
+            0,
+            0,
+            excessive_entries,
+            excessive_entries,
+            0,
+            0,
+            0,
+        )
+    elif case == "classic_size":
+        payload = struct.pack(
+            "<4sHHHHIIH",
+            b"PK\x05\x06",
+            0,
+            0,
+            0,
+            0,
+            bambu_projects_module._PROJECT_MAX_CENTRAL_DIRECTORY_BYTES + 1,
+            0,
+            0,
+        )
+    elif case == "actual_count":
+        central_directory = (b"PK\x01\x02" + b"\x00" * 42) * 2
+        payload = central_directory + struct.pack(
+            "<4sHHHHIIH",
+            b"PK\x05\x06",
+            0,
+            0,
+            1,
+            1,
+            len(central_directory),
+            0,
+            0,
+        )
+    elif case == "zip64_count":
+        zip64 = struct.pack(
+            "<4sQHHIIQQQQ",
+            b"PK\x06\x06",
+            44,
+            45,
+            45,
+            0,
+            0,
+            excessive_entries,
+            excessive_entries,
+            0,
+            0,
+        )
+        locator = struct.pack("<4sIQI", b"PK\x06\x07", 0, 0, 1)
+        eocd = struct.pack(
+            "<4sHHHHIIH",
+            b"PK\x05\x06",
+            0,
+            0,
+            0xFFFF,
+            0xFFFF,
+            0xFFFFFFFF,
+            0xFFFFFFFF,
+            0,
+        )
+        payload = zip64 + locator + eocd
+    else:
+        raise AssertionError(case)
+    project.write_bytes(payload)
+
+    def forbidden_zipfile(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("ZipFile must not be constructed for oversized metadata")
+
+    monkeypatch.setattr(bambu_projects_module, "ZipFile", forbidden_zipfile)
+
+    with pytest.raises(RuntimeError, match=message):
+        archive_evidence(project, primary)
+
+
 def test_canonical_writer_does_not_follow_the_legacy_fixed_temp_symlink(
     tmp_path: Path,
 ) -> None:
@@ -391,6 +490,96 @@ def test_sha256_reads_the_pinned_file_after_final_path_swap(
 
     assert bambu_projects_module.sha256(source) == hashlib.sha256(original).hexdigest()
     assert source.read_bytes() == b"attacker replacement"
+
+
+def test_regular_evidence_rejects_preexisting_hard_links(tmp_path: Path) -> None:
+    source = tmp_path / "evidence.bin"
+    alias = tmp_path / "evidence-alias.bin"
+    source.write_bytes(b"sensitive-token")
+    try:
+        os.link(source, alias)
+    except OSError as exc:
+        pytest.skip(f"hard links are unavailable: {exc}")
+
+    with pytest.raises(RuntimeError, match="exactly one hard link"):
+        bambu_projects_module.sha256(source)
+
+
+def test_pinned_evidence_detects_a_hard_link_created_after_open(tmp_path: Path) -> None:
+    source = tmp_path / "evidence.bin"
+    alias = tmp_path / "opened-after-hardlink.bin"
+    source.write_bytes(b"sensitive-token")
+
+    with bambu_projects_module._open_pinned_regular_file(
+        source,
+        label="test evidence",
+    ) as pinned:
+        try:
+            os.link(source, alias)
+        except OSError as exc:
+            pytest.skip(f"hard links are unavailable: {exc}")
+        with pytest.raises(RuntimeError, match="changed while it was being read"):
+            bambu_projects_module._require_pinned_unchanged(
+                pinned,
+                label="test evidence",
+            )
+
+
+def test_snapshot_copy_uses_the_already_pinned_file_after_path_swap(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "generated.3mf"
+    detached = tmp_path / "generated.original.3mf"
+    replacement = tmp_path / "replacement.3mf"
+    destination = tmp_path / "snapshot" / "generated.3mf"
+    original = b"trusted generated bytes"
+    source.write_bytes(original)
+    replacement.write_bytes(b"attacker replacement")
+
+    with bambu_projects_module._open_pinned_regular_file(
+        source,
+        label="generated evidence",
+    ) as pinned:
+        source.rename(detached)
+        replacement.rename(source)
+        digest, size = bambu_projects_module._copy_pinned_regular_file_snapshot(
+            pinned,
+            destination,
+            label="generated evidence",
+            maximum_bytes=1024,
+        )
+
+    assert destination.read_bytes() == original
+    assert digest == hashlib.sha256(original).hexdigest()
+    assert size == len(original)
+
+
+def test_generated_json_parse_and_copy_share_one_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "result.json"
+    destination = tmp_path / "evidence" / "result.json"
+    original = b'{"return_code":0,"trusted":true}\n'
+    source.write_bytes(original)
+    real_write = bambu_projects_module._write_atomic_bytes
+
+    def racing_write(path: Path, payload: bytes) -> Path:
+        if path == destination:
+            source.write_bytes(b'{"return_code":0,"attacker":true}\n')
+        return real_write(path, payload)
+
+    monkeypatch.setattr(bambu_projects_module, "_write_atomic_bytes", racing_write)
+
+    value = bambu_projects_module._snapshot_generated_json(
+        source,
+        destination,
+        label="generated result",
+    )
+
+    assert value == {"return_code": 0, "trusted": True}
+    assert destination.read_bytes() == original
+    assert b"attacker" in source.read_bytes()
 
 
 def test_json_snapshot_fails_closed_after_parent_path_swap_without_reading_replacement(
@@ -651,36 +840,43 @@ def test_canonical_writer_anchors_replace_when_parent_is_swapped(
     assert (detached_parent / destination.name).read_bytes() == b'{"safe":true}\n'
 
 
-def test_source_snapshot_destination_mkdir_swap_fails_closed(
+@pytest.mark.parametrize("operation", ["copy", "atomic_write"])
+@pytest.mark.parametrize("force_fallback", [False, True])
+def test_nested_symlink_destination_does_not_create_victim_directories(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+    force_fallback: bool,
 ) -> None:
     source = tmp_path / "source.3mf"
     source.write_bytes(b"trusted")
-    destination_parent = tmp_path / "snapshots"
-    destination = destination_parent / "snapshot.3mf"
     victim_parent = tmp_path / "victim"
     victim_parent.mkdir()
-    real_mkdir = Path.mkdir
-    swapped = False
-
-    def racing_mkdir(path: Path, *args: Any, **kwargs: Any) -> None:
-        nonlocal swapped
-        real_mkdir(path, *args, **kwargs)
-        if path == destination_parent and not swapped:
-            swapped = True
-            path.rmdir()
-            path.symlink_to(victim_parent, target_is_directory=True)
-
-    monkeypatch.setattr(Path, "mkdir", racing_mkdir)
-
-    with pytest.raises(RuntimeError, match="without following links"):
-        bambu_projects_module._copy_regular_file_snapshot(
-            source,
-            destination,
-            label="test source",
-            maximum_bytes=1024,
+    anchor = tmp_path / "anchor"
+    anchor.mkdir()
+    linked = anchor / "linked"
+    try:
+        linked.symlink_to(victim_parent, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symbolic links are unavailable: {exc}")
+    destination = linked / "missing" / "nested" / "snapshot.3mf"
+    if force_fallback:
+        monkeypatch.setattr(
+            bambu_projects_module,
+            "_descriptor_relative_supported",
+            lambda: False,
         )
+
+    with pytest.raises(RuntimeError, match=r"symbolic link|reparse|without following"):
+        if operation == "copy":
+            bambu_projects_module._copy_regular_file_snapshot(
+                source,
+                destination,
+                label="test source",
+                maximum_bytes=1024,
+            )
+        else:
+            bambu_projects_module._write_atomic_bytes(destination, b"trusted")
 
     assert list(victim_parent.iterdir()) == []
 
@@ -1169,11 +1365,75 @@ def test_project_model_measurement_streams_without_full_tree_fromstring(
     assert measurement["triangle_count"] == 2
 
 
+def _shared_component_dag_model(depth: int) -> bytes:
+    objects = [
+        """<object id="1" type="model"><mesh><vertices>
+        <vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/>
+        <vertex x="0" y="1" z="1"/></vertices>
+        <triangles><triangle v1="0" v2="1" v3="2"/></triangles>
+        </mesh></object>"""
+    ]
+    for object_id in range(2, depth + 2):
+        referenced_id = object_id - 1
+        objects.append(
+            f'<object id="{object_id}" type="model"><components>'
+            f'<component objectid="{referenced_id}"/>'
+            f'<component objectid="{referenced_id}"/>'
+            "</components></object>"
+        )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<model unit="millimeter" '
+        'xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
+        f"<resources>{''.join(objects)}</resources>"
+        f'<build><item objectid="{depth + 1}"/></build></model>'
+    ).encode()
+
+
+@pytest.mark.parametrize(
+    ("constant", "limit", "message"),
+    [
+        ("_PROJECT_MAX_EXPANDED_INSTANCES", 1_000, "object instance limit"),
+        ("_PROJECT_MAX_EXPANDED_VERTICES", 1_000, "vertex limit"),
+        ("_PROJECT_MAX_EXPANDED_TRIANGLES", 1_000, "triangle limit"),
+        ("_PROJECT_MAX_COMPONENT_DEPTH", 4, "depth limit"),
+    ],
+)
+def test_project_model_measurement_preflights_shared_dag_expansion(
+    monkeypatch: pytest.MonkeyPatch,
+    constant: str,
+    limit: int,
+    message: str,
+) -> None:
+    monkeypatch.setattr(bambu_projects_module, constant, limit)
+
+    with pytest.raises(RuntimeError, match=message):
+        bambu_projects_module._project_model_measurement(_shared_component_dag_model(12))
+
+
 def test_project_model_measurement_rejects_out_of_range_triangle_indices() -> None:
     invalid = _MODEL_XML.replace(b'v3="2"', b'v3="99"')
 
     with pytest.raises(RuntimeError, match="triangle indices are invalid"):
         bambu_projects_module._project_model_measurement(invalid)
+
+
+def test_atomic_publication_never_replaces_an_existing_empty_directory(
+    tmp_path: Path,
+) -> None:
+    staging = tmp_path / "stage"
+    output = tmp_path / "output"
+    staging.mkdir()
+    (staging / "manifest.json").write_text("trusted", encoding="utf-8")
+    output.mkdir()
+    output_identity = (output.stat().st_dev, output.stat().st_ino)
+
+    with pytest.raises(RuntimeError, match="destination already exists"):
+        bambu_projects_module._publish_directory_no_replace(staging, output)
+
+    assert (output.stat().st_dev, output.stat().st_ino) == output_identity
+    assert list(output.iterdir()) == []
+    assert staging.is_dir()
 
 
 def test_semantic_verification_accepts_relocated_identical_executable(
@@ -1393,3 +1653,105 @@ def test_verifier_rejects_symlinked_output_manifest(
 
     with pytest.raises(RuntimeError, match="regular non-link file"):
         _verify_semantic_evidence(semantic_evidence, project_set)
+
+
+def test_generation_race_cannot_replace_an_empty_destination_and_cleans_stage(
+    semantic_evidence: _SemanticEvidence,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "raced-project-set"
+    runner = _SemanticBambuRunner()
+    real_publish = bambu_projects_module._publish_directory_no_replace
+    raced_identity: tuple[int, int] | None = None
+
+    def racing_publish(staging: Path, destination: Path) -> None:
+        nonlocal raced_identity
+        destination.mkdir()
+        information = destination.stat()
+        raced_identity = (information.st_dev, information.st_ino)
+        real_publish(staging, destination)
+
+    monkeypatch.setattr(bambu_projects_module, "run_command", runner)
+    monkeypatch.setattr(
+        bambu_projects_module,
+        "_publish_directory_no_replace",
+        racing_publish,
+    )
+
+    with pytest.raises(RuntimeError, match="destination already exists"):
+        generate_bambu_project_evidence(
+            semantic_evidence.print_set,
+            semantic_evidence.slice_set,
+            semantic_evidence.executable,
+            output,
+            timeout_seconds=30.0,
+        )
+
+    information = output.stat()
+    assert raced_identity == (information.st_dev, information.st_ino)
+    assert list(output.iterdir()) == []
+    assert list(tmp_path.glob(f".{output.name}.topoforge-stage-*")) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows holds the locked executable against rename")
+@pytest.mark.parametrize("mutation_stage", ["probe", "build", "reopen"])
+def test_generation_rejects_executable_replacement_at_every_execution_boundary(
+    semantic_evidence: _SemanticEvidence,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation_stage: str,
+) -> None:
+    executable = tmp_path / "BambuStudio"
+    shutil.copyfile(semantic_evidence.executable, executable)
+    executable.chmod(0o755)
+    detached = tmp_path / "BambuStudio.detached"
+    delegate = _SemanticBambuRunner()
+    replaced = False
+
+    def replacing_runner(
+        command: Sequence[str],
+        *,
+        timeout_seconds: float,
+        env: Mapping[str, str] | None = None,
+        cwd: Path | None = None,
+    ) -> CommandExecution:
+        nonlocal replaced
+        result = delegate(
+            command,
+            timeout_seconds=timeout_seconds,
+            env=env,
+            cwd=cwd,
+        )
+        normalized = tuple(command)
+        matches = (
+            (mutation_stage == "probe" and "--help" in normalized)
+            or (mutation_stage == "build" and "--export-3mf" in normalized)
+            or (
+                mutation_stage == "reopen"
+                and "--export-3mf" not in normalized
+                and Path(normalized[-1]).name == "model.bambu-p2s.3mf"
+            )
+        )
+        if matches and not replaced:
+            replaced = True
+            executable.rename(detached)
+            shutil.copyfile(detached, executable)
+            executable.chmod(0o755)
+        return result
+
+    monkeypatch.setattr(bambu_projects_module, "run_command", replacing_runner)
+    output = tmp_path / f"replaced-{mutation_stage}"
+
+    with pytest.raises(RuntimeError, match=r"executable.*(?:changed|identity)"):
+        generate_bambu_project_evidence(
+            semantic_evidence.print_set,
+            semantic_evidence.slice_set,
+            executable,
+            output,
+            timeout_seconds=30.0,
+        )
+
+    assert replaced is True
+    assert not output.exists()
+    assert list(tmp_path.glob(f".{output.name}.topoforge-stage-*")) == []

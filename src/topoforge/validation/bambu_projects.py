@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import io
 import json
@@ -12,6 +14,7 @@ import re
 import secrets
 import shutil
 import stat
+import struct
 import sys
 import tempfile
 import unicodedata
@@ -36,6 +39,7 @@ TILE_SCHEMA_VERSION = "topoforge-bambu-tile-project-v1"
 _MAX_JSON_BYTES = 16 * 1024 * 1024
 _PROJECT_MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024
 _PROJECT_MAX_MEMBERS = 20_000
+_PROJECT_MAX_CENTRAL_DIRECTORY_BYTES = 64 * 1024 * 1024
 _PROJECT_MAX_MEMBER_BYTES = 1024 * 1024 * 1024
 _PROJECT_MAX_TOTAL_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
 _PROJECT_MAX_COMPRESSION_RATIO = 1000.0
@@ -43,6 +47,13 @@ _PROJECT_MAX_RELATIONSHIP_BYTES = 8 * 1024 * 1024
 # A 64 MiB model keeps production terrain capacity while the streaming parser below
 # clears XML nodes eagerly instead of retaining a second full ElementTree.
 _PROJECT_MAX_MODEL_XML_BYTES = 64 * 1024 * 1024
+# Component graphs can encode exponentially many mesh instances in a tiny XML
+# document. These limits are checked with a memoized, saturating graph summary
+# before any transformed vertex traversal begins.
+_PROJECT_MAX_EXPANDED_INSTANCES = 100_000
+_PROJECT_MAX_EXPANDED_VERTICES = 10_000_000
+_PROJECT_MAX_EXPANDED_TRIANGLES = 20_000_000
+_PROJECT_MAX_COMPONENT_DEPTH = 128
 # Real Bambu G-code can be much larger than its metadata. The reader hashes all
 # 256 MiB but retains at most 32 MiB of comment lines consumed by the shared parser.
 _PROJECT_MAX_GCODE_TEXT_BYTES = 256 * 1024 * 1024
@@ -191,6 +202,13 @@ class _PinnedRegularFile:
 
 
 @dataclass(frozen=True, slots=True)
+class _ExecutableIdentity:
+    path: Path
+    pinned: _PinnedRegularFile
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
 class _BinarySnapshot:
     path: Path
     payload: bytes
@@ -227,6 +245,18 @@ def _absolute_path(path: Path) -> Path:
     return Path(os.path.abspath(os.fspath(path)))
 
 
+def _path_exists_no_follow(path: Path) -> bool:
+    try:
+        os.stat(path, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise RuntimeError(
+            f"path cannot be inspected without following links: {path}: {exc}"
+        ) from exc
+    return True
+
+
 def _directory_flags() -> int:
     return (
         os.O_RDONLY
@@ -248,6 +278,10 @@ def _is_link_or_reparse(information: os.stat_result) -> bool:
     )
 
 
+def _is_single_link_regular(information: os.stat_result) -> bool:
+    return stat.S_ISREG(information.st_mode) and information.st_nlink == 1
+
+
 def _checked_path_chain(path: Path, *, label: str) -> tuple[os.stat_result, ...]:
     absolute = _absolute_path(path)
     current = Path(absolute.anchor)
@@ -262,6 +296,100 @@ def _checked_path_chain(path: Path, *, label: str) -> tuple[os.stat_result, ...]
             raise RuntimeError(f"{label} path contains a symbolic link or reparse point: {current}")
         information.append(item)
     return tuple(information)
+
+
+def _ensure_directory_tree(path: Path, *, label: str) -> Path:
+    """Create a directory tree one component at a time without traversing links."""
+    absolute = _absolute_path(path)
+    if _descriptor_relative_supported() and os.mkdir in os.supports_dir_fd:
+        descriptor = -1
+        try:
+            descriptor = os.open(absolute.anchor, _directory_flags())
+            for part in absolute.parts[1:]:
+                try:
+                    next_descriptor = os.open(part, _directory_flags(), dir_fd=descriptor)
+                except FileNotFoundError:
+                    with suppress(FileExistsError):
+                        os.mkdir(part, 0o700, dir_fd=descriptor)
+                    next_descriptor = os.open(part, _directory_flags(), dir_fd=descriptor)
+                os.close(descriptor)
+                descriptor = next_descriptor
+            information = os.fstat(descriptor)
+            if not _directory_path_still_names(absolute, information):
+                raise RuntimeError(
+                    f"{label} directory path changed while it was created: {absolute}"
+                )
+        except OSError as exc:
+            raise RuntimeError(
+                f"{label} directory is unavailable without following links: {absolute}: {exc}"
+            ) from exc
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+        return absolute
+
+    current = Path(absolute.anchor)
+    try:
+        current_information = os.stat(current, follow_symlinks=False)
+    except OSError as exc:
+        raise RuntimeError(f"{label} directory anchor is unavailable: {current}: {exc}") from exc
+    if not stat.S_ISDIR(current_information.st_mode) or _is_link_or_reparse(current_information):
+        raise RuntimeError(f"{label} directory anchor is not a plain directory: {current}")
+    for part in absolute.parts[1:]:
+        candidate = current / part
+        parent_information = os.stat(current, follow_symlinks=False)
+        try:
+            information = os.stat(candidate, follow_symlinks=False)
+        except FileNotFoundError:
+            with suppress(FileExistsError):
+                os.mkdir(candidate, 0o700)
+            information = os.stat(candidate, follow_symlinks=False)
+            parent_after = os.stat(current, follow_symlinks=False)
+            if _object_identity(parent_after) != _object_identity(parent_information):
+                raise RuntimeError(
+                    f"{label} directory parent changed while creating: {candidate}"
+                ) from None
+        if not stat.S_ISDIR(information.st_mode) or _is_link_or_reparse(information):
+            raise RuntimeError(
+                f"{label} path contains a symbolic link, reparse point, or non-directory: "
+                f"{candidate}"
+            )
+        current = candidate
+    return absolute
+
+
+def _make_private_staging_directory(parent: Path, *, prefix: str) -> Path:
+    absolute_parent = _ensure_directory_tree(parent, label="Bambu staging parent")
+    if _descriptor_relative_supported() and os.mkdir in os.supports_dir_fd:
+        with _open_pinned_directory(absolute_parent, label="Bambu staging parent") as descriptor:
+            parent_information = os.fstat(descriptor)
+            for _attempt in range(128):
+                name = f"{prefix}{secrets.token_hex(16)}"
+                try:
+                    os.mkdir(name, 0o700, dir_fd=descriptor)
+                except FileExistsError:
+                    continue
+                if not _directory_path_still_names(absolute_parent, parent_information):
+                    with suppress(OSError):
+                        os.rmdir(name, dir_fd=descriptor)
+                    raise RuntimeError("Bambu staging parent changed while creating the stage")
+                return absolute_parent / name
+        raise RuntimeError("unable to allocate a unique Bambu staging directory")
+
+    before = _checked_path_chain(absolute_parent, label="Bambu staging parent")
+    staging = Path(tempfile.mkdtemp(prefix=prefix, dir=absolute_parent))
+    after = _checked_path_chain(absolute_parent, label="Bambu staging parent")
+    stage_information = os.stat(staging, follow_symlinks=False)
+    if (
+        tuple(_object_identity(item) for item in before)
+        != tuple(_object_identity(item) for item in after)
+        or not stat.S_ISDIR(stage_information.st_mode)
+        or _is_link_or_reparse(stage_information)
+    ):
+        with suppress(OSError):
+            os.rmdir(staging)
+        raise RuntimeError("Bambu staging parent changed while creating the stage")
+    return staging
 
 
 @contextmanager
@@ -312,8 +440,11 @@ def _open_pinned_regular_file(path: Path, *, label: str) -> Iterator[_PinnedRegu
             with _open_pinned_directory(absolute.parent, label=label) as parent_descriptor:
                 descriptor = os.open(absolute.name, flags, dir_fd=parent_descriptor)
                 information = os.fstat(descriptor)
-                if not stat.S_ISREG(information.st_mode):
-                    raise RuntimeError(f"{label} must be a regular non-link file: {path}")
+                if not _is_single_link_regular(information):
+                    raise RuntimeError(
+                        f"{label} must be a regular non-link file with exactly one hard link: "
+                        f"{path}"
+                    )
                 with os.fdopen(descriptor, "rb") as handle:
                     descriptor = -1
                     yield _PinnedRegularFile(
@@ -328,14 +459,14 @@ def _open_pinned_regular_file(path: Path, *, label: str) -> Iterator[_PinnedRegu
         information = os.fstat(descriptor)
         after = _checked_path_chain(absolute, label=label)
         if (
-            not stat.S_ISREG(information.st_mode)
+            not _is_single_link_regular(information)
             or not after
             or _stat_identity(after[-1]) != _stat_identity(information)
             or tuple(_object_identity(item) for item in before)
             != tuple(_object_identity(item) for item in after)
         ):
             raise RuntimeError(
-                f"{label} path changed while opening or is not a regular file: {path}"
+                f"{label} path changed while opening or is not a single-link regular file: {path}"
             )
         with os.fdopen(descriptor, "rb") as handle:
             descriptor = -1
@@ -346,14 +477,15 @@ def _open_pinned_regular_file(path: Path, *, label: str) -> Iterator[_PinnedRegu
             )
     except OSError as exc:
         raise RuntimeError(
-            f"{label} must be a regular non-link file and is unavailable: {path}: {exc}"
+            f"{label} must be a regular non-link file with exactly one hard link and is "
+            f"unavailable: {path}: {exc}"
         ) from exc
     finally:
         if descriptor >= 0:
             os.close(descriptor)
 
 
-def _stat_identity(information: os.stat_result) -> tuple[int, int, int, int, int, int]:
+def _stat_identity(information: os.stat_result) -> tuple[int, int, int, int, int, int, int]:
     return (
         information.st_dev,
         information.st_ino,
@@ -361,6 +493,7 @@ def _stat_identity(information: os.stat_result) -> tuple[int, int, int, int, int
         information.st_size,
         information.st_mtime_ns,
         information.st_ctime_ns,
+        information.st_nlink,
     )
 
 
@@ -419,6 +552,118 @@ def _read_binary_snapshot(
     )
 
 
+def _copy_pinned_regular_file_snapshot(
+    pinned: _PinnedRegularFile,
+    destination: Path,
+    *,
+    label: str,
+    maximum_bytes: int,
+) -> tuple[str, int]:
+    _ensure_directory_tree(destination.parent, label=f"{label} snapshot destination")
+    absolute_destination = _absolute_path(destination)
+    size = pinned.information.st_size
+    if size <= 0 or size > maximum_bytes:
+        raise RuntimeError(
+            f"{label} size {size} is outside the supported "
+            f"1..{maximum_bytes} byte range: {pinned.path}"
+        )
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    digest = hashlib.sha256()
+    consumed = 0
+    pinned.handle.seek(0)
+
+    def transfer(descriptor: int) -> os.stat_result:
+        nonlocal consumed
+        with os.fdopen(descriptor, "wb") as target:
+            while True:
+                block = pinned.handle.read(1024 * 1024)
+                if not block:
+                    break
+                consumed += len(block)
+                if consumed > maximum_bytes:
+                    raise RuntimeError(f"{label} expanded beyond the {maximum_bytes} byte limit")
+                digest.update(block)
+                target.write(block)
+            target.flush()
+            os.fsync(target.fileno())
+            target_information = os.fstat(target.fileno())
+        if consumed != size:
+            raise RuntimeError(f"{label} size changed while snapshotting: {pinned.path}")
+        _require_pinned_unchanged(pinned, label=label)
+        return target_information
+
+    if _descriptor_relative_supported():
+        with _open_pinned_directory(
+            absolute_destination.parent,
+            label=f"{label} snapshot destination",
+        ) as parent:
+            parent_information = os.fstat(parent)
+            descriptor = os.open(
+                absolute_destination.name,
+                flags,
+                0o600,
+                dir_fd=parent,
+            )
+            try:
+                target_information = transfer(descriptor)
+                destination_information = os.stat(
+                    absolute_destination.name,
+                    dir_fd=parent,
+                    follow_symlinks=False,
+                )
+                if _stat_identity(destination_information) != _stat_identity(
+                    target_information
+                ) or not _directory_path_still_names(
+                    absolute_destination.parent,
+                    parent_information,
+                ):
+                    raise RuntimeError(
+                        f"{label} snapshot path or parent changed: {absolute_destination}"
+                    )
+            except BaseException:
+                with suppress(FileNotFoundError):
+                    os.unlink(absolute_destination.name, dir_fd=parent)
+                raise
+    else:
+        parent_before = _checked_path_chain(
+            absolute_destination.parent,
+            label=f"{label} snapshot destination",
+        )
+        if not parent_before or not stat.S_ISDIR(parent_before[-1].st_mode):
+            raise RuntimeError(
+                f"{label} snapshot parent is not a directory: {absolute_destination.parent}"
+            )
+        descriptor = os.open(absolute_destination, flags, 0o600)
+        try:
+            target_information = transfer(descriptor)
+            parent_after = _checked_path_chain(
+                absolute_destination.parent,
+                label=f"{label} snapshot destination",
+            )
+            destination_after = _checked_path_chain(
+                absolute_destination,
+                label=f"{label} snapshot destination",
+            )
+            if (
+                tuple(_object_identity(item) for item in parent_before)
+                != tuple(_object_identity(item) for item in parent_after)
+                or not destination_after
+                or _stat_identity(destination_after[-1]) != _stat_identity(target_information)
+            ):
+                raise RuntimeError(f"{label} snapshot path changed during publication")
+        except BaseException:
+            absolute_destination.unlink(missing_ok=True)
+            raise
+    return digest.hexdigest(), consumed
+
+
 def _copy_regular_file_snapshot(
     source: Path,
     destination: Path,
@@ -426,109 +671,67 @@ def _copy_regular_file_snapshot(
     label: str,
     maximum_bytes: int,
 ) -> tuple[str, int]:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    absolute_destination = _absolute_path(destination)
     with _open_pinned_regular_file(source, label=label) as pinned:
-        size = pinned.information.st_size
-        if size <= 0 or size > maximum_bytes:
-            raise RuntimeError(
-                f"{label} size {size} is outside the supported "
-                f"1..{maximum_bytes} byte range: {source}"
-            )
-        flags = (
-            os.O_WRONLY
-            | os.O_CREAT
-            | os.O_EXCL
-            | getattr(os, "O_BINARY", 0)
-            | getattr(os, "O_CLOEXEC", 0)
-            | getattr(os, "O_NOFOLLOW", 0)
+        return _copy_pinned_regular_file_snapshot(
+            pinned,
+            destination,
+            label=label,
+            maximum_bytes=maximum_bytes,
         )
-        digest = hashlib.sha256()
-        consumed = 0
-
-        def transfer(descriptor: int) -> os.stat_result:
-            nonlocal consumed
-            with os.fdopen(descriptor, "wb") as target:
-                while True:
-                    block = pinned.handle.read(1024 * 1024)
-                    if not block:
-                        break
-                    consumed += len(block)
-                    if consumed > maximum_bytes:
-                        raise RuntimeError(
-                            f"{label} expanded beyond the {maximum_bytes} byte limit"
-                        )
-                    digest.update(block)
-                    target.write(block)
-                target.flush()
-                os.fsync(target.fileno())
-                target_information = os.fstat(target.fileno())
-            if consumed != size:
-                raise RuntimeError(f"{label} size changed while snapshotting: {source}")
-            _require_pinned_unchanged(pinned, label=label)
-            return target_information
-
-        if _descriptor_relative_supported():
-            with _open_pinned_directory(
-                absolute_destination.parent,
-                label=f"{label} snapshot destination",
-            ) as parent:
-                parent_information = os.fstat(parent)
-                descriptor = os.open(
-                    absolute_destination.name,
-                    flags,
-                    0o600,
-                    dir_fd=parent,
-                )
-                try:
-                    transfer(descriptor)
-                    if not _directory_path_still_names(
-                        absolute_destination.parent,
-                        parent_information,
-                    ):
-                        raise RuntimeError(
-                            f"{label} snapshot parent changed: {absolute_destination.parent}"
-                        )
-                except BaseException:
-                    with suppress(FileNotFoundError):
-                        os.unlink(absolute_destination.name, dir_fd=parent)
-                    raise
-        else:
-            parent_before = _checked_path_chain(
-                absolute_destination.parent,
-                label=f"{label} snapshot destination",
-            )
-            if not parent_before or not stat.S_ISDIR(parent_before[-1].st_mode):
-                raise RuntimeError(
-                    f"{label} snapshot parent is not a directory: {absolute_destination.parent}"
-                )
-            descriptor = os.open(absolute_destination, flags, 0o600)
-            try:
-                target_information = transfer(descriptor)
-                parent_after = _checked_path_chain(
-                    absolute_destination.parent,
-                    label=f"{label} snapshot destination",
-                )
-                destination_after = _checked_path_chain(
-                    absolute_destination,
-                    label=f"{label} snapshot destination",
-                )
-                if (
-                    tuple(_object_identity(item) for item in parent_before)
-                    != tuple(_object_identity(item) for item in parent_after)
-                    or not destination_after
-                    or _stat_identity(destination_after[-1]) != _stat_identity(target_information)
-                ):
-                    raise RuntimeError(f"{label} snapshot path changed during publication")
-            except BaseException:
-                absolute_destination.unlink(missing_ok=True)
-                raise
-    return digest.hexdigest(), consumed
 
 
 def sha256(path: Path) -> str:
     with _open_pinned_regular_file(path, label="SHA-256 input") as pinned:
         return _hash_pinned(pinned, label="SHA-256 input")
+
+
+def _require_executable_identity(identity: _ExecutableIdentity, *, phase: str) -> None:
+    _require_pinned_unchanged(identity.pinned, label="Bambu Studio executable")
+    with _open_pinned_regular_file(
+        identity.path,
+        label="Bambu Studio executable",
+    ) as current:
+        if _stat_identity(current.information) != _stat_identity(identity.pinned.information):
+            raise RuntimeError(f"Bambu Studio executable identity changed {phase}: {identity.path}")
+        if _hash_pinned(current, label="Bambu Studio executable") != identity.sha256:
+            raise RuntimeError(f"Bambu Studio executable content changed {phase}: {identity.path}")
+
+
+@contextmanager
+def _lock_executable(path: Path) -> Iterator[_ExecutableIdentity]:
+    absolute = _absolute_path(path)
+    if not os.access(absolute, os.X_OK):
+        raise RuntimeError(f"Bambu Studio executable is not executable: {absolute}")
+    with _open_pinned_regular_file(absolute, label="Bambu Studio executable") as pinned:
+        if os.name != "nt" and pinned.information.st_mode & 0o111 == 0:
+            raise RuntimeError(f"Bambu Studio executable has no execute permission: {absolute}")
+        identity = _ExecutableIdentity(
+            path=absolute,
+            pinned=pinned,
+            sha256=_hash_pinned(pinned, label="Bambu Studio executable"),
+        )
+        _require_executable_identity(identity, phase="before evidence generation")
+        yield identity
+
+
+def _run_with_executable_identity(
+    identity: _ExecutableIdentity,
+    command: Sequence[str],
+    *,
+    timeout_seconds: float,
+    env: Mapping[str, str] | None,
+) -> CommandExecution:
+    if not command or command[0] != str(identity.path):
+        raise RuntimeError("Bambu Studio command does not use the locked executable path")
+    _require_executable_identity(identity, phase="immediately before execution")
+    try:
+        return run_command(
+            command,
+            timeout_seconds=timeout_seconds,
+            env=env,
+        )
+    finally:
+        _require_executable_identity(identity, phase="immediately after execution")
 
 
 def sha256_text(value: str) -> str:
@@ -560,7 +763,7 @@ def _directory_path_still_names(
 
 
 def _write_atomic_bytes(path: Path, payload: bytes) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_directory_tree(path.parent, label="atomic destination")
     absolute = _absolute_path(path)
     if _descriptor_relative_supported() and os.rename in os.supports_dir_fd:
         with _open_pinned_directory(absolute.parent, label="canonical destination") as parent:
@@ -661,6 +864,139 @@ def write_canonical(path: Path, value: dict[str, Any]) -> Path:
     return _write_atomic_bytes(path, canonical_bytes(value))
 
 
+def _write_text_from_memory(path: Path, value: str) -> str:
+    payload = value.encode("utf-8", errors="replace")
+    _write_atomic_bytes(path, payload)
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _raise_publish_error(error_code: int, *, output: Path) -> None:
+    if error_code in {errno.EEXIST, errno.ENOTEMPTY, 80, 183}:
+        raise RuntimeError(f"Bambu tile project destination already exists: {output}")
+    message = os.strerror(error_code) if error_code > 0 else "unknown native error"
+    raise RuntimeError(f"atomic no-clobber Bambu publication failed: {output}: {message}")
+
+
+def _native_publish_no_replace(
+    staging: Path,
+    output: Path,
+    *,
+    parent_descriptor: int | None,
+) -> None:
+    if sys.platform.startswith("linux"):
+        library: Any = ctypes.CDLL(None, use_errno=True)
+        renameat2: Any = getattr(library, "renameat2", None)
+        if renameat2 is None:
+            raise RuntimeError("atomic no-clobber publication requires Linux renameat2")
+        directory = parent_descriptor if parent_descriptor is not None else -100
+        source = staging.name if parent_descriptor is not None else os.fspath(staging)
+        destination = output.name if parent_descriptor is not None else os.fspath(output)
+        result = renameat2(
+            directory,
+            ctypes.c_char_p(os.fsencode(source)),
+            directory,
+            ctypes.c_char_p(os.fsencode(destination)),
+            1,
+        )
+        if result != 0:
+            _raise_publish_error(ctypes.get_errno(), output=output)
+        return
+
+    if sys.platform == "darwin":
+        library = ctypes.CDLL(None, use_errno=True)
+        renameatx: Any = getattr(library, "renameatx_np", None)
+        if parent_descriptor is not None and renameatx is not None:
+            result = renameatx(
+                parent_descriptor,
+                ctypes.c_char_p(os.fsencode(staging.name)),
+                parent_descriptor,
+                ctypes.c_char_p(os.fsencode(output.name)),
+                0x00000004,
+            )
+        else:
+            renamex: Any = getattr(library, "renamex_np", None)
+            if renamex is None:
+                raise RuntimeError("atomic no-clobber publication requires macOS renamex_np")
+            result = renamex(
+                ctypes.c_char_p(os.fsencode(staging)),
+                ctypes.c_char_p(os.fsencode(output)),
+                0x00000004,
+            )
+        if result != 0:
+            _raise_publish_error(ctypes.get_errno(), output=output)
+        return
+
+    if os.name == "nt":
+        win_dll: Any = getattr(ctypes, "WinDLL")  # noqa: B009 -- Windows-only API
+        kernel32: Any = win_dll("kernel32", use_last_error=True)
+        move_file_ex: Any = kernel32.MoveFileExW
+        move_file_ex.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint]
+        move_file_ex.restype = ctypes.c_int
+        if not move_file_ex(os.fspath(staging), os.fspath(output), 0x00000008):
+            get_last_error: Any = getattr(  # noqa: B009 -- Windows-only API
+                ctypes,
+                "get_last_error",
+            )
+            _raise_publish_error(int(get_last_error()), output=output)
+        return
+
+    raise RuntimeError(
+        f"atomic no-clobber Bambu publication is unsupported on platform {sys.platform!r}"
+    )
+
+
+def _publish_directory_no_replace(staging: Path, output: Path) -> None:
+    absolute_staging = _absolute_path(staging)
+    absolute_output = _absolute_path(output)
+    if absolute_staging.parent != absolute_output.parent:
+        raise RuntimeError("Bambu staging and destination directories must share one parent")
+    parent = absolute_output.parent
+    if _descriptor_relative_supported():
+        with _open_pinned_directory(parent, label="Bambu publication parent") as descriptor:
+            parent_information = os.fstat(descriptor)
+            stage_information = os.stat(
+                absolute_staging.name,
+                dir_fd=descriptor,
+                follow_symlinks=False,
+            )
+            if not stat.S_ISDIR(stage_information.st_mode) or _is_link_or_reparse(
+                stage_information
+            ):
+                raise RuntimeError("Bambu staging path is not a plain directory")
+            _native_publish_no_replace(
+                absolute_staging,
+                absolute_output,
+                parent_descriptor=descriptor,
+            )
+            published_information = os.stat(
+                absolute_output.name,
+                dir_fd=descriptor,
+                follow_symlinks=False,
+            )
+            if _object_identity(published_information) != _object_identity(
+                stage_information
+            ) or not _directory_path_still_names(parent, parent_information):
+                raise RuntimeError("Bambu publication parent or directory identity changed")
+            os.fsync(descriptor)
+        return
+
+    parent_before = _checked_path_chain(parent, label="Bambu publication parent")
+    stage_information = os.stat(absolute_staging, follow_symlinks=False)
+    if not stat.S_ISDIR(stage_information.st_mode) or _is_link_or_reparse(stage_information):
+        raise RuntimeError("Bambu staging path is not a plain directory")
+    _native_publish_no_replace(
+        absolute_staging,
+        absolute_output,
+        parent_descriptor=None,
+    )
+    parent_after = _checked_path_chain(parent, label="Bambu publication parent")
+    published_information = os.stat(absolute_output, follow_symlinks=False)
+    if tuple(_object_identity(item) for item in parent_before) != tuple(
+        _object_identity(item) for item in parent_after
+    ) or _object_identity(published_information) != _object_identity(stage_information):
+        raise RuntimeError("Bambu publication parent or directory identity changed")
+
+
 def _relative_parts(relative: str, *, label: str) -> tuple[str, ...]:
     if not relative or "\x00" in relative or "\\" in relative or relative.startswith("/"):
         raise RuntimeError(f"{label} is not a canonical relative POSIX path: {relative!r}")
@@ -708,6 +1044,19 @@ def _read_json_snapshot(path: Path) -> tuple[Any, _BinarySnapshot]:
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"JSON is unreadable: {path}: {exc}") from exc
     return value, snapshot
+
+
+def _snapshot_generated_json(
+    source: Path,
+    destination: Path,
+    *,
+    label: str,
+) -> dict[str, Any]:
+    value, snapshot = _read_json_snapshot(source)
+    if not isinstance(value, dict):
+        raise RuntimeError(f"{label} root is not an object: {source}")
+    _write_atomic_bytes(destination, snapshot.payload)
+    return value
 
 
 def _read_json_value(path: Path) -> Any:
@@ -937,6 +1286,165 @@ def _archive_member_is_regular(info: ZipInfo) -> bool:
     if info.is_dir():
         return file_type in {0, stat.S_IFDIR}
     return file_type in {0, stat.S_IFREG}
+
+
+def _read_pinned_range(
+    pinned: _PinnedRegularFile,
+    offset: int,
+    length: int,
+    *,
+    label: str,
+) -> bytes:
+    if offset < 0 or length < 0 or offset + length > pinned.information.st_size:
+        raise RuntimeError(f"{label} points outside the pinned file")
+    pinned.handle.seek(offset)
+    payload = pinned.handle.read(length)
+    if len(payload) != length:
+        raise RuntimeError(f"{label} could not be read completely")
+    return payload
+
+
+def _preflight_project_central_directory(project_file: _PinnedRegularFile) -> None:
+    size = project_file.information.st_size
+    eocd_size = 22
+    maximum_comment = 65_535
+    if size < eocd_size:
+        raise RuntimeError("Bambu project archive has no ZIP end-of-central-directory record")
+    tail_size = min(size, eocd_size + maximum_comment)
+    tail_offset = size - tail_size
+    tail = _read_pinned_range(
+        project_file,
+        tail_offset,
+        tail_size,
+        label="Bambu project ZIP tail",
+    )
+    signature = b"PK\x05\x06"
+    position = tail.rfind(signature)
+    eocd: tuple[bytes, int, int, int, int, int, int, int] | None = None
+    while position >= 0:
+        if position + eocd_size <= len(tail):
+            candidate = struct.unpack_from("<4sHHHHIIH", tail, position)
+            if position + eocd_size + candidate[-1] == len(tail):
+                eocd = candidate
+                break
+        position = tail.rfind(signature, 0, position)
+    if eocd is None:
+        raise RuntimeError("Bambu project archive has an invalid ZIP end record")
+    (
+        _signature,
+        disk_number,
+        directory_disk,
+        entries_on_disk,
+        entry_count,
+        directory_size,
+        directory_offset,
+        _comment_size,
+    ) = eocd
+    if disk_number != 0 or directory_disk != 0 or entries_on_disk != entry_count:
+        raise RuntimeError("Bambu project archive must not use a multi-disk ZIP layout")
+
+    eocd_offset = tail_offset + position
+    locator_offset = eocd_offset - 20
+    zip64_offset: int | None = None
+    if locator_offset >= 0:
+        locator = _read_pinned_range(
+            project_file,
+            locator_offset,
+            20,
+            label="Bambu project ZIP64 locator",
+        )
+        if locator[:4] == b"PK\x06\x07":
+            _locator_signature, zip64_disk, parsed_zip64_offset, disk_count = struct.unpack(
+                "<4sIQI",
+                locator,
+            )
+            zip64_offset = int(parsed_zip64_offset)
+            if zip64_disk != 0 or disk_count != 1:
+                raise RuntimeError("Bambu project archive must not use multi-disk ZIP64")
+            fixed = _read_pinned_range(
+                project_file,
+                zip64_offset,
+                56,
+                label="Bambu project ZIP64 end record",
+            )
+            (
+                zip64_signature,
+                zip64_record_size,
+                _version_made,
+                _version_needed,
+                zip64_disk_number,
+                zip64_directory_disk,
+                zip64_entries_on_disk,
+                zip64_entry_count,
+                zip64_directory_size,
+                zip64_directory_offset,
+            ) = struct.unpack("<4sQHHIIQQQQ", fixed)
+            if zip64_signature != b"PK\x06\x06" or zip64_record_size < 44:
+                raise RuntimeError("Bambu project archive has an invalid ZIP64 end record")
+            if zip64_offset + 12 + zip64_record_size != locator_offset:
+                raise RuntimeError("Bambu project archive has an inconsistent ZIP64 end record")
+            if (
+                zip64_disk_number != 0
+                or zip64_directory_disk != 0
+                or zip64_entries_on_disk != zip64_entry_count
+            ):
+                raise RuntimeError("Bambu project archive must not use multi-disk ZIP64")
+            entry_count = zip64_entry_count
+            directory_size = zip64_directory_size
+            directory_offset = zip64_directory_offset
+
+    uses_sentinel = (
+        entry_count == 0xFFFF
+        or entries_on_disk == 0xFFFF
+        or directory_size == 0xFFFFFFFF
+        or directory_offset == 0xFFFFFFFF
+    )
+    if uses_sentinel and zip64_offset is None:
+        raise RuntimeError("Bambu project archive has ZIP64 sentinels without ZIP64 metadata")
+    if entry_count > _PROJECT_MAX_MEMBERS:
+        raise RuntimeError(
+            f"Bambu project archive member count {entry_count} exceeds {_PROJECT_MAX_MEMBERS}"
+        )
+    if directory_size > _PROJECT_MAX_CENTRAL_DIRECTORY_BYTES:
+        raise RuntimeError(
+            f"Bambu project central directory size {directory_size} exceeds "
+            f"{_PROJECT_MAX_CENTRAL_DIRECTORY_BYTES} bytes"
+        )
+    if entry_count and directory_size < entry_count * 46:
+        raise RuntimeError("Bambu project central directory is too small for its entry count")
+    directory_boundary = eocd_offset if zip64_offset is None else zip64_offset
+    if (
+        directory_offset > directory_boundary
+        or directory_size > directory_boundary - directory_offset
+    ):
+        raise RuntimeError("Bambu project central directory points outside the archive")
+    position = directory_offset
+    directory_end = directory_offset + directory_size
+    actual_entries = 0
+    while position < directory_end:
+        header = _read_pinned_range(
+            project_file,
+            position,
+            46,
+            label="Bambu project central directory header",
+        )
+        if header[:4] != b"PK\x01\x02":
+            raise RuntimeError("Bambu project central directory has an invalid entry header")
+        name_size, extra_size, comment_size = struct.unpack_from("<HHH", header, 28)
+        record_size = 46 + name_size + extra_size + comment_size
+        if record_size > directory_end - position:
+            raise RuntimeError("Bambu project central directory entry exceeds its declared size")
+        actual_entries += 1
+        if actual_entries > _PROJECT_MAX_MEMBERS:
+            raise RuntimeError(
+                f"Bambu project central directory has more than {_PROJECT_MAX_MEMBERS} entries"
+            )
+        position += record_size
+    if position != directory_end or actual_entries != entry_count:
+        raise RuntimeError(
+            "Bambu project central directory entry count does not match its end record"
+        )
+    _require_pinned_unchanged(project_file, label="Bambu project archive")
 
 
 def _validated_project_members(package: ZipFile, *, project: Path) -> dict[str, ZipInfo]:
@@ -1233,6 +1741,97 @@ def _project_model_measurement(payload: bytes | bytearray) -> dict[str, Any]:
     if len(build_items) != 1:
         raise RuntimeError("Bambu project model must contain exactly one build item")
     build_object_id, build_transform = build_items[0]
+
+    def saturated_add(left: int, right: int, limit: int) -> int:
+        if left > limit or right > limit or right > limit - left:
+            return limit + 1
+        return left + right
+
+    summaries: dict[int, tuple[int, int, int, int]] = {}
+
+    def summarize(
+        object_id: int,
+        active: frozenset[int],
+    ) -> tuple[int, int, int, int]:
+        if object_id in active:
+            raise RuntimeError("Bambu project component graph contains a cycle")
+        cached = summaries.get(object_id)
+        if cached is not None:
+            return cached
+        if len(active) >= _PROJECT_MAX_COMPONENT_DEPTH:
+            raise RuntimeError(
+                "Bambu project component graph exceeds the expanded depth limit "
+                f"{_PROJECT_MAX_COMPONENT_DEPTH}"
+            )
+        model_object = objects.get(object_id)
+        if model_object is None:
+            raise RuntimeError("Bambu project references a missing object")
+        vertices = model_object["vertices"]
+        if vertices:
+            summary = (
+                1,
+                len(vertices),
+                int(model_object["triangle_count"]),
+                1,
+            )
+        else:
+            instances = 1
+            vertex_visits = 0
+            triangle_visits = 0
+            depth = 1
+            descendants = active | {object_id}
+            for referenced_id, _component_transform in model_object["components"]:
+                child_instances, child_vertices, child_triangles, child_depth = summarize(
+                    referenced_id,
+                    descendants,
+                )
+                instances = saturated_add(
+                    instances,
+                    child_instances,
+                    _PROJECT_MAX_EXPANDED_INSTANCES,
+                )
+                vertex_visits = saturated_add(
+                    vertex_visits,
+                    child_vertices,
+                    _PROJECT_MAX_EXPANDED_VERTICES,
+                )
+                triangle_visits = saturated_add(
+                    triangle_visits,
+                    child_triangles,
+                    _PROJECT_MAX_EXPANDED_TRIANGLES,
+                )
+                depth = max(depth, child_depth + 1)
+            summary = (instances, vertex_visits, triangle_visits, depth)
+        instances, vertex_visits, triangle_visits, depth = summary
+        if depth > _PROJECT_MAX_COMPONENT_DEPTH:
+            raise RuntimeError(
+                "Bambu project component graph exceeds the expanded depth limit "
+                f"{_PROJECT_MAX_COMPONENT_DEPTH}"
+            )
+        if instances > _PROJECT_MAX_EXPANDED_INSTANCES:
+            raise RuntimeError(
+                "Bambu project component graph exceeds the expanded object instance limit "
+                f"{_PROJECT_MAX_EXPANDED_INSTANCES}"
+            )
+        if vertex_visits > _PROJECT_MAX_EXPANDED_VERTICES:
+            raise RuntimeError(
+                "Bambu project component graph exceeds the expanded vertex limit "
+                f"{_PROJECT_MAX_EXPANDED_VERTICES}"
+            )
+        if triangle_visits > _PROJECT_MAX_EXPANDED_TRIANGLES:
+            raise RuntimeError(
+                "Bambu project component graph exceeds the expanded triangle limit "
+                f"{_PROJECT_MAX_EXPANDED_TRIANGLES}"
+            )
+        summaries[object_id] = summary
+        return summary
+
+    (
+        _expanded_instances,
+        _expanded_vertices,
+        expanded_triangle_count,
+        _expanded_depth,
+    ) = summarize(build_object_id, frozenset())
     minimum = [math.inf, math.inf, math.inf]
     maximum = [-math.inf, -math.inf, -math.inf]
     triangle_count = 0
@@ -1264,7 +1863,11 @@ def _project_model_measurement(payload: bytes | bytearray) -> dict[str, Any]:
             visit(referenced_id, (component_transform, *transforms), descendants)
 
     visit(build_object_id, (build_transform,), frozenset())
-    if triangle_count <= 0 or not all(math.isfinite(value) for value in (*minimum, *maximum)):
+    if (
+        triangle_count <= 0
+        or triangle_count != expanded_triangle_count
+        or not all(math.isfinite(value) for value in (*minimum, *maximum))
+    ):
         raise RuntimeError("Bambu project build item has no finite triangle mesh")
     return {
         "dimensions_mm": [maximum[axis] - minimum[axis] for axis in range(3)],
@@ -1272,96 +1875,93 @@ def _project_model_measurement(payload: bytes | bytearray) -> dict[str, Any]:
     }
 
 
-def _inspect_archive(project: Path, primary_gcode: Path) -> _ArchiveInspection:
+def _inspect_archive_pinned(
+    project_file: _PinnedRegularFile,
+    primary_file: _PinnedRegularFile,
+) -> _ArchiveInspection:
+    project = project_file.path
     actual_md5 = hashlib.md5(usedforsecurity=False)
     recorded_md5_bytes: bytes | None = None
     model_xml_bytes: bytearray | None = None
     embedded_matches_primary = True
     try:
-        with (
-            _open_pinned_regular_file(project, label="Bambu project archive") as project_file,
-            _open_pinned_regular_file(
-                primary_gcode,
-                label="primary Bambu G-code",
-            ) as primary_file,
-        ):
-            project_size = project_file.information.st_size
-            if project_size <= 0 or project_size > _PROJECT_MAX_ARCHIVE_BYTES:
-                raise RuntimeError(
-                    f"Bambu project archive size {project_size} is outside the "
-                    f"supported 1..{_PROJECT_MAX_ARCHIVE_BYTES} byte range: {project}"
-                )
-            project_hash = _hash_pinned(project_file, label="Bambu project archive")
-            primary_snapshot = _read_gcode_from_pinned(
-                primary_file,
-                label="primary Bambu G-code",
+        project_size = project_file.information.st_size
+        if project_size <= 0 or project_size > _PROJECT_MAX_ARCHIVE_BYTES:
+            raise RuntimeError(
+                f"Bambu project archive size {project_size} is outside the "
+                f"supported 1..{_PROJECT_MAX_ARCHIVE_BYTES} byte range: {project}"
             )
-            project_file.handle.seek(0)
-            primary_file.handle.seek(0)
-            with ZipFile(project_file.handle, "r") as package:
-                members = _validated_project_members(package, project=project)
-                embedded_info = members["Metadata/plate_1.gcode"]
-                if embedded_info.file_size != primary_snapshot.size:
-                    embedded_matches_primary = False
-                for info in package.infolist():
-                    if info.is_dir():
-                        continue
-                    capture_relationship = info.filename.endswith(".rels")
-                    capture_md5 = info.filename == "Metadata/plate_1.gcode.md5"
-                    capture_model = info.filename == "3D/3dmodel.model"
-                    captured = bytearray()
-                    count = 0
-                    with package.open(info, "r") as member:
-                        while True:
-                            block = member.read(1024 * 1024)
-                            if not block:
-                                break
-                            count += len(block)
-                            if count > info.file_size or count > _PROJECT_MAX_MEMBER_BYTES:
+        _preflight_project_central_directory(project_file)
+        project_hash = _hash_pinned(project_file, label="Bambu project archive")
+        primary_snapshot = _read_gcode_from_pinned(
+            primary_file,
+            label="primary Bambu G-code",
+        )
+        project_file.handle.seek(0)
+        primary_file.handle.seek(0)
+        with ZipFile(project_file.handle, "r") as package:
+            members = _validated_project_members(package, project=project)
+            embedded_info = members["Metadata/plate_1.gcode"]
+            if embedded_info.file_size != primary_snapshot.size:
+                embedded_matches_primary = False
+            for info in package.infolist():
+                if info.is_dir():
+                    continue
+                capture_relationship = info.filename.endswith(".rels")
+                capture_md5 = info.filename == "Metadata/plate_1.gcode.md5"
+                capture_model = info.filename == "3D/3dmodel.model"
+                captured = bytearray()
+                count = 0
+                with package.open(info, "r") as member:
+                    while True:
+                        block = member.read(1024 * 1024)
+                        if not block:
+                            break
+                        count += len(block)
+                        if count > info.file_size or count > _PROJECT_MAX_MEMBER_BYTES:
+                            raise RuntimeError(
+                                "Bambu project archive member expanded beyond its "
+                                f"validated size: {info.filename}"
+                            )
+                        if capture_relationship:
+                            if count > _PROJECT_MAX_RELATIONSHIP_BYTES:
                                 raise RuntimeError(
-                                    "Bambu project archive member expanded beyond its "
-                                    f"validated size: {info.filename}"
+                                    "Bambu project relationship member exceeds the "
+                                    f"{_PROJECT_MAX_RELATIONSHIP_BYTES} byte limit: "
+                                    f"{info.filename}"
                                 )
-                            if capture_relationship:
-                                if count > _PROJECT_MAX_RELATIONSHIP_BYTES:
-                                    raise RuntimeError(
-                                        "Bambu project relationship member exceeds the "
-                                        f"{_PROJECT_MAX_RELATIONSHIP_BYTES} byte limit: "
-                                        f"{info.filename}"
-                                    )
-                                captured.extend(block)
-                            elif capture_md5:
-                                if count > 128:
-                                    raise RuntimeError(
-                                        "Bambu project embedded G-code MD5 record is oversized"
-                                    )
-                                captured.extend(block)
-                            elif capture_model:
-                                if count > _PROJECT_MAX_MODEL_XML_BYTES:
-                                    raise RuntimeError(
-                                        "Bambu project model XML exceeds the "
-                                        f"{_PROJECT_MAX_MODEL_XML_BYTES} byte limit"
-                                    )
-                                captured.extend(block)
-                            elif info.filename == "Metadata/plate_1.gcode":
-                                actual_md5.update(block)
-                                if primary_file.handle.read(len(block)) != block:
-                                    embedded_matches_primary = False
-                    if count != info.file_size:
-                        raise RuntimeError(
-                            f"Bambu project archive member size changed while reading: "
-                            f"{info.filename}"
-                        )
-                    if capture_relationship:
-                        _reject_external_relationships(bytes(captured), name=info.filename)
-                    elif capture_md5:
-                        recorded_md5_bytes = bytes(captured)
-                    elif capture_model:
-                        model_xml_bytes = captured
-                if primary_file.handle.read(1):
-                    embedded_matches_primary = False
-            _require_pinned_unchanged(project_file, label="Bambu project archive")
-            _require_pinned_unchanged(primary_file, label="primary Bambu G-code")
+                            captured.extend(block)
+                        elif capture_md5:
+                            if count > 128:
+                                raise RuntimeError(
+                                    "Bambu project embedded G-code MD5 record is oversized"
+                                )
+                            captured.extend(block)
+                        elif capture_model:
+                            if count > _PROJECT_MAX_MODEL_XML_BYTES:
+                                raise RuntimeError(
+                                    "Bambu project model XML exceeds the "
+                                    f"{_PROJECT_MAX_MODEL_XML_BYTES} byte limit"
+                                )
+                            captured.extend(block)
+                        elif info.filename == "Metadata/plate_1.gcode":
+                            actual_md5.update(block)
+                            if primary_file.handle.read(len(block)) != block:
+                                embedded_matches_primary = False
+                if count != info.file_size:
+                    raise RuntimeError(
+                        f"Bambu project archive member size changed while reading: {info.filename}"
+                    )
+                if capture_relationship:
+                    _reject_external_relationships(bytes(captured), name=info.filename)
+                elif capture_md5:
+                    recorded_md5_bytes = bytes(captured)
+                elif capture_model:
+                    model_xml_bytes = captured
+            if primary_file.handle.read(1):
+                embedded_matches_primary = False
+        _require_pinned_unchanged(project_file, label="Bambu project archive")
+        _require_pinned_unchanged(primary_file, label="primary Bambu G-code")
     except (BadZipFile, OSError) as exc:
         raise RuntimeError(f"Bambu project archive is invalid: {project}: {exc}") from exc
 
@@ -1391,6 +1991,17 @@ def _inspect_archive(project: Path, primary_gcode: Path) -> _ArchiveInspection:
         project_sha256=project_hash,
         primary_gcode=primary_snapshot,
     )
+
+
+def _inspect_archive(project: Path, primary_gcode: Path) -> _ArchiveInspection:
+    with (
+        _open_pinned_regular_file(project, label="Bambu project archive") as project_file,
+        _open_pinned_regular_file(
+            primary_gcode,
+            label="primary Bambu G-code",
+        ) as primary_file,
+    ):
+        return _inspect_archive_pinned(project_file, primary_file)
 
 
 def archive_evidence(project: Path, primary_gcode: Path) -> dict[str, Any]:
@@ -1485,7 +2096,7 @@ def isolated_environment(
         caches = home / "Library" / "Caches"
         temporary = runtime / "tmp"
         for path in (home, application_support, preferences, caches, temporary):
-            path.mkdir(parents=True, exist_ok=True)
+            _ensure_directory_tree(path, label="isolated Bambu runtime")
         for key in (
             "APPIMAGE_EXTRACT_AND_RUN",
             "XDG_CONFIG_HOME",
@@ -1506,7 +2117,7 @@ def isolated_environment(
     cache = home / ".cache"
     xdg_runtime = runtime / "xdg-runtime"
     for path in (home, config, cache, xdg_runtime):
-        path.mkdir(parents=True, exist_ok=True)
+        _ensure_directory_tree(path, label="isolated Bambu runtime")
     xdg_runtime.chmod(0o700)
     environment.update(
         {
@@ -1526,10 +2137,23 @@ def probe_bambu_studio(
     runtime: Path,
     timeout_seconds: float,
     evidence_root: Path | None = None,
+    _identity: _ExecutableIdentity | None = None,
 ) -> dict[str, Any]:
     """Probe the exact executable in isolation and retain version-bearing hashes."""
-    command = [str(executable), "--help"]
-    execution = run_command(
+    if _identity is None:
+        with _lock_executable(executable) as locked:
+            return probe_bambu_studio(
+                locked.path,
+                runtime=runtime,
+                timeout_seconds=timeout_seconds,
+                evidence_root=evidence_root,
+                _identity=locked,
+            )
+    if _absolute_path(executable) != _identity.path:
+        raise RuntimeError("Bambu Studio probe path differs from the locked executable")
+    command = [str(_identity.path), "--help"]
+    execution = _run_with_executable_identity(
+        _identity,
         command,
         timeout_seconds=min(timeout_seconds, 30.0),
         env=isolated_environment(runtime),
@@ -1548,17 +2172,17 @@ def probe_bambu_studio(
         "stderr_sha256": sha256_text(execution.stderr),
     }
     if evidence_root is not None:
-        evidence_root.mkdir(parents=True, exist_ok=True)
+        _ensure_directory_tree(evidence_root, label="Bambu probe evidence")
         stdout_path = evidence_root / "bambu-studio-probe.stdout.log"
         stderr_path = evidence_root / "bambu-studio-probe.stderr.log"
-        stdout_path.write_text(execution.stdout, encoding="utf-8")
-        stderr_path.write_text(execution.stderr, encoding="utf-8")
+        stdout_hash = _write_text_from_memory(stdout_path, execution.stdout)
+        stderr_hash = _write_text_from_memory(stderr_path, execution.stderr)
         record.update(
             {
                 "stdout_path": stdout_path.name,
                 "stderr_path": stderr_path.name,
-                "stdout_sha256": sha256(stdout_path),
-                "stderr_sha256": sha256(stderr_path),
+                "stdout_sha256": stdout_hash,
+                "stderr_sha256": stderr_hash,
             }
         )
     return record
@@ -1569,8 +2193,10 @@ def run_checked(
     *,
     runtime: Path,
     timeout_seconds: float,
+    executable_identity: _ExecutableIdentity,
 ) -> CommandExecution:
-    execution = run_command(
+    execution = _run_with_executable_identity(
+        executable_identity,
         command,
         timeout_seconds=timeout_seconds,
         env=isolated_environment(runtime),
@@ -2080,7 +2706,7 @@ def _verify_source_evidence(
     snapshot_root: Path | None = None,
 ) -> _SourceEvidence:
     if snapshot_root is not None:
-        snapshot_root.mkdir(parents=True, exist_ok=True)
+        _ensure_directory_tree(snapshot_root, label="verified Bambu source snapshots")
         return _verify_source_evidence_at(
             print_root=print_root,
             slice_root=slice_root,
@@ -2101,7 +2727,7 @@ def copy_profiles(
     profiles: tuple[tuple[Any, Path, _BinarySnapshot], ...],
 ) -> tuple[list[Path], list[Path], list[dict[str, Any]]]:
     destination = staging / "profiles"
-    destination.mkdir()
+    _ensure_directory_tree(destination, label="Bambu profile snapshots")
     copied_settings: list[Path] = []
     copied_filaments: list[Path] = []
     records: list[dict[str, Any]] = []
@@ -2608,25 +3234,33 @@ def verify_output(
     }
 
 
-def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
+def _build_evidence_locked(
+    args: _EvidenceArgs,
+    executable_identity: _ExecutableIdentity,
+) -> dict[str, Any]:
     print_root = args.print_set.expanduser().resolve()
     slice_root = args.slice_set.expanduser().resolve()
-    executable = args.bambu_studio.expanduser().resolve()
-    output = args.output.expanduser().resolve()
-    if output.exists():
+    executable = executable_identity.path
+    output = _absolute_path(args.output.expanduser())
+    if _path_exists_no_follow(output):
         raise RuntimeError(f"Bambu tile project destination already exists: {output}")
-    if not executable.is_file():
-        raise RuntimeError(f"Bambu Studio executable does not exist: {executable}")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=f".{output.name}.topoforge-stage-", dir=output.parent))
+    _ensure_directory_tree(output.parent, label="Bambu tile project destination parent")
+    staging = _make_private_staging_directory(
+        output.parent,
+        prefix=f".{output.name}.topoforge-stage-",
+    )
     runtime_root = staging / ".runtime"
     try:
+        _require_executable_identity(executable_identity, phase="before source verification")
         source = _verify_source_evidence(
             print_root=print_root,
             slice_root=slice_root,
             executable=executable,
             snapshot_root=runtime_root / "verified-source",
         )
+        _require_executable_identity(executable_identity, phase="after source verification")
+        if source.executable_sha256 != executable_identity.sha256:
+            raise RuntimeError("source evidence does not bind the locked Bambu Studio executable")
         print_manifest = source.print_manifest
         expected_version = source.expected_version
         probe_record = probe_bambu_studio(
@@ -2634,6 +3268,7 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
             runtime=runtime_root / "probe",
             timeout_seconds=args.timeout,
             evidence_root=staging,
+            _identity=executable_identity,
         )
         if probe_record["version"] != expected_version:
             raise RuntimeError(
@@ -2650,11 +3285,11 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
             input_path = source_tile.verified_source_3mf
             input_inspection = source_tile.source_3mf_inspection
             tile_dir = staging / "tiles" / tile_id
-            tile_dir.mkdir(parents=True)
+            _ensure_directory_tree(tile_dir, label="Bambu tile evidence")
             build_runtime = runtime_root / tile_id / "build"
             reopen_runtime = runtime_root / tile_id / "reopen"
-            build_runtime.mkdir(parents=True)
-            reopen_runtime.mkdir(parents=True)
+            _ensure_directory_tree(build_runtime, label="Bambu build runtime")
+            _ensure_directory_tree(reopen_runtime, label="Bambu reopen runtime")
             project_name = f"{tile_id}.bambu-p2s.3mf"
             build_command = [
                 str(executable),
@@ -2680,25 +3315,57 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
                 str(input_path),
             ]
             build_execution = run_checked(
-                build_command, runtime=build_runtime / "environment", timeout_seconds=args.timeout
+                build_command,
+                runtime=build_runtime / "environment",
+                timeout_seconds=args.timeout,
+                executable_identity=executable_identity,
             )
             build_result_path = build_runtime / "result.json"
             build_project_path = build_runtime / project_name
             build_gcode_path = build_runtime / "plate_1.gcode"
-            build_result = load_json(build_result_path)
-            if (
-                not result_passed(build_result)
-                or not build_project_path.is_file()
-                or not build_gcode_path.is_file()
-            ):
+            build_result = _snapshot_generated_json(
+                build_result_path,
+                tile_dir / "build_result.json",
+                label="Bambu build result",
+            )
+            if not result_passed(build_result):
                 raise RuntimeError(f"Bambu project build failed for {tile_id}")
             project_path = tile_dir / "model.bambu-p2s.3mf"
             primary_gcode = tile_dir / "primary.gcode"
-            shutil.copyfile(build_project_path, project_path)
-            shutil.copyfile(build_gcode_path, primary_gcode)
-            shutil.copyfile(build_result_path, tile_dir / "build_result.json")
-            (tile_dir / "build.stdout.log").write_text(build_execution.stdout, encoding="utf-8")
-            (tile_dir / "build.stderr.log").write_text(build_execution.stderr, encoding="utf-8")
+            with (
+                _open_pinned_regular_file(
+                    build_project_path,
+                    label="generated Bambu project archive",
+                ) as build_project_file,
+                _open_pinned_regular_file(
+                    build_gcode_path,
+                    label="generated primary Bambu G-code",
+                ) as build_gcode_file,
+            ):
+                archive_inspection = _inspect_archive_pinned(
+                    build_project_file,
+                    build_gcode_file,
+                )
+                copied_project_hash, _project_size = _copy_pinned_regular_file_snapshot(
+                    build_project_file,
+                    project_path,
+                    label="generated Bambu project archive",
+                    maximum_bytes=_PROJECT_MAX_ARCHIVE_BYTES,
+                )
+                copied_primary_hash, _primary_size = _copy_pinned_regular_file_snapshot(
+                    build_gcode_file,
+                    primary_gcode,
+                    label="generated primary Bambu G-code",
+                    maximum_bytes=_PROJECT_MAX_GCODE_TEXT_BYTES,
+                )
+            if (
+                copied_project_hash != archive_inspection.project_sha256
+                or copied_primary_hash != archive_inspection.primary_gcode.sha256
+            ):
+                raise RuntimeError("Bambu build outputs changed between inspection and snapshot")
+            archive = archive_inspection.evidence
+            _write_text_from_memory(tile_dir / "build.stdout.log", build_execution.stdout)
+            _write_text_from_memory(tile_dir / "build.stderr.log", build_execution.stderr)
             reopen_command = [
                 str(executable),
                 "--debug",
@@ -2711,33 +3378,53 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
                 str(project_path),
             ]
             reopen_execution = run_checked(
-                reopen_command, runtime=reopen_runtime / "environment", timeout_seconds=args.timeout
+                reopen_command,
+                runtime=reopen_runtime / "environment",
+                timeout_seconds=args.timeout,
+                executable_identity=executable_identity,
             )
             reopen_result_path = reopen_runtime / "result.json"
             reopen_gcode_path = reopen_runtime / "plate_1.gcode"
-            reopen_result = load_json(reopen_result_path)
-            if not result_passed(reopen_result) or not reopen_gcode_path.is_file():
+            reopen_result = _snapshot_generated_json(
+                reopen_result_path,
+                tile_dir / "reopen_result.json",
+                label="Bambu reopen result",
+            )
+            if not result_passed(reopen_result):
                 raise RuntimeError(f"Bambu project reopen failed for {tile_id}")
             reopen_gcode = tile_dir / "reopen.gcode"
-            shutil.copyfile(reopen_gcode_path, reopen_gcode)
-            shutil.copyfile(reopen_result_path, tile_dir / "reopen_result.json")
-            (tile_dir / "reopen.stdout.log").write_text(reopen_execution.stdout, encoding="utf-8")
-            (tile_dir / "reopen.stderr.log").write_text(reopen_execution.stderr, encoding="utf-8")
-            primary_metrics, primary_gate, primary_version = release_gate(
-                primary_gcode,
+            with _open_pinned_regular_file(
+                reopen_gcode_path,
+                label="generated reopened Bambu G-code",
+            ) as reopen_gcode_file:
+                reopened_snapshot = _read_gcode_from_pinned(
+                    reopen_gcode_file,
+                    label="generated reopened Bambu G-code",
+                )
+                copied_reopen_hash, _reopen_size = _copy_pinned_regular_file_snapshot(
+                    reopen_gcode_file,
+                    reopen_gcode,
+                    label="generated reopened Bambu G-code",
+                    maximum_bytes=_PROJECT_MAX_GCODE_TEXT_BYTES,
+                )
+            if copied_reopen_hash != reopened_snapshot.sha256:
+                raise RuntimeError("Bambu reopen G-code changed between inspection and snapshot")
+            _write_text_from_memory(tile_dir / "reopen.stdout.log", reopen_execution.stdout)
+            _write_text_from_memory(tile_dir / "reopen.stderr.log", reopen_execution.stderr)
+            primary_metrics, primary_gate, primary_version = _release_gate_snapshot(
+                archive_inspection.primary_gcode,
                 expected_version=expected_version,
                 stdout=build_execution.stdout,
                 stderr=build_execution.stderr,
             )
-            reopen_metrics, reopen_gate, reopen_version = release_gate(
-                reopen_gcode,
+            reopen_metrics, reopen_gate, reopen_version = _release_gate_snapshot(
+                reopened_snapshot,
                 expected_version=expected_version,
                 stdout=reopen_execution.stdout,
                 stderr=reopen_execution.stderr,
             )
             build_object = object_measurement(build_result)
             reopen_object = object_measurement(reopen_result)
-            archive = archive_evidence(project_path, primary_gcode)
             dimensions_ok = bool(
                 dimensions_match(build_object["dimensions_mm"], input_inspection.dimensions_mm)
                 and dimensions_match(reopen_object["dimensions_mm"], input_inspection.dimensions_mm)
@@ -2851,10 +3538,12 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
             "tiles": records,
         }
         write_canonical(staging / "bambu-tile-project-manifest.json", manifest)
+        _require_executable_identity(executable_identity, phase="before final verification")
         verification = verify_output(
             staging, print_root=print_root, slice_root=slice_root, executable=executable
         )
-        staging.replace(output)
+        _require_executable_identity(executable_identity, phase="before atomic publication")
+        _publish_directory_no_replace(staging, output)
         return {
             "status": "published",
             "output": str(output),
@@ -2864,6 +3553,12 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
+
+
+def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
+    executable = args.bambu_studio.expanduser().resolve()
+    with _lock_executable(executable) as executable_identity:
+        return _build_evidence_locked(args, executable_identity)
 
 
 def verify_bambu_project_evidence(
