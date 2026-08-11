@@ -1,0 +1,531 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://topoforge.local/schemas/windows-release-evidence-v1.json",
+  "title": "TopoForge Windows 0.11.x release evidence manifest",
+  "description": "A tracked, fail-closed binding between a release tag, one immutable source-bound portable ZIP, canonical Linux and clean Windows 10/11 manufacturing evidence, rollback verification, and optional exact Bambu Studio signer identity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "topoforge_version",
+    "release_tag",
+    "release_role",
+    "source_commit",
+    "portable_archive",
+    "candidate_artifact",
+    "clean_system_reports",
+    "bambu_studio_identity",
+    "bambu_policy_approval_commit",
+    "cross_platform",
+    "rollback",
+    "required_checks_passed"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "topoforge-windows-release-evidence-v1"
+    },
+    "topoforge_version": {
+      "type": "string",
+      "pattern": "^0[.]11[.][0-9]+$"
+    },
+    "release_tag": {
+      "type": "string",
+      "pattern": "^v0[.]11[.][0-9]+$"
+    },
+    "release_role": {
+      "enum": [
+        "phase12a-core-web-portable",
+        "phase12b-bambu"
+      ]
+    },
+    "source_commit": {
+      "$ref": "#/$defs/commit"
+    },
+    "portable_archive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filename",
+        "sha256",
+        "bytes",
+        "config_sha256",
+        "build_constraints_sha256",
+        "verifier_sha256"
+      ],
+      "properties": {
+        "filename": {
+          "type": "string",
+          "pattern": "^topoforge-0[.]11[.][0-9]+-windows-x64-portable[.]zip$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "config_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "build_constraints_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "verifier_sha256": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "builder",
+            "portable",
+            "system",
+            "bambu",
+            "helper"
+          ],
+          "properties": {
+            "builder": {
+              "$ref": "#/$defs/sha256"
+            },
+            "portable": {
+              "$ref": "#/$defs/sha256"
+            },
+            "system": {
+              "$ref": "#/$defs/sha256"
+            },
+            "bambu": {
+              "$ref": "#/$defs/sha256"
+            },
+            "helper": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      }
+    },
+    "candidate_artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "github_actions_run_id",
+        "github_actions_run_attempt",
+        "github_actions_workflow_id",
+        "github_actions_workflow_path",
+        "github_actions_event",
+        "artifact_id",
+        "artifact_name",
+        "artifact_digest",
+        "archive_relative_path",
+        "verification_relative_path",
+        "verification_sha256"
+      ],
+      "properties": {
+        "github_actions_run_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "github_actions_run_attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "github_actions_workflow_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "github_actions_workflow_path": {
+          "const": ".github/workflows/ci.yml"
+        },
+        "github_actions_event": {
+          "const": "push"
+        },
+        "artifact_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "artifact_name": {
+          "const": "topoforge-windows-x64-portable-candidate"
+        },
+        "artifact_digest": {
+          "$ref": "#/$defs/artifact_digest"
+        },
+        "archive_relative_path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "verification_relative_path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "verification_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "clean_system_reports": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "target_id",
+          "report_path",
+          "report_sha256",
+          "github_actions_run_id",
+          "github_actions_run_attempt",
+          "github_actions_workflow_id",
+          "github_actions_workflow_path",
+          "github_actions_event",
+          "artifact_id",
+          "artifact_name",
+          "artifact_digest",
+          "private_report_relative_path",
+          "private_report_sha256",
+          "public_report_relative_path",
+          "public_report_sha256"
+        ],
+        "properties": {
+          "target_id": {
+            "enum": [
+              "windows-10-22h2-x64",
+              "windows-11-x64"
+            ]
+          },
+          "report_path": {
+            "$ref": "#/$defs/relative_path"
+          },
+          "report_sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "github_actions_run_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "github_actions_run_attempt": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "github_actions_workflow_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "github_actions_workflow_path": {
+            "const": ".github/workflows/windows-clean-release-evidence.yml"
+          },
+          "github_actions_event": {
+            "const": "workflow_dispatch"
+          },
+          "artifact_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "artifact_name": {
+            "type": "string",
+            "pattern": "^topoforge-windows-(?:10-22h2-x64|11-x64)-clean-release-evidence$"
+          },
+          "artifact_digest": {
+            "$ref": "#/$defs/artifact_digest"
+          },
+          "private_report_relative_path": {
+            "type": "string",
+            "pattern": "^windows-(?:10-22h2-x64|11-x64)/private-report[.]json$"
+          },
+          "private_report_sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "public_report_relative_path": {
+            "type": "string",
+            "pattern": "^windows-(?:10-22h2-x64|11-x64)/public-report[.]json$"
+          },
+          "public_report_sha256": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      }
+    },
+    "bambu_studio_identity": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/bambu_identity"
+        }
+      ]
+    },
+    "bambu_policy_approval_commit": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/commit"
+        }
+      ]
+    },
+    "cross_platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "linux_report_path",
+        "linux_report_sha256",
+        "linux_source_commit",
+        "linux_verifier_sha256",
+        "linux_ci_artifact_id",
+        "linux_ci_artifact_name",
+        "linux_ci_artifact_digest",
+        "linux_ci_relative_path",
+        "comparison_report_path",
+        "comparison_report_sha256"
+      ],
+      "properties": {
+        "linux_report_path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "linux_report_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "linux_source_commit": {
+          "$ref": "#/$defs/commit"
+        },
+        "linux_verifier_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "linux_ci_artifact_name": {
+          "const": "topoforge-linux-x86_64-python-3.12-core-evidence"
+        },
+        "linux_ci_artifact_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "linux_ci_artifact_digest": {
+          "$ref": "#/$defs/artifact_digest"
+        },
+        "linux_ci_relative_path": {
+          "const": "ci-linux-x86_64-python-3.12-core.json"
+        },
+        "comparison_report_path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "comparison_report_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "script_path",
+        "script_sha256",
+        "producer_path",
+        "producer_sha256",
+        "current_wheel",
+        "previous_release",
+        "runtime_report_relative_path"
+      ],
+      "properties": {
+        "script_path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "script_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "producer_path": {
+          "const": "scripts/verify_release_rollback.py"
+        },
+        "producer_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "current_wheel": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "filename",
+            "sha256"
+          ],
+          "properties": {
+            "filename": {
+              "type": "string",
+              "pattern": "^topoforge-0[.]11[.][0-9]+-py3-none-any[.]whl$"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "previous_release": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "release_tag",
+            "release_id",
+            "published_at",
+            "wheel_filename",
+            "wheel_asset_id",
+            "wheel_sha256",
+            "checksums_filename",
+            "checksums_asset_id",
+            "checksums_sha256"
+          ],
+          "properties": {
+            "release_tag": {
+              "type": "string",
+              "pattern": "^v(?:0[.]10[.]3|0[.]11[.][0-9]+)$"
+            },
+            "release_id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "published_at": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+            },
+            "wheel_filename": {
+              "type": "string",
+              "pattern": "^topoforge-(?:0[.]10[.]3|0[.]11[.][0-9]+)-py3-none-any[.]whl$"
+            },
+            "wheel_asset_id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "wheel_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "checksums_filename": {
+              "const": "SHA256SUMS"
+            },
+            "checksums_asset_id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "checksums_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "runtime_report_relative_path": {
+          "const": "rollback-verification-runtime.json"
+        }
+      }
+    },
+    "required_checks_passed": {
+      "const": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "release_role": {
+            "const": "phase12a-core-web-portable"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "bambu_studio_identity": {
+            "type": "null"
+          },
+          "bambu_policy_approval_commit": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "release_role": {
+            "const": "phase12b-bambu"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "bambu_studio_identity": {
+            "$ref": "#/$defs/bambu_identity"
+          },
+          "bambu_policy_approval_commit": {
+            "$ref": "#/$defs/commit"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "artifact_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "relative_path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)[.][.]?(?:/|$))[A-Za-z0-9._/-]+$"
+    },
+    "bambu_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publisher_subject",
+        "certificate_thumbprint",
+        "executable_sha256",
+        "version",
+        "profile_content_identity_sha256",
+        "resolved_profile_sha256",
+        "source_records_sha256",
+        "source_root_identity_sha256"
+      ],
+      "properties": {
+        "publisher_subject": {
+          "type": "string",
+          "minLength": 1
+        },
+        "certificate_thumbprint": {
+          "type": "string",
+          "pattern": "^(?:[0-9A-F]{40}|[0-9A-F]{64})$"
+        },
+        "executable_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profile_content_identity_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "resolved_profile_sha256": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "machine",
+            "process",
+            "filament"
+          ],
+          "properties": {
+            "machine": {
+              "$ref": "#/$defs/sha256"
+            },
+            "process": {
+              "$ref": "#/$defs/sha256"
+            },
+            "filament": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "source_records_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "source_root_identity_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  }
+}

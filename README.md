@@ -183,8 +183,10 @@ Phase 12 builds one self-contained Windows x64 ZIP with an embedded CPython 3.12
 runtime; end users do not need administrator access, a system Python installation, or a
 `PATH` change. The archive contains `TopoForge-Web.cmd`, `topoforge.cmd`, the
 packaged bilingual Web application, all locked Windows wheels, licenses, and a
-per-file SHA-256 manifest. Its runtime URL, source commit, byte count, and SHA-256 are
-pinned in [`packaging/windows-x64-runtime.json`](packaging/windows-x64-runtime.json).
+per-file SHA-256 manifest. Its runtime URL, byte count, and SHA-256 are pinned in
+[`packaging/windows-x64-runtime.json`](packaging/windows-x64-runtime.json); the archive manifest
+separately embeds the clean source commit, hashed build constraints, and five exact
+build/verification script hashes.
 
 Maintainers can build and cross-host inspect the candidate with:
 
@@ -193,9 +195,26 @@ uv run python scripts/build_windows_portable.py \
   --output-dir dist/windows-primary \
   --report artifacts/logs/windows-portable-primary-build.json
 uv run python scripts/verify_windows_portable.py \
-  --archive dist/windows-primary/topoforge-0.10.3-windows-x64-portable.zip \
-  --expected-version 0.10.3 \
-  --report artifacts/logs/windows-portable-verification.json
+  --archive dist/windows-primary/topoforge-VERSION-windows-x64-portable.zip \
+  --expected-version VERSION \
+  --report artifacts/logs/windows-portable-inspection.json
+```
+
+Cross-host inspection is not clean-client evidence. On each final clean VM, execute the same
+archive with an exact source commit and browser gate (shown for Win10; repeat with `win11` and
+a fresh work root):
+
+```powershell
+$commit = "0123456789abcdef0123456789abcdef01234567"
+uv run python scripts/verify_windows_portable.py `
+  --archive dist/windows-primary/topoforge-VERSION-windows-x64-portable.zip `
+  --expected-version VERSION `
+  --execute `
+  --expected-target win10-22h2 `
+  --expected-source-commit $commit `
+  --browser-mode require `
+  --work-root "C:\TopoForge Evidence\Win10 地形" `
+  --report artifacts/logs/windows-10-portable.json
 ```
 
 CI independently builds the ZIP twice, requires byte-identical archives, extracts it
@@ -208,8 +227,13 @@ reopen gates. Bambu Studio discovery and automation are a separate support claim
 
 For Phase 12B clean-host testing, the optional portable verifier can invoke the
 installed official Bambu Studio through the archive's embedded Python with
-`--execute --verify-bambu --work-root PATH`. It requires normative P2S slicing,
-project export, no-external-profile reopen, and reslice evidence. Hosted CI deliberately
+`--execute --expected-target TARGET --expected-source-commit COMMIT --browser-mode require
+--verify-bambu --expected-publisher-subject SUBJECT
+--expected-certificate-thumbprint THUMBPRINT --expected-profile-content-identity-sha256 SHA256
+--expected-machine-profile-sha256 SHA256 --expected-process-profile-sha256 SHA256
+--expected-filament-profile-sha256 SHA256 --work-root PATH`. It requires normative P2S
+slicing, exact signer/executable/profile identity, project export, no-external-profile reopen,
+and reslice evidence. Hosted CI deliberately
 does not run this gate because it has no official binary; see
 [`docs/release.md`](docs/release.md) for the Win10/Win11 evidence commands and claim
 boundary.
@@ -520,8 +544,12 @@ uv run ruff check .
 uv run ruff format --check .
 uv run pyright
 uv run pytest
-SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/primary
-SOURCE_DATE_EPOCH=1580601600 uv build --no-sources --out-dir dist/repeat
+SOURCE_DATE_EPOCH=1580601600 uv build --no-sources \
+  --build-constraints packaging/build-constraints.txt --require-hashes \
+  --out-dir dist/primary
+SOURCE_DATE_EPOCH=1580601600 uv build --no-sources \
+  --build-constraints packaging/build-constraints.txt --require-hashes \
+  --out-dir dist/repeat
 uv run python scripts/verify_release.py \
   --primary-dir dist/primary --repeat-dir dist/repeat \
   --version 0.10.3 --install \

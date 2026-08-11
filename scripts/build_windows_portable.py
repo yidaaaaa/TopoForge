@@ -6,8 +6,11 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import csv
 import errno
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -24,8 +27,17 @@ from email.parser import Parser
 from pathlib import Path, PurePosixPath
 from typing import IO, Any
 
+_SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+if str(_SCRIPT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIRECTORY))
+import windows_acceptance as _windows_evidence  # noqa: E402
+
+source_repository_record = _windows_evidence.source_repository_record
+
 BUILD_SCHEMA_VERSION = "topoforge-windows-portable-build-v1"
-MANIFEST_SCHEMA_VERSION = "topoforge-windows-portable-v1"
+MANIFEST_SCHEMA_VERSION = "topoforge-windows-portable-v2"
+DEPENDENCY_RECORD_SCHEMA_VERSION = "topoforge-windows-dependency-record-projection-v1"
+RUNTIME_SITE_PACKAGES_SCHEMA_VERSION = "topoforge-windows-runtime-site-packages-v1"
 DEFAULT_CONFIG = Path("packaging/windows-x64-runtime.json")
 WINDOWS_RESERVED_NAMES = {
     "aux",
@@ -457,17 +469,281 @@ def _project_version(repository_root: Path) -> str:
     return version
 
 
+def _canonical_distribution_name(name: str) -> str:
+    normalized: list[str] = []
+    separator = False
+    for character in name.casefold():
+        if character in "-_.":
+            separator = True
+            continue
+        if separator and normalized:
+            normalized.append("-")
+        normalized.append(character)
+        separator = False
+    return "".join(normalized)
+
+
+def _metadata_values(
+    payload: bytes,
+    *,
+    context: str,
+    required_fields: tuple[str, ...],
+) -> dict[str, str]:
+    try:
+        decoded = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{context} METADATA is not UTF-8") from exc
+    metadata = Parser().parsestr(decoded)
+    if metadata.defects:
+        defect_names = ", ".join(type(defect).__name__ for defect in metadata.defects)
+        raise ValueError(f"{context} METADATA is malformed: {defect_names}")
+    values: dict[str, str] = {}
+    for field in required_fields:
+        raw_values = metadata.get_all(field, [])
+        if len(raw_values) != 1:
+            raise ValueError(f"{context} METADATA must contain exactly one {field} field")
+        value = str(raw_values[0])
+        if (
+            not value
+            or value != value.strip()
+            or any(ord(character) < 32 or ord(character) == 127 for character in value)
+        ):
+            raise ValueError(f"{context} METADATA {field} field is invalid")
+        values[field] = value
+    return values
+
+
+def _projection_sha256(entries: list[dict[str, Any]]) -> str:
+    payload = json.dumps(
+        entries,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _installed_file_projection(
+    root: Path,
+    *,
+    maximum_files: int,
+    maximum_file_bytes: int,
+) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    windows_paths: dict[str, tuple[str, str]] = {}
+    candidates = sorted(
+        root.rglob("*"),
+        key=lambda path: path.relative_to(root).as_posix().casefold(),
+    )
+    for path in candidates:
+        if path.is_symlink():
+            raise ValueError(f"installed dependency path is a symlink: {path}")
+        if not path.is_file():
+            continue
+        if len(entries) >= maximum_files:
+            raise ValueError("installed dependency projection exceeds its file-count bound")
+        relative = _safe_relative_path(path.relative_to(root).as_posix())
+        _register_windows_path(relative, windows_paths)
+        size = path.stat().st_size
+        if size > maximum_file_bytes:
+            raise ValueError(f"installed dependency file exceeds its size bound: {relative}")
+        entries.append(
+            {
+                "path": relative.as_posix(),
+                "bytes": size,
+                "sha256": _sha256(path),
+            }
+        )
+    entries.sort(key=lambda entry: (entry["path"].casefold(), entry["path"]))
+    return entries
+
+
+def _record_digest(path: Path) -> str:
+    encoded = base64.urlsafe_b64encode(bytes.fromhex(_sha256(path))).rstrip(b"=")
+    return encoded.decode("ascii")
+
+
+def _read_record_rows(
+    record_path: Path,
+    *,
+    maximum_bytes: int,
+    maximum_rows: int,
+) -> list[tuple[str, str, str]]:
+    size = record_path.stat().st_size
+    if size > maximum_bytes:
+        raise ValueError(f"dependency RECORD exceeds its size bound: {record_path}")
+    try:
+        payload = record_path.read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ValueError(f"dependency RECORD is unreadable UTF-8: {record_path}") from exc
+    rows: list[tuple[str, str, str]] = []
+    reader = csv.reader(io.StringIO(payload, newline=""))
+    for row in reader:
+        if len(rows) >= maximum_rows:
+            raise ValueError(f"dependency RECORD exceeds its row-count bound: {record_path}")
+        if len(row) != 3 or not row[0] or len(row[0]) > 1024:
+            raise ValueError(f"dependency RECORD contains an invalid row: {record_path}")
+        rows.append((row[0], row[1], row[2]))
+    if not rows:
+        raise ValueError(f"dependency RECORD is empty: {record_path}")
+    return rows
+
+
+def _normalize_distribution_record(
+    site_packages: Path,
+    directory: Path,
+    *,
+    maximum_record_bytes: int,
+    maximum_rows: int,
+    maximum_file_bytes: int,
+) -> tuple[dict[str, Any], set[str], list[dict[str, Any]]]:
+    record_path = directory / "RECORD"
+    if not record_path.is_file() or record_path.is_symlink():
+        raise ValueError(f"dependency wheel RECORD is missing or unsafe: {record_path}")
+    original_rows = _read_record_rows(
+        record_path,
+        maximum_bytes=maximum_record_bytes,
+        maximum_rows=maximum_rows,
+    )
+    metadata_path = directory / "METADATA"
+    if not metadata_path.is_file() or metadata_path.is_symlink():
+        raise ValueError(f"dependency METADATA is missing or unsafe: {metadata_path}")
+    try:
+        metadata_payload = metadata_path.read_bytes()
+    except OSError as exc:
+        raise ValueError(f"dependency metadata is unreadable: {metadata_path}") from exc
+    metadata = _metadata_values(
+        metadata_payload,
+        context=f"dependency {metadata_path}",
+        required_fields=("Metadata-Version", "Name", "Version"),
+    )
+    name = metadata["Name"]
+    version = metadata["Version"]
+
+    generated = {"INSTALLER", "REQUESTED", "direct_url.json"}
+    for generated_name in generated:
+        generated_path = directory / generated_name
+        if generated_path.is_symlink():
+            raise ValueError(f"generated dependency metadata is unsafe: {generated_path}")
+        generated_path.unlink(missing_ok=True)
+
+    record_relative = record_path.relative_to(site_packages).as_posix()
+    retained: list[dict[str, Any]] = []
+    retained_paths: set[str] = set()
+    record_self_count = 0
+    windows_paths: dict[str, tuple[str, str]] = {}
+    seen_original: set[str] = set()
+    for raw_path, hash_spec, raw_size in original_rows:
+        if "\\" in raw_path or "\x00" in raw_path:
+            raise ValueError(f"dependency RECORD path is unsafe: {raw_path!r}")
+        raw_parts = PurePosixPath(raw_path).parts
+        if ".." in raw_parts:
+            if not any(part.casefold() in {"bin", "scripts"} for part in raw_parts):
+                raise ValueError(f"dependency RECORD escapes site-packages: {raw_path}")
+            continue
+        relative = _safe_relative_path(raw_path)
+        relative_text = relative.as_posix()
+        _register_windows_path(relative, windows_paths)
+        if relative_text in seen_original:
+            raise ValueError(f"dependency RECORD contains a duplicate path: {relative_text}")
+        seen_original.add(relative_text)
+        if relative.parent == PurePosixPath(directory.name) and relative.name in generated:
+            continue
+        if relative_text == record_relative:
+            record_self_count += 1
+            if hash_spec or raw_size:
+                raise ValueError(f"dependency RECORD self row is not canonical: {record_path}")
+            continue
+        installed = site_packages / Path(*relative.parts)
+        if not installed.is_file() or installed.is_symlink():
+            raise ValueError(f"dependency RECORD member is missing or unsafe: {relative_text}")
+        size = installed.stat().st_size
+        if size > maximum_file_bytes:
+            raise ValueError(f"dependency RECORD member exceeds its size bound: {relative_text}")
+        if raw_size != str(size):
+            raise ValueError(f"dependency RECORD member size changed: {relative_text}")
+        expected_hash = f"sha256={_record_digest(installed)}"
+        if hash_spec != expected_hash:
+            raise ValueError(f"dependency RECORD member SHA-256 changed: {relative_text}")
+        retained_paths.add(relative_text)
+        retained.append(
+            {
+                "path": relative_text,
+                "bytes": size,
+                "sha256": _sha256(installed),
+            }
+        )
+    if record_self_count != 1:
+        raise ValueError(f"dependency RECORD must contain exactly one self row: {record_path}")
+    metadata_relative = metadata_path.relative_to(site_packages).as_posix()
+    if metadata_relative not in retained_paths:
+        raise ValueError(f"dependency RECORD does not bind its METADATA: {record_path}")
+
+    retained.sort(key=lambda entry: (entry["path"].casefold(), entry["path"]))
+    normalized_rows = [
+        (
+            entry["path"],
+            "sha256="
+            + base64.urlsafe_b64encode(bytes.fromhex(entry["sha256"])).rstrip(b"=").decode("ascii"),
+            str(entry["bytes"]),
+        )
+        for entry in retained
+    ]
+    normalized_rows.append((record_relative, "", ""))
+    normalized_rows.sort(key=lambda row: (row[0].casefold(), row[0]))
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerows(normalized_rows)
+    normalized_payload = output.getvalue().encode("utf-8")
+    if len(normalized_payload) > maximum_record_bytes:
+        raise ValueError(f"normalized dependency RECORD exceeds its size bound: {record_path}")
+    record_path.write_bytes(normalized_payload)
+
+    record_entry = {
+        "path": record_relative,
+        "bytes": len(normalized_payload),
+        "sha256": _sha256(record_path),
+    }
+    all_entries = sorted(
+        [*retained, record_entry],
+        key=lambda entry: (entry["path"].casefold(), entry["path"]),
+    )
+    return (
+        {
+            "name": name,
+            "version": version,
+            "dist_info": directory.name,
+            "record_path": record_relative,
+            "record_sha256": record_entry["sha256"],
+            "installed_file_count": len(all_entries),
+            "installed_bytes": sum(int(entry["bytes"]) for entry in all_entries),
+            "installed_files_sha256": _projection_sha256(all_entries),
+        },
+        {str(entry["path"]) for entry in all_entries},
+        all_entries,
+    )
+
+
 def _normalize_dependency_install(
     site_packages: Path,
     *,
     original_dist_info: set[str],
-) -> tuple[list[dict[str, str]], int]:
+    runtime_baseline: list[dict[str, Any]],
+    maximum_files: int,
+    maximum_file_bytes: int,
+    maximum_record_bytes: int,
+) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
     for scripts_name in ("bin", "Scripts"):
         scripts = site_packages / scripts_name
         if scripts.exists():
             if not scripts.is_dir() or scripts.is_symlink():
                 raise ValueError(f"dependency script path is unsafe: {scripts}")
             shutil.rmtree(scripts)
+    installer_lock = site_packages / ".lock"
+    if installer_lock.exists():
+        if not installer_lock.is_file() or installer_lock.is_symlink():
+            raise ValueError(f"dependency installer lock path is unsafe: {installer_lock}")
+        installer_lock.unlink()
 
     new_dist_info = sorted(
         (
@@ -477,27 +753,54 @@ def _normalize_dependency_install(
         ),
         key=lambda item: item.name.casefold(),
     )
-    dependencies: list[dict[str, str]] = []
+    dependencies: list[dict[str, Any]] = []
+    dependency_paths: set[str] = set()
+    dependency_entries: list[dict[str, Any]] = []
     names: set[str] = set()
     for directory in new_dist_info:
         if not directory.is_dir() or directory.is_symlink():
             raise ValueError(f"dependency metadata path is unsafe: {directory}")
-        metadata_path = directory / "METADATA"
-        try:
-            metadata = Parser().parsestr(metadata_path.read_text(encoding="utf-8"))
-        except OSError as exc:
-            raise ValueError(f"dependency metadata is unreadable: {metadata_path}") from exc
-        name = metadata.get("Name")
-        version = metadata.get("Version")
-        if not name or not version:
-            raise ValueError(f"dependency metadata has no name/version: {metadata_path}")
-        canonical_name = name.casefold().replace("_", "-")
+        package, package_paths, package_entries = _normalize_distribution_record(
+            site_packages,
+            directory,
+            maximum_record_bytes=maximum_record_bytes,
+            maximum_rows=maximum_files,
+            maximum_file_bytes=maximum_file_bytes,
+        )
+        canonical_name = _canonical_distribution_name(str(package["name"]))
         if canonical_name in names:
-            raise ValueError(f"dependency inventory contains a duplicate: {name}")
+            raise ValueError(f"dependency inventory contains a duplicate: {package['name']}")
+        overlap = dependency_paths & package_paths
+        if overlap:
+            raise ValueError(f"dependency RECORD projections overlap: {sorted(overlap)[:20]}")
         names.add(canonical_name)
-        dependencies.append({"name": name, "version": version})
-        for generated_name in ("INSTALLER", "RECORD", "REQUESTED", "direct_url.json"):
-            (directory / generated_name).unlink(missing_ok=True)
+        dependencies.append(package)
+        dependency_paths.update(package_paths)
+        dependency_entries.extend(package_entries)
+        if len(dependency_paths) > maximum_files:
+            raise ValueError("dependency RECORD projection exceeds its file-count bound")
+
+    current = _installed_file_projection(
+        site_packages,
+        maximum_files=maximum_files,
+        maximum_file_bytes=maximum_file_bytes,
+    )
+    baseline_by_path = {str(entry["path"]): entry for entry in runtime_baseline}
+    current_by_path = {str(entry["path"]): entry for entry in current}
+    baseline_paths = set(baseline_by_path)
+    if baseline_paths & dependency_paths:
+        raise ValueError("dependency RECORD projection overlaps the embedded runtime baseline")
+    expected_paths = baseline_paths | dependency_paths
+    if set(current_by_path) != expected_paths:
+        extra = sorted(set(current_by_path) - expected_paths)
+        missing = sorted(expected_paths - set(current_by_path))
+        raise ValueError(
+            "installed dependency files differ from runtime baseline plus wheel RECORDs; "
+            f"extra={extra[:20]}, missing={missing[:20]}"
+        )
+    for path, expected in baseline_by_path.items():
+        if current_by_path[path] != expected:
+            raise ValueError(f"embedded runtime site-packages file changed: {path}")
 
     forbidden_binary_suffixes = {".dylib", ".so"}
     forbidden_binaries = sorted(
@@ -516,8 +819,18 @@ def _normalize_dependency_install(
     )
     if extension_count == 0:
         raise ValueError("Windows dependency installation contains no compiled .pyd extensions")
-    dependencies.sort(key=lambda item: item["name"].casefold())
-    return dependencies, extension_count
+    dependencies.sort(key=lambda item: _canonical_distribution_name(str(item["name"])))
+    dependency_entries.sort(key=lambda entry: (entry["path"].casefold(), entry["path"]))
+    return (
+        dependencies,
+        extension_count,
+        {
+            "schema_version": DEPENDENCY_RECORD_SCHEMA_VERSION,
+            "installed_file_count": len(dependency_entries),
+            "installed_bytes": sum(int(entry["bytes"]) for entry in dependency_entries),
+            "installed_files_sha256": _projection_sha256(dependency_entries),
+        },
+    )
 
 
 def _assert_no_build_path(root: Path, repository_root: Path) -> None:
@@ -542,7 +855,7 @@ def _inspect_project_wheel(path: Path, version: str) -> dict[str, Any]:
     metadata_name = f"{dist_info}/METADATA"
     with zipfile.ZipFile(path) as archive:
         try:
-            metadata = Parser().parsestr(archive.read(metadata_name).decode("utf-8"))
+            metadata_payload = archive.read(metadata_name)
         except KeyError as exc:
             raise ValueError(f"TopoForge wheel has no {metadata_name}") from exc
     expected = {
@@ -551,10 +864,15 @@ def _inspect_project_wheel(path: Path, version: str) -> dict[str, Any]:
         "Requires-Python": "<3.15,>=3.11",
         "License-Expression": "Apache-2.0",
     }
+    metadata = _metadata_values(
+        metadata_payload,
+        context="TopoForge wheel",
+        required_fields=("Metadata-Version", *expected),
+    )
     for field, value in expected.items():
-        if metadata.get(field) != value:
+        if metadata[field] != value:
             raise ValueError(
-                f"TopoForge wheel metadata {field} is {metadata.get(field)!r}, expected {value!r}"
+                f"TopoForge wheel metadata {field} is {metadata[field]!r}, expected {value!r}"
             )
     return {
         "filename": path.name,
@@ -790,6 +1108,31 @@ def build_windows_portable(
     version = _project_version(repository)
     if expected_version is not None and version != expected_version:
         raise ValueError(f"project version is {version}, expected --version {expected_version}")
+    build_constraints = repository / "packaging" / "build-constraints.txt"
+    if not build_constraints.is_file():
+        raise FileNotFoundError(f"reproducible build constraints are missing: {build_constraints}")
+    source = source_repository_record(
+        repository,
+        expected_commit=None,
+        require_clean=True,
+    )
+    verifier_paths = {
+        "builder": Path(__file__).resolve(),
+        "portable": repository / "scripts" / "verify_windows_portable.py",
+        "system": repository / "scripts" / "verify_windows_system.py",
+        "bambu": repository / "scripts" / "verify_windows_bambu.py",
+        "helper": repository / "scripts" / "windows_acceptance.py",
+    }
+    build_provenance = {
+        "source_commit": source["commit"],
+        "source_tracked_dirty": False,
+        "config_sha256": _sha256(config_file),
+        "build_constraints_sha256": _sha256(build_constraints),
+        "verifier_sha256": {
+            role: _sha256(verifier_path) for role, verifier_path in verifier_paths.items()
+        },
+        "required_checks_passed": True,
+    }
     output = output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
     destination = output / f"topoforge-{version}-windows-x64-portable.zip"
@@ -820,6 +1163,17 @@ def build_windows_portable(
         site_packages = embedded_runtime / "Lib" / "site-packages"
         site_packages.mkdir(parents=True, exist_ok=True)
         original_dist_info = {path.name.casefold() for path in site_packages.glob("*.dist-info")}
+        runtime_baseline_files = _installed_file_projection(
+            site_packages,
+            maximum_files=bounds["portable_member_count_max"],
+            maximum_file_bytes=bounds["portable_member_max_bytes"],
+        )
+        runtime_site_packages = {
+            "schema_version": RUNTIME_SITE_PACKAGES_SCHEMA_VERSION,
+            "file_count": len(runtime_baseline_files),
+            "files_sha256": _projection_sha256(runtime_baseline_files),
+            "files": runtime_baseline_files,
+        }
 
         requirements = temporary / "locked-runtime-requirements.txt"
         commands.append(
@@ -865,9 +1219,13 @@ def build_windows_portable(
                 environment=environment,
             )
         )
-        dependencies, extension_count = _normalize_dependency_install(
+        dependencies, extension_count, dependency_projection = _normalize_dependency_install(
             site_packages,
             original_dist_info=original_dist_info,
+            runtime_baseline=runtime_baseline_files,
+            maximum_files=bounds["portable_member_count_max"],
+            maximum_file_bytes=bounds["portable_member_max_bytes"],
+            maximum_record_bytes=bounds["manifest_max_bytes"],
         )
         _assert_no_build_path(site_packages, repository)
 
@@ -880,6 +1238,9 @@ def build_windows_portable(
                     "build",
                     "--wheel",
                     "--no-sources",
+                    "--build-constraints",
+                    str(build_constraints),
+                    "--require-hashes",
                     "--quiet",
                     "--out-dir",
                     str(wheel_dir),
@@ -901,6 +1262,7 @@ def build_windows_portable(
         shutil.copyfile(requirements, provenance / requirements.name)
         shutil.copyfile(repository / "uv.lock", provenance / "uv.lock")
         shutil.copyfile(config_file, provenance / config_file.name)
+        shutil.copyfile(build_constraints, provenance / build_constraints.name)
         provider_license = config_file.parent / runtime["provider_license_file"]
         if not provider_license.is_file():
             raise FileNotFoundError(f"runtime provider license is missing: {provider_license}")
@@ -917,6 +1279,7 @@ def build_windows_portable(
                 **runtime,
                 **runtime_summary,
             },
+            "build_provenance": build_provenance,
             "locked_dependencies": {
                 "count": len(dependencies),
                 "packages": dependencies,
@@ -924,7 +1287,11 @@ def build_windows_portable(
                 "requirements_sha256": _sha256(requirements),
                 "uv_lock_path": "provenance/uv.lock",
                 "uv_lock_sha256": _sha256(repository / "uv.lock"),
+                "build_constraints_path": f"provenance/{build_constraints.name}",
+                "build_constraints_sha256": _sha256(build_constraints),
                 "compiled_extension_count": extension_count,
+                "runtime_site_packages": runtime_site_packages,
+                "record_projection": dependency_projection,
             },
             "project_wheel": {
                 **wheel_summary,
@@ -1005,6 +1372,7 @@ def build_windows_portable(
         },
         "dependency_count": len(dependencies),
         "compiled_extension_count": extension_count,
+        "build_provenance": build_provenance,
         "verification": verification,
         "commands": commands,
         "required_checks_passed": True,

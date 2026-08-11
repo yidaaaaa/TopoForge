@@ -1,0 +1,295 @@
+name: windows-clean-release-evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_id:
+        description: Dedicated clean-client runner target
+        required: true
+        type: choice
+        options:
+          - windows-10-22h2-x64
+          - windows-11-x64
+      version:
+        description: Exact 0.11.x candidate version
+        required: true
+        type: string
+      source_commit:
+        description: Full candidate source commit
+        required: true
+        type: string
+      candidate_run_id:
+        description: Successful ci run containing the immutable Windows candidate
+        required: true
+        type: string
+      candidate_run_attempt:
+        description: Exact successful ci run attempt
+        required: true
+        type: string
+      candidate_workflow_id:
+        description: Exact .github/workflows/ci.yml workflow ID
+        required: true
+        type: string
+      candidate_artifact_id:
+        description: Exact immutable Windows candidate artifact ID
+        required: true
+        type: string
+      candidate_artifact_digest:
+        description: Exact sha256-prefixed candidate artifact digest
+        required: true
+        type: string
+      verify_bambu:
+        description: Run official Bambu Studio acceptance for a Phase 12B candidate
+        required: true
+        default: false
+        type: boolean
+      publisher_subject:
+        description: Frozen Authenticode publisher subject (Phase 12B only)
+        required: false
+        type: string
+      certificate_thumbprint:
+        description: Frozen Authenticode certificate thumbprint (Phase 12B only)
+        required: false
+        type: string
+      profile_content_identity_sha256:
+        description: Frozen profile content identity SHA-256 (Phase 12B only)
+        required: false
+        type: string
+      machine_profile_sha256:
+        description: Frozen machine profile SHA-256 (Phase 12B only)
+        required: false
+        type: string
+      process_profile_sha256:
+        description: Frozen process profile SHA-256 (Phase 12B only)
+        required: false
+        type: string
+      filament_profile_sha256:
+        description: Frozen filament profile SHA-256 (Phase 12B only)
+        required: false
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: clean-release-evidence-${{ inputs.target_id }}
+  cancel-in-progress: false
+
+jobs:
+  acceptance:
+    runs-on: [self-hosted, Windows, X64, clean, "${{ inputs.target_id }}"]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.source_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Verify immutable candidate workflow identity
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_RUN_ATTEMPT: ${{ inputs.candidate_run_attempt }}
+          CANDIDATE_WORKFLOW_ID: ${{ inputs.candidate_workflow_id }}
+          CANDIDATE_ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          CANDIDATE_ARTIFACT_DIGEST: ${{ inputs.candidate_artifact_digest }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          WORKFLOW_HEAD_SHA: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:SOURCE_COMMIT -notmatch "^[0-9a-f]{40}$") {
+            throw "source_commit must be a full lowercase Git commit"
+          }
+          if ($env:CANDIDATE_RUN_ID -notmatch "^[1-9][0-9]*$") {
+            throw "candidate_run_id must be a positive integer"
+          }
+          if ($env:CANDIDATE_RUN_ATTEMPT -notmatch "^[1-9][0-9]*$") {
+            throw "candidate_run_attempt must be a positive integer"
+          }
+          if ($env:CANDIDATE_WORKFLOW_ID -notmatch "^[1-9][0-9]*$") {
+            throw "candidate_workflow_id must be a positive integer"
+          }
+          if ($env:CANDIDATE_ARTIFACT_ID -notmatch "^[1-9][0-9]*$") {
+            throw "candidate_artifact_id must be a positive integer"
+          }
+          if ($env:CANDIDATE_ARTIFACT_DIGEST -notmatch "^sha256:[0-9a-f]{64}$") {
+            throw "candidate_artifact_digest must be a SHA-256 artifact digest"
+          }
+          if ($env:WORKFLOW_HEAD_SHA -ne $env:SOURCE_COMMIT) {
+            throw "workflow dispatch head must equal source_commit"
+          }
+          $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:CANDIDATE_RUN_ID" | ConvertFrom-Json
+          if ([string]$run.id -ne $env:CANDIDATE_RUN_ID) { throw "candidate run ID changed" }
+          if ([string]$run.run_attempt -ne $env:CANDIDATE_RUN_ATTEMPT) {
+            throw "candidate run attempt changed"
+          }
+          if ([string]$run.workflow_id -ne $env:CANDIDATE_WORKFLOW_ID) {
+            throw "candidate workflow ID changed"
+          }
+          if ($run.path -ne ".github/workflows/ci.yml") { throw "candidate workflow path changed" }
+          if ($run.event -ne "push") { throw "candidate workflow event changed" }
+          if ($run.head_sha -ne $env:SOURCE_COMMIT) { throw "candidate head SHA changed" }
+          if ($run.conclusion -ne "success") { throw "candidate workflow did not succeed" }
+          $workflow = gh api "repos/$env:GITHUB_REPOSITORY/actions/workflows/$env:CANDIDATE_WORKFLOW_ID" | ConvertFrom-Json
+          if ([string]$workflow.id -ne $env:CANDIDATE_WORKFLOW_ID) {
+            throw "candidate workflow endpoint ID changed"
+          }
+          if ($workflow.path -ne ".github/workflows/ci.yml") {
+            throw "candidate workflow endpoint path changed"
+          }
+          $artifact = gh api "repos/$env:GITHUB_REPOSITORY/actions/artifacts/$env:CANDIDATE_ARTIFACT_ID" | ConvertFrom-Json
+          if ([string]$artifact.id -ne $env:CANDIDATE_ARTIFACT_ID) {
+            throw "candidate artifact ID changed"
+          }
+          if ($artifact.name -ne "topoforge-windows-x64-portable-candidate") {
+            throw "candidate artifact name changed"
+          }
+          if ($artifact.expired -ne $false) { throw "candidate artifact expired" }
+          if ($artifact.digest -ne $env:CANDIDATE_ARTIFACT_DIGEST) {
+            throw "candidate artifact digest changed"
+          }
+          if ([string]$artifact.workflow_run.id -ne $env:CANDIDATE_RUN_ID) {
+            throw "candidate artifact run changed"
+          }
+          if ($artifact.workflow_run.head_sha -ne $env:SOURCE_COMMIT) {
+            throw "candidate artifact source commit changed"
+          }
+      - name: Download exact Windows candidate
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          CANDIDATE_ARTIFACT_DIGEST: ${{ inputs.candidate_artifact_digest }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:CANDIDATE_RUN_ID -notmatch "^[1-9][0-9]*$") {
+            throw "candidate_run_id must be a positive integer"
+          }
+          if ($env:CANDIDATE_ARTIFACT_ID -notmatch "^[1-9][0-9]*$") {
+            throw "candidate_artifact_id must be a positive integer"
+          }
+          if ($env:CANDIDATE_ARTIFACT_DIGEST -notmatch "^sha256:[0-9a-f]{64}$") {
+            throw "candidate_artifact_digest must be a SHA-256 artifact digest"
+          }
+          if ($env:VERSION -notmatch "^0[.]11[.][0-9]+$") { throw "version is not 0.11.x" }
+          $candidateRoot = Join-Path $env:RUNNER_TEMP "topoforge-clean-candidate-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"
+          if (Test-Path -LiteralPath $candidateRoot) {
+            throw "candidate extraction root already exists"
+          }
+          $artifactZip = Join-Path $env:RUNNER_TEMP "topoforge-candidate-$env:CANDIDATE_ARTIFACT_ID.zip"
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $downloadUrl = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/actions/artifacts/$env:CANDIDATE_ARTIFACT_ID/zip"
+          Invoke-WebRequest -Uri $downloadUrl -Headers $headers -OutFile $artifactZip
+          $observedDigest = "sha256:$((Get-FileHash -Algorithm SHA256 $artifactZip).Hash.ToLowerInvariant())"
+          if ($observedDigest -ne $env:CANDIDATE_ARTIFACT_DIGEST) {
+            throw "downloaded candidate artifact digest changed"
+          }
+          $archiveName = "topoforge-$($env:VERSION)-windows-x64-portable.zip"
+          $extractArguments = @(
+            "scripts/verify_release_evidence.py",
+            "--extract-artifact", $artifactZip,
+            "--extract-destination", $candidateRoot,
+            "--allow-extract-member", $archiveName,
+            "--allow-extract-member", "dist/windows-primary/$archiveName",
+            "--allow-extract-member", "SHA256SUMS",
+            "--allow-extract-member", "dist/windows-primary/SHA256SUMS",
+            "--allow-extract-member", "ci-windows-portable-primary-build.json",
+            "--allow-extract-member", "ci-windows-portable-repeat-build.json",
+            "--allow-extract-member", "ci-windows-portable-verification.json",
+            "--allow-extract-member", "artifacts/logs/ci-windows-portable-primary-build.json",
+            "--allow-extract-member", "artifacts/logs/ci-windows-portable-repeat-build.json",
+            "--allow-extract-member", "artifacts/logs/ci-windows-portable-verification.json"
+          )
+          Remove-Item Env:GH_TOKEN
+          & python @extractArguments
+          if ($LASTEXITCODE -ne 0) { throw "safe candidate artifact extraction failed" }
+      - name: Execute clean-client acceptance
+        shell: pwsh
+        env:
+          TARGET_ID: ${{ inputs.target_id }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          VERIFY_BAMBU: ${{ inputs.verify_bambu }}
+          PUBLISHER_SUBJECT: ${{ inputs.publisher_subject }}
+          CERTIFICATE_THUMBPRINT: ${{ inputs.certificate_thumbprint }}
+          PROFILE_CONTENT_IDENTITY_SHA256: ${{ inputs.profile_content_identity_sha256 }}
+          MACHINE_PROFILE_SHA256: ${{ inputs.machine_profile_sha256 }}
+          PROCESS_PROFILE_SHA256: ${{ inputs.process_profile_sha256 }}
+          FILAMENT_PROFILE_SHA256: ${{ inputs.filament_profile_sha256 }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:VERSION -notmatch "^0[.]11[.][0-9]+$") { throw "version is not 0.11.x" }
+          if ($env:SOURCE_COMMIT -notmatch "^[0-9a-f]{40}$") {
+            throw "source_commit must be a full lowercase Git commit"
+          }
+          $targetArgument = @{
+            "windows-10-22h2-x64" = "win10-22h2"
+            "windows-11-x64" = "win11"
+          }[$env:TARGET_ID]
+          if ($null -eq $targetArgument) { throw "target_id is not supported" }
+          $candidateRoot = Join-Path $env:RUNNER_TEMP "topoforge-clean-candidate-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"
+          $archiveName = "topoforge-$($env:VERSION)-windows-x64-portable.zip"
+          $archives = @(Get-ChildItem $candidateRoot -Recurse -File -Filter $archiveName)
+          if ($archives.Count -ne 1) { throw "expected exactly one candidate archive" }
+          $evidenceParent = Join-Path $env:RUNNER_TEMP "topoforge-clean-evidence-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"
+          New-Item -ItemType Directory $evidenceParent | Out-Null
+          $evidenceRoot = Join-Path $evidenceParent $env:TARGET_ID
+          New-Item -ItemType Directory $evidenceRoot | Out-Null
+          $arguments = @(
+            "scripts/verify_windows_portable.py",
+            "--archive", $archives[0].FullName,
+            "--expected-version", $env:VERSION,
+            "--execute",
+            "--expected-target", $targetArgument,
+            "--expected-source-commit", $env:SOURCE_COMMIT,
+            "--browser-mode", "require",
+            "--work-root", (Join-Path $env:RUNNER_TEMP "TopoForge Clean Work 路径 $($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"),
+            "--report", (Join-Path $evidenceRoot "private-report.json"),
+            "--public-report", (Join-Path $evidenceRoot "public-report.json")
+          )
+          if ($env:VERIFY_BAMBU -eq "true") {
+            if ([string]::IsNullOrWhiteSpace($env:PUBLISHER_SUBJECT) -or $env:PUBLISHER_SUBJECT -match "[\r\n]") {
+              throw "publisher_subject must be one non-empty line"
+            }
+            if ($env:CERTIFICATE_THUMBPRINT -notmatch "^(?:[0-9A-F]{40}|[0-9A-F]{64})$") {
+              throw "certificate_thumbprint is invalid"
+            }
+            foreach ($digest in @(
+              $env:PROFILE_CONTENT_IDENTITY_SHA256,
+              $env:MACHINE_PROFILE_SHA256,
+              $env:PROCESS_PROFILE_SHA256,
+              $env:FILAMENT_PROFILE_SHA256
+            )) {
+              if ($digest -notmatch "^[0-9a-f]{64}$") { throw "profile SHA-256 is invalid" }
+            }
+            $arguments += @(
+              "--verify-bambu",
+              "--expected-publisher-subject", $env:PUBLISHER_SUBJECT,
+              "--expected-certificate-thumbprint", $env:CERTIFICATE_THUMBPRINT,
+              "--expected-profile-content-identity-sha256", $env:PROFILE_CONTENT_IDENTITY_SHA256,
+              "--expected-machine-profile-sha256", $env:MACHINE_PROFILE_SHA256,
+              "--expected-process-profile-sha256", $env:PROCESS_PROFILE_SHA256,
+              "--expected-filament-profile-sha256", $env:FILAMENT_PROFILE_SHA256
+            )
+          } elseif ($env:VERIFY_BAMBU -ne "false") {
+            throw "verify_bambu must be true or false"
+          }
+          & python @arguments
+          if ($LASTEXITCODE -ne 0) { throw "clean-client acceptance failed" }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: topoforge-${{ inputs.target_id }}-clean-release-evidence
+          path: ${{ runner.temp }}/topoforge-clean-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0

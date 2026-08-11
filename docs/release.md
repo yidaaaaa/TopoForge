@@ -41,7 +41,47 @@ manifest.
 
 Hosted Windows CI builds the candidate twice and executes it natively, but does not
 replace clean Windows 10 22H2 x64 and Windows 11 x64 VM evidence. The candidate is not
-published by `.github/workflows/release.yml` until both clean-system gates close.
+published by `.github/workflows/release.yml` until both clean-system gates close. Successful
+hosted runs retain the candidate ZIP and checksum; failed runs retain diagnostic JSON only.
+
+### Windows 0.11.x publication evidence
+
+Every `0.11.x` tag fails closed unless it tracks
+`release-evidence/<version>/windows-release.json`, one report for each clean Windows target,
+the canonical Linux x86_64/Python 3.12 core report from the same successful `ci` run, the
+Linux/Win10/Win11 comparison report, and the rollback-verification report. The manifest schema
+is `packaging/release-evidence.schema.json`. It binds the candidate source commit, ZIP
+name/SHA-256/byte count, successful run and exact artifacts, runtime configuration, hashed
+build constraints, and all five Windows build/verification scripts (including the builder).
+The candidate source must be an ancestor of the tag. The tag may differ from that candidate
+only by the manifest and declared evidence reports; the version-specific rollback script and
+all code/config/verifiers must already exist unchanged in the candidate commit.
+
+`0.11.0` is the core/Web/portable evidence role. `0.11.1` and later patch releases additionally
+freeze one exact Bambu Studio executable version/hash, Authenticode publisher/thumbprint, and
+resolved official profile identity; both clean targets must match it and pass project
+reopen/reslice. Both roles require a successful default-browser launch from the packaged
+application, native AMD64 (not ARM64 emulation), byte-reproducible candidate provenance, exact
+Linux/Win10/Win11 manufacturing dimensions/topology/orientation, and verified installed/source
+rollback that preserves retained evidence. Hosted Windows Server reports explicitly record
+`hosted_server=true` and `target_verified=false`; they cannot satisfy either clean target.
+Missing, untracked, stale, dirty-source, cross-candidate, wrong-target, wrong-verifier,
+checksum-mismatched, or placeholder evidence blocks publication before any asset is staged.
+Raw machine reports remain outside sdists and wheels; only the validated gate summary is staged
+as a release asset.
+
+Clean-client evidence is produced only by
+`.github/workflows/windows-clean-release-evidence.yml` on separately administered clean
+Win10/Win11 runners. Each target artifact contains a private raw report and its public
+projection. The tracked manifest records the workflow run/artifact identity and both hashes;
+the release workflow downloads the artifact and requires the public bytes to equal the tracked
+report and the projection to match the private report field by field. Private reports are
+access-controlled, retention-bounded evidence and are never tracked or uploaded as release
+assets.
+
+The PEP 517 build backend is pinned to `hatchling==1.31.0`; its complete transitive build
+environment is pinned and wheel-hashed in `packaging/build-constraints.txt`. Every release
+and Windows portable build passes that file to `uv build` with `--require-hashes`.
 
 ### Phase 12B official Bambu Studio acceptance
 
@@ -55,44 +95,55 @@ verifier additionally records the measured Bambu Studio version. Both the CLI an
 entry points retain manual executable and profile-root overrides.
 
 The hosted `windows-bambu-contracts` job intentionally has no official Bambu Studio
-binary. It tests only discovery, profile, path, and verifier contracts and is not
-release evidence. On each clean Windows target, run the official tool gate separately
-with a new work root:
+binary. It tests discovery, profile, path, and verifier contracts only; it is not release
+evidence. Use the portable verifier for the final candidate because it creates and checks the
+candidate binding before invoking the official Bambu gate. Run once on each clean target, using
+the identical archive, source commit, publisher subject, certificate thumbprint, and frozen
+profile identity:
 
 ```powershell
-uv run python scripts/verify_windows_bambu.py `
-  --work-root artifacts/windows-bambu-acceptance `
-  --require-windows `
-  --report artifacts/logs/windows-bambu-acceptance.json
-```
+$version = "0.11.1"
+$commit = "0123456789abcdef0123456789abcdef01234567"
+$publisher = "EXACT SIGNER SUBJECT FROM ACCEPTED INSTALLER"
+$thumbprint = "EXACT40OR64HEXTHUMBPRINTFROMINSTALLER"
+$profileContentIdentitySha = "EXACT64HEXPROFILECONTENTIDENTITYSHA256"
+$machineProfileSha = "EXACT64HEXMACHINEPROFILESHA256"
+$processProfileSha = "EXACT64HEXPROCESSPROFILESHA256"
+$filamentProfileSha = "EXACT64HEXFILAMENTPROFILESHA256"
 
-If standard discovery is unavailable, add
-`--bambu-studio-executable "C:\Program Files\Bambu Studio\bambu-studio.exe"` and
-`--bambu-profiles-root "C:\Program Files\Bambu Studio\resources\profiles\BBL"`.
-The verifier creates a synthetic terrain below a path containing spaces and non-ASCII
-characters, runs normative P2S slicing, exports the Bambu project, reopens it without
-external profiles, reslices it, checks every manufacturing parameter gate, and binds
-the OS build, Python, TopoForge, executable, profiles, workflow, and artifacts by
-SHA-256.
-
-To prove the packaged application rather than the source environment, add the opt-in
-gate to native portable verification. `--work-root` is mandatory so the evidence is
-retained:
-
-```powershell
 uv run python scripts/verify_windows_portable.py `
-  --archive dist/windows-primary/topoforge-0.10.3-windows-x64-portable.zip `
-  --expected-version 0.10.3 `
+  --archive "dist/windows-primary/topoforge-$version-windows-x64-portable.zip" `
+  --expected-version $version `
   --execute `
+  --expected-target win10-22h2 `
+  --expected-source-commit $commit `
+  --browser-mode require `
   --verify-bambu `
-  --work-root artifacts/windows-portable-bambu-acceptance `
-  --report artifacts/logs/windows-portable-bambu-verification.json
+  --expected-publisher-subject $publisher `
+  --expected-certificate-thumbprint $thumbprint `
+  --expected-profile-content-identity-sha256 $profileContentIdentitySha `
+  --expected-machine-profile-sha256 $machineProfileSha `
+  --expected-process-profile-sha256 $processProfileSha `
+  --expected-filament-profile-sha256 $filamentProfileSha `
+  --work-root "C:\TopoForge Evidence\Win10 Bambu 地形" `
+  --report artifacts/logs/windows-10-portable-bambu.json
 ```
 
-Run both commands for the identical release candidate on clean Windows 10 22H2 x64
-and Windows 11 x64 hosts and retain separate reports. Neither hosted CI, the successful
-Linux official-Bambu regression, nor one Windows version may substitute for the other;
-do not publish a Windows or Bambu support claim until both reports pass.
+Repeat with `--expected-target win11`, a fresh Win11 work root, and a separate report. If
+standard discovery is unavailable, add `--bambu-studio-executable` and
+`--bambu-profiles-root`; publication still requires the discovered/overridden executable and
+profiles to match every policy-frozen hash and the official profiles root to be the signed
+executable's expected sibling. The verifier runs normative P2S slicing, exports the Bambu
+project, reopens it without external profiles, reslices it, checks every manufacturing
+parameter gate, and binds the OS/native architecture, archive, source, executable, profiles,
+workflow, and artifacts by SHA-256. Neither hosted CI nor one Windows version may substitute
+for the other.
+
+The executable signer and path-independent profile content identity are frozen in
+`packaging/bambu-studio-windows-identity-policy.json`. For a Phase 12B tag, the manifest must
+name a distinct prior approval commit; that commit must be an ancestor of the candidate and
+the policy blob must remain byte-identical through the candidate and release tag. A candidate
+cannot approve its own Bambu identity by changing the policy and evidence together.
 
 ## Build and verify a release
 
@@ -104,8 +155,8 @@ uv run ruff format --check .
 uv run pyright
 uv run pytest
 
-uv build --no-sources --out-dir dist/primary
-uv build --no-sources --out-dir dist/repeat
+uv build --no-sources --build-constraints packaging/build-constraints.txt --require-hashes --out-dir dist/primary
+uv build --no-sources --build-constraints packaging/build-constraints.txt --require-hashes --out-dir dist/repeat
 uv run python scripts/verify_release.py \
   --primary-dir dist/primary \
   --repeat-dir dist/repeat \
@@ -120,13 +171,22 @@ CLI import outside the repository. The installed CLI verifies the packaged Web a
 
 ## GitHub Release publication
 
-The .github/workflows/release.yml workflow runs on main, version tags, and manual
-dispatch. A main push selects the newest reachable tag without a GitHub Release, which
-bootstraps historical tags such as v0.9.0. A tag push publishes that exact tag. The
-workflow checks out the target tag, requires v<project.version> identity, builds the Web
-assets, creates two fixed-epoch archive sets, runs isolated installation verification,
-writes and rechecks SHA256SUMS, and uploads the wheel, sdist, verification JSON, and
-checksums. Existing Release pages are detected and skipped without replacing assets.
+The `.github/workflows/release.yml` workflow runs on main, version tags, and manual
+dispatch. Its current automatic publication contract starts with `0.11.x`: a main push
+selects the newest reachable unpublished tag that contains the complete Phase 12 release
+scripts, constraints, and required verifier CLIs. Older tags are skipped, and an explicit
+unsupported tag fails before checkout; historical recovery must use a separately reviewed
+historical workflow or retained release assets. A supported tag push publishes that exact
+tag. The workflow checks out the target tag, requires `v<project.version>` identity, builds
+the Web assets, creates two fixed-epoch archive sets, runs isolated installation verification,
+writes and rechecks `SHA256SUMS`, and uploads the explicit checksum-bound asset inventory.
+Every Action used by this workflow is pinned to a full upstream commit SHA. The read-only
+preparation job records the peeled commit that it actually built; the separate write-capable
+publication job has no checkout and, immediately before creating the Release, recursively
+resolves the live lightweight or annotated tag through the GitHub API and requires it still
+to end at that exact commit. A moved, deleted, malformed, cyclic, or over-deep tag chain fails
+before publication.
+Existing Release pages are detected and skipped without replacing assets.
 
 ## Connected installation
 
@@ -179,7 +239,17 @@ contain every resolved platform dependency, especially lib3mf and the geospatial
 
 ## Rollback
 
-Installed CLI rollback keeps the 0.10.3 environment intact and switches back to 0.10.2:
+Every `0.11.x` source candidate must already contain
+`scripts/rollback-topoforge-VERSION.sh`. The release workflow runs
+`scripts/verify_release_rollback.py` at the release tag, exercises the canonical source
+worktree rollback and an installed active-entrypoint switch from the current wheel to the
+previous wheel, and proves retained evidence is byte-identical before and after. The generated
+`rollback-verification-runtime.json` binds both the earlier candidate source commit and the
+release-tag commit. The publication gate rejects a missing, renamed, post-candidate-added,
+noncanonical, self-reported, or unexecuted rollback path.
+
+The historical 0.10.3 installed CLI rollback keeps its environment intact and switches back
+to 0.10.2:
 
 ```bash
 ~/.venvs/topoforge-0.10.2/bin/topoforge doctor

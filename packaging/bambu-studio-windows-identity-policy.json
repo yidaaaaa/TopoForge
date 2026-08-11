@@ -1,0 +1,7 @@
+{
+  "allowed_identities": [],
+  "note": "Release engineering must independently freeze and review the official Windows installer signer, executable, version, and profile identities before Phase 12B publication.",
+  "policy_status": "unfrozen",
+  "required_checks_passed": false,
+  "schema_version": "topoforge-bambu-windows-identity-policy-v1"
+}
