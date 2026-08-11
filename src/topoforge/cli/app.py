@@ -84,6 +84,7 @@ from topoforge.util import sha256_file
 from topoforge.validation import validate_mesh
 from topoforge.workflow import (
     GlobalAcquisitionConfig,
+    WorkflowCleanupPlan,
     WorkflowExecutionResult,
     WorkflowLaunchConfig,
     apply_workflow_cleanup,
@@ -1001,21 +1002,49 @@ def cleanup_workflow(
             help="Exact workflow id required with --apply.",
         ),
     ] = None,
+    confirm_plan_id: Annotated[
+        str | None,
+        typer.Option(
+            "--confirm-plan-id",
+            help="Exact cleanup plan id required with --apply.",
+        ),
+    ] = None,
 ) -> None:
     """Review or explicitly apply cleanup of unreferenced content-addressed stages."""
     try:
         root = workspace.expanduser().resolve()
-        plan = plan_workflow_cleanup(root)
         plan_path = root / "workflow-cleanup-plan.json"
-        write_json(plan_path, plan.model_dump(mode="json"))
         if not apply:
+            plan = plan_workflow_cleanup(root)
+            write_json(plan_path, plan.model_dump(mode="json"))
             _emit({"status": "review", "plan": str(plan_path), **plan.model_dump(mode="json")})
             return
-        if confirm_workflow_id is None:
-            raise ValueError("--apply requires --confirm-workflow-id from the reviewed plan")
+        if confirm_workflow_id is None or confirm_plan_id is None:
+            raise ValueError(
+                "--apply requires --confirm-workflow-id and --confirm-plan-id from the "
+                "same reviewed plan"
+            )
+        if not plan_path.is_file():
+            raise FileNotFoundError(
+                f"reviewed cleanup plan is missing: {plan_path}. Run cleanup without --apply "
+                "and review the generated plan first."
+            )
+        try:
+            reviewed = WorkflowCleanupPlan.model_validate_json(
+                plan_path.read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError) as exc:
+            raise ValueError(
+                f"reviewed cleanup plan is unreadable: {plan_path}. Generate and review a new plan."
+            ) from exc
+        if reviewed.workspace.expanduser().resolve() != root:
+            raise ValueError("reviewed cleanup plan belongs to a different workspace")
+        if reviewed.workflow_id != confirm_workflow_id or reviewed.plan_id != confirm_plan_id:
+            raise ValueError("confirmation values do not match the saved reviewed cleanup plan")
         result = apply_workflow_cleanup(
             root,
             confirm_workflow_id=confirm_workflow_id,
+            confirm_plan_id=confirm_plan_id,
         )
         result_path = root / "workflow-cleanup-result.json"
         write_json(result_path, result.model_dump(mode="json"))

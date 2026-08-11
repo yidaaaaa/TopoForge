@@ -5,6 +5,7 @@ from zipfile import ZipFile
 import numpy as np
 import rasterio
 import trimesh
+from affine import Affine
 from rasterio.transform import from_origin
 
 from topoforge.engine import build_local_terrain
@@ -99,3 +100,54 @@ def test_asymmetric_dem_keeps_all_corners_and_peak_in_stl_glb_and_3mf(tmp_path: 
     assert inspection.metadata["customXMLNS0:east_axis"] == "+X = East"
     assert inspection.metadata["customXMLNS0:north_axis"] == "+Y = North"
     assert inspection.metadata["customXMLNS0:north_edge"] == "y=model_depth_mm"
+
+
+def test_west_up_metric_dem_is_normalized_before_mesh_construction(tmp_path: Path) -> None:
+    values = np.array(
+        [
+            [300.0, 325.0, 350.0, 375.0, 400.0],
+            [260.0, 280.0, 300.0, 320.0, 340.0],
+            [180.0, 200.0, 220.0, 240.0, 260.0],
+            [100.0, 125.0, 150.0, 175.0, 200.0],
+        ],
+        dtype=np.float32,
+    )
+    source = tmp_path / "west-up.tif"
+    with rasterio.open(
+        source,
+        "w",
+        driver="GTiff",
+        width=5,
+        height=4,
+        count=1,
+        dtype="float32",
+        crs="EPSG:32647",
+        transform=Affine(-30.0, 0.0, 500_150.0, 0.0, -30.0, 3_300_000.0),
+    ) as dataset:
+        dataset.write(values, 1)
+
+    result = build_local_terrain(
+        BuildConfig(
+            dem_path=source,
+            output_dir=tmp_path / "west-up-build",
+            model_width_mm=100.0,
+            model_depth_mm=80.0,
+            sampling_mode=SamplingMode.SOURCE_PRESERVING,
+            vertical_scale_mode=VerticalScaleMode.FIT_HEIGHT,
+            max_height_mm=30.0,
+        )
+    )
+
+    mesh = trimesh.load(result.artifacts["model_stl"], force="mesh", process=True)
+    assert isinstance(mesh, trimesh.Trimesh)
+    northwest = _top_z(mesh, 0.0, 80.0)
+    northeast = _top_z(mesh, 100.0, 80.0)
+    southwest = _top_z(mesh, 0.0, 0.0)
+    southeast = _top_z(mesh, 100.0, 0.0)
+    assert northwest > northeast > southwest > southeast
+    assert result.validation["orientation_consistent"] is True
+    assert result.validation["orientation"]["east_axis"] == "+X = East"
+    assert result.validation["orientation"]["north_axis"] == "+Y = North"
+    assert mesh.is_watertight
+    assert mesh.is_winding_consistent
+    assert mesh.volume > 0.0

@@ -1,3 +1,5 @@
+import pytest
+
 from topoforge.validation.manufacturing import evaluate_bambu_p2s_release_gate
 
 
@@ -11,6 +13,8 @@ def _result() -> dict:
             "out_of_bed": False,
             "empty_layer_warning": False,
             "floating_region_warning": False,
+            "support_material": False,
+            "layer_count": 224,
             "settings": {
                 "printer_model": "Bambu Lab P2S",
                 "printer_settings_id": "Bambu Lab P2S 0.4 nozzle",
@@ -49,6 +53,12 @@ def test_official_bambu_p2s_evidence_passes_release_gate() -> None:
     assert gate["parameter_checks_passed"] is True
     assert gate["slice_checks_passed"] is True
     assert gate["release_gate_passed"] is True
+    assert gate["policy_id"] == "bambu-p2s-official-release-v2"
+    assert {check["group"] for check in gate["parameter_checks"]} == {
+        "validator",
+        "slice",
+        "parameter",
+    }
 
 
 def test_false_200_mm_p2s_and_prusa_results_are_rejected() -> None:
@@ -63,3 +73,40 @@ def test_false_200_mm_p2s_and_prusa_results_are_rejected() -> None:
     assert not evaluate_bambu_p2s_release_gate(prusa, printer_profile_id="bambu-p2s-0.4")[
         "release_gate_passed"
     ]
+
+
+@pytest.mark.parametrize("support_material", [True, None, 0, "false"])
+def test_observed_support_material_must_be_explicitly_false(
+    support_material: object,
+) -> None:
+    result = _result()
+    result["metrics"]["support_material"] = support_material
+
+    gate = evaluate_bambu_p2s_release_gate(result, printer_profile_id="bambu-p2s-0.4")
+
+    assert gate["parameter_checks_passed"] is True
+    assert gate["slice_checks_passed"] is False
+    assert gate["release_gate_passed"] is False
+
+
+@pytest.mark.parametrize("layer_count", [0, -1, None, True, 1.5])
+def test_observed_layer_count_must_be_a_positive_integer(layer_count: object) -> None:
+    result = _result()
+    result["metrics"]["layer_count"] = layer_count
+
+    gate = evaluate_bambu_p2s_release_gate(result, printer_profile_id="bambu-p2s-0.4")
+
+    assert gate["parameter_checks_passed"] is True
+    assert gate["slice_checks_passed"] is False
+    assert gate["release_gate_passed"] is False
+
+
+def test_parameter_and_slice_check_groups_are_independent() -> None:
+    result = _result()
+    result["metrics"]["settings"]["wall_loops"] = 3
+
+    gate = evaluate_bambu_p2s_release_gate(result, printer_profile_id="bambu-p2s-0.4")
+
+    assert gate["parameter_checks_passed"] is False
+    assert gate["slice_checks_passed"] is True
+    assert gate["release_gate_passed"] is False

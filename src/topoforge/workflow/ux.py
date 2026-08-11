@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import html
 import json
+import os
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 from urllib.parse import quote
 
 import yaml
@@ -14,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from topoforge.exceptions import ConfigurationError
 from topoforge.models import BuildConfig
 from topoforge.overlays import OverlayConfig
-from topoforge.provenance import write_json
+from topoforge.platforms import path_is_link_like
 from topoforge.util import sha256_file
 from topoforge.validation.slicers import (
     BambuStudioAdapter,
@@ -33,6 +34,7 @@ from topoforge.workflow.local import (
     WorkflowStage,
     WorkflowState,
     run_local_workflow,
+    verify_completed_workflow,
 )
 
 _LAUNCH_SCHEMA_VERSION = "topoforge-workflow-launch-v1"
@@ -120,14 +122,104 @@ class WorkflowExecutionResult(BaseModel):
     report_path: Path
 
 
-def _atomic_yaml(path: Path, value: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(
-        yaml.safe_dump(value, sort_keys=True, allow_unicode=True),
-        encoding="utf-8",
+class _OwnedAtomicWrite(NamedTuple):
+    """One publication bound to the parent identity used for its write."""
+
+    path: Path
+    root: Path
+    root_identity: tuple[int, int]
+
+
+def _atomic_write_bytes(
+    path: Path,
+    payload: bytes,
+    *,
+    root: Path | None = None,
+    root_identity: tuple[int, int] | None = None,
+) -> _OwnedAtomicWrite:
+    """Atomically replace one regular file through an identity-bound parent."""
+    from topoforge.workflow.maintenance import (
+        _ensure_owned_directory_tree,
+        atomic_write_owned_regular_bytes,
     )
-    temporary.replace(path)
+
+    destination = Path(os.path.abspath(path.expanduser()))
+    if (root is None) != (root_identity is None):
+        raise ConfigurationError("workflow output root and root identity must be provided together")
+    if root is None:
+        parent, parent_identity = _ensure_owned_directory_tree(
+            destination.parent,
+            context=f"workflow output parent for {destination.name}",
+        )
+    else:
+        parent = Path(os.path.abspath(root.expanduser()))
+        assert root_identity is not None
+        parent_identity = root_identity
+    try:
+        atomic_write_owned_regular_bytes(
+            destination,
+            payload,
+            root=parent,
+            root_identity=parent_identity,
+            context=f"workflow output {destination}",
+            replace=True,
+        )
+    except (OSError, ValueError) as exc:
+        if getattr(exc, "committed", False):
+            raise ConfigurationError(
+                "workflow output publication committed but its durability is uncertain; "
+                f"reopen and verify before retrying: {destination}"
+            ) from exc
+        raise ConfigurationError(
+            f"workflow output could not be safely written: {destination}"
+        ) from exc
+    return _OwnedAtomicWrite(destination, parent, parent_identity)
+
+
+def _reopen_atomic_write_bytes(
+    written: _OwnedAtomicWrite,
+    *,
+    max_bytes: int,
+) -> bytes:
+    """Read one just-published file through the same identity-bound parent."""
+    from topoforge.web.security import read_owned_regular_bytes
+
+    try:
+        return read_owned_regular_bytes(
+            written.path,
+            root=written.root,
+            root_identity=written.root_identity,
+            context=f"workflow output strict reopen {written.path}",
+            max_bytes=max_bytes,
+        )
+    except (OSError, ValueError) as exc:
+        raise ConfigurationError(
+            f"workflow output parent or file changed before strict reopen: {written.path}"
+        ) from exc
+
+
+def _atomic_yaml(
+    path: Path,
+    value: dict[str, Any],
+    *,
+    root: Path | None = None,
+    root_identity: tuple[int, int] | None = None,
+) -> _OwnedAtomicWrite:
+    payload = yaml.safe_dump(value, sort_keys=True, allow_unicode=True).encode("utf-8")
+    return _atomic_write_bytes(path, payload, root=root, root_identity=root_identity)
+
+
+def _atomic_json(
+    path: Path,
+    value: dict[str, Any],
+    *,
+    root: Path | None = None,
+    root_identity: tuple[int, int] | None = None,
+) -> _OwnedAtomicWrite:
+    payload = (
+        json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False, default=str) + "\n"
+    ).encode("utf-8")
+    return _atomic_write_bytes(path, payload, root=root, root_identity=root_identity)
 
 
 def write_workflow_launch_config(
@@ -135,13 +227,18 @@ def write_workflow_launch_config(
     path: Path | None = None,
 ) -> Path:
     """Write and strictly reopen a stable workflow launch YAML file."""
-    destination = (
-        (path if path is not None else config.workspace_dir / "workflow-launch.yaml")
-        .expanduser()
-        .resolve()
+    destination = Path(
+        os.path.abspath(
+            (
+                path if path is not None else config.workspace_dir / "workflow-launch.yaml"
+            ).expanduser()
+        )
     )
-    _atomic_yaml(destination, config.model_dump(mode="json"))
-    reopened = read_workflow_launch_config(destination)
+    written = _atomic_yaml(destination, config.model_dump(mode="json"))
+    reopened = _parse_workflow_launch_bytes(
+        _reopen_atomic_write_bytes(written, max_bytes=16 * 1024 * 1024),
+        source=destination,
+    )
     if reopened != config:
         raise ConfigurationError("workflow launch config failed strict YAML reopen")
     return destination
@@ -149,14 +246,38 @@ def write_workflow_launch_config(
 
 def read_workflow_launch_config(path: Path) -> WorkflowLaunchConfig:
     """Read one saved launch file with strict field validation."""
-    resolved = path.expanduser().resolve()
+    from topoforge.web.security import read_owned_regular_bytes, real_directory_tree_identity
+
+    source = Path(os.path.abspath(path.expanduser()))
     try:
-        raw = yaml.safe_load(resolved.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError) as exc:
-        raise ConfigurationError(f"workflow launch config is unreadable: {resolved}") from exc
+        parent_identity = real_directory_tree_identity(
+            source.parent,
+            context="workflow launch config parent",
+        )
+        payload = read_owned_regular_bytes(
+            source,
+            root=source.parent,
+            root_identity=parent_identity,
+            context="workflow launch config",
+            max_bytes=16 * 1024 * 1024,
+        )
+    except (OSError, ValueError) as exc:
+        raise ConfigurationError(f"workflow launch config is unreadable: {source}") from exc
+    return _parse_workflow_launch_bytes(payload, source=source)
+
+
+def _parse_workflow_launch_bytes(payload: bytes, *, source: Path) -> WorkflowLaunchConfig:
+    """Parse one bounded launch payload already read through a trusted handle."""
+    try:
+        raw = yaml.safe_load(payload.decode("utf-8"))
+    except (UnicodeDecodeError, yaml.YAMLError) as exc:
+        raise ConfigurationError(f"workflow launch config is unreadable: {source}") from exc
     if not isinstance(raw, dict):
         raise ConfigurationError("workflow launch config root is not a mapping")
-    return WorkflowLaunchConfig.model_validate(raw)
+    try:
+        return WorkflowLaunchConfig.model_validate(raw)
+    except ValueError as exc:
+        raise ConfigurationError(f"workflow launch config is invalid: {source}") from exc
 
 
 def _slicer_context(
@@ -184,11 +305,48 @@ def _slicer_context(
     return adapter, profile
 
 
-def _within(root: Path, value: str) -> Path:
-    path = (root / value).resolve()
-    if path != root and root not in path.parents:
-        raise ConfigurationError(f"workflow artifact escapes workspace: {path}")
-    return path
+def _workspace_root(workspace_dir: Path) -> Path:
+    lexical = Path(os.path.abspath(workspace_dir.expanduser()))
+    try:
+        if path_is_link_like(lexical):
+            raise ConfigurationError(
+                f"workflow workspace root is link-like: {lexical}; use the real directory"
+            )
+    except FileNotFoundError as exc:
+        raise ConfigurationError(f"workflow workspace is missing: {lexical}") from exc
+    return lexical.resolve()
+
+
+def _within(
+    root: Path,
+    value: str | Path,
+    *,
+    context: str = "workflow artifact",
+    require_exists: bool = True,
+) -> Path:
+    relative = Path(value)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ConfigurationError(f"{context} must be workspace-relative without '..': {relative}")
+    candidate = Path(os.path.abspath(root / relative))
+    if candidate == root or root not in candidate.parents:
+        raise ConfigurationError(f"{context} escapes workspace: {candidate}")
+    current = root
+    for part in relative.parts:
+        current /= part
+        try:
+            if path_is_link_like(current):
+                raise ConfigurationError(
+                    f"{context} contains a link-like component: {current}; "
+                    "replace it with the original file or directory"
+                )
+        except FileNotFoundError:
+            if require_exists:
+                raise ConfigurationError(f"{context} is missing: {current}") from None
+            break
+    resolved = candidate.resolve(strict=require_exists)
+    if resolved == root or root not in resolved.parents:
+        raise ConfigurationError(f"{context} escapes workspace: {resolved}")
+    return resolved
 
 
 def _json_object(path: Path) -> dict[str, Any]:
@@ -204,10 +362,13 @@ def _json_object(path: Path) -> dict[str, Any]:
 def _existing_artifacts(root: Path, candidates: dict[str, Path]) -> dict[str, str]:
     artifacts = {"workspace": str(root)}
     for role, path in candidates.items():
-        resolved = path.resolve()
+        resolved = _within(
+            root,
+            path.relative_to(root),
+            context=f"workflow artifact {role}",
+            require_exists=False,
+        )
         if resolved.exists():
-            if resolved != root and root not in resolved.parents:
-                raise ConfigurationError(f"workflow artifact escapes workspace: {resolved}")
             artifacts[role] = str(resolved)
     return artifacts
 
@@ -218,10 +379,29 @@ def inspect_workflow_workspace(
     completed_stages: tuple[WorkflowStage, ...] = (),
     reused_stages: tuple[WorkflowStage, ...] = (),
 ) -> WorkflowRunSummary:
-    """Strictly reopen workflow records and build a measured artifact index."""
-    root = workspace_dir.expanduser().resolve()
-    manifest_path = root / "workflow-manifest.json"
-    status_path = root / "workflow-status.json"
+    """Offline-reverify the full stage chain and build a measured artifact index."""
+    root = _workspace_root(workspace_dir)
+    try:
+        verify_completed_workflow(root)
+    except ConfigurationError:
+        restore_evidence = root / "workflow-restore.json"
+        if not restore_evidence.exists() and not restore_evidence.is_symlink():
+            raise
+        from topoforge.workflow.maintenance import verify_workflow_restore_evidence
+
+        verify_workflow_restore_evidence(root)
+        verify_completed_workflow(root, verify_request_identity=False)
+
+    manifest_path = _within(
+        root,
+        "workflow-manifest.json",
+        context="workflow manifest path",
+    )
+    status_path = _within(
+        root,
+        "workflow-status.json",
+        context="workflow status path",
+    )
     try:
         manifest = LocalWorkflowManifest.model_validate_json(
             manifest_path.read_text(encoding="utf-8")
@@ -238,8 +418,16 @@ def inspect_workflow_workspace(
 
     stage_paths: dict[WorkflowStage, Path] = {}
     for record in manifest.stages:
-        output = _within(root, record.output_path)
-        stage_manifest = _within(root, record.manifest_path)
+        output = _within(
+            root,
+            record.output_path,
+            context=f"workflow {record.name.value} output path",
+        )
+        stage_manifest = _within(
+            root,
+            record.manifest_path,
+            context=f"workflow {record.name.value} manifest path",
+        )
         if not output.is_dir() or not stage_manifest.is_file():
             raise ConfigurationError(f"workflow stage artifact is missing: {record.name.value}")
         if sha256_file(stage_manifest) != record.manifest_sha256:
@@ -383,9 +571,20 @@ def _relative_link(report_path: Path, artifact_path: str) -> str:
     return quote(relative, safe="/.-_") + ("/" if target.is_dir() else "")
 
 
-def write_workflow_report(path: Path, summary: WorkflowRunSummary) -> Path:
-    """Write a dependency-free local artifact browser as one static HTML file."""
-    destination = path.expanduser().resolve()
+def render_workflow_report_bytes(
+    summary: WorkflowRunSummary,
+    *,
+    report_path: Path | None = None,
+) -> bytes:
+    """Render one dependency-free local artifact browser without writing it."""
+    if report_path is None:
+        configured_path = summary.artifacts.get("workflow_report")
+        if configured_path is None:
+            raise ConfigurationError(
+                "workflow report rendering requires a workflow_report artifact path"
+            )
+        report_path = Path(configured_path)
+    destination = Path(os.path.abspath(report_path.expanduser()))
     metric_rows = "\n".join(
         "<tr>"
         f"<th>{html.escape(key)}</th>"
@@ -477,21 +676,50 @@ img {{
 </body>
 </html>
 """
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(f".{destination.name}.tmp")
-    temporary.write_text(document, encoding="utf-8")
-    temporary.replace(destination)
+    return document.encode("utf-8")
+
+
+def write_workflow_report(
+    path: Path,
+    summary: WorkflowRunSummary,
+    *,
+    root: Path | None = None,
+    root_identity: tuple[int, int] | None = None,
+) -> Path:
+    """Write a dependency-free local artifact browser as one static HTML file."""
+    destination = Path(os.path.abspath(path.expanduser()))
+    payload = render_workflow_report_bytes(summary, report_path=destination)
+    written = _atomic_write_bytes(
+        destination,
+        payload,
+        root=root,
+        root_identity=root_identity,
+    )
+    if _reopen_atomic_write_bytes(written, max_bytes=max(len(payload), 1)) != payload:
+        raise ConfigurationError("workflow report failed identity-bound strict reopen")
     return destination
 
 
-def publish_workflow_summary(result: LocalWorkflowResult) -> tuple[WorkflowRunSummary, Path, Path]:
+def publish_workflow_summary(
+    result: LocalWorkflowResult,
+    *,
+    workspace_root_identity: tuple[int, int] | None = None,
+) -> tuple[WorkflowRunSummary, Path, Path]:
     """Strictly inspect a completed result and publish concise JSON/HTML views."""
+    from topoforge.web.security import real_directory_tree_identity
     from topoforge.workflow.maintenance import (
         estimate_workflow_storage,
         write_workflow_storage_estimate,
     )
 
-    root = result.workspace_dir.resolve()
+    root = _workspace_root(result.workspace_dir)
+    observed_root_identity = real_directory_tree_identity(
+        root,
+        context="workflow summary workspace",
+    )
+    if workspace_root_identity is not None and observed_root_identity != workspace_root_identity:
+        raise ConfigurationError("workflow workspace changed before summary publication")
+    root_identity = observed_root_identity
     summary_path = root / "workflow-summary.json"
     report_path = root / "workflow-report.html"
     storage_path = root / "workflow-storage.json"
@@ -502,7 +730,12 @@ def publish_workflow_summary(result: LocalWorkflowResult) -> tuple[WorkflowRunSu
     )
     launch = read_workflow_launch_config(root / "workflow-launch.yaml")
     storage = estimate_workflow_storage(launch, summary=summary)
-    write_workflow_storage_estimate(storage, storage_path)
+    write_workflow_storage_estimate(
+        storage,
+        storage_path,
+        root=root,
+        root_identity=root_identity,
+    )
     summary = summary.model_copy(
         update={
             "metrics": {
@@ -526,9 +759,21 @@ def publish_workflow_summary(result: LocalWorkflowResult) -> tuple[WorkflowRunSu
             },
         }
     )
-    write_json(summary_path, summary.model_dump(mode="json"))
-    write_workflow_report(report_path, summary)
-    reopened = WorkflowRunSummary.model_validate_json(summary_path.read_text(encoding="utf-8"))
+    written_summary = _atomic_json(
+        summary_path,
+        summary.model_dump(mode="json"),
+        root=root,
+        root_identity=root_identity,
+    )
+    write_workflow_report(
+        report_path,
+        summary,
+        root=root,
+        root_identity=root_identity,
+    )
+    reopened = WorkflowRunSummary.model_validate_json(
+        _reopen_atomic_write_bytes(written_summary, max_bytes=16 * 1024 * 1024)
+    )
     if reopened != summary:
         raise ConfigurationError("workflow summary failed strict JSON reopen")
     return summary, summary_path, report_path
@@ -536,6 +781,8 @@ def publish_workflow_summary(result: LocalWorkflowResult) -> tuple[WorkflowRunSu
 
 def execute_workflow_launch(config: WorkflowLaunchConfig) -> WorkflowExecutionResult:
     """Save one launch request, execute the shared core, and publish local views."""
+    from topoforge.web.security import real_directory_tree_identity
+
     workspace = config.workspace_dir.expanduser().resolve()
     normalized = config.model_copy(
         update={
@@ -544,13 +791,21 @@ def execute_workflow_launch(config: WorkflowLaunchConfig) -> WorkflowExecutionRe
         }
     )
     launch_path = write_workflow_launch_config(normalized)
+    workspace_identity = real_directory_tree_identity(
+        workspace,
+        context="workflow execution workspace",
+    )
     adapter, profile = _slicer_context(normalized)
     result = run_local_workflow(
         normalized.workflow_config(),
         adapter=adapter,
         profile=profile,
+        workspace_identity=workspace_identity,
     )
-    summary, summary_path, report_path = publish_workflow_summary(result)
+    summary, summary_path, report_path = publish_workflow_summary(
+        result,
+        workspace_root_identity=workspace_identity,
+    )
     return WorkflowExecutionResult(
         workflow=result,
         launch_config_path=launch_path,

@@ -4,10 +4,13 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
+import topoforge.workflow.local as local_workflow_module
 from topoforge.cli.app import app
 from topoforge.config import dump_resolved_config
+from topoforge.exceptions import ConfigurationError
 from topoforge.models import BuildConfig, SamplingMode
 from topoforge.raster import SyntheticTerrain, create_synthetic_geotiff
 from topoforge.validation.slicers import (
@@ -98,6 +101,57 @@ G1 X1 Y1 Z0.2
             gcode_size_bytes=output_gcode.stat().st_size,
             metrics=parse_gcode_metrics(gcode),
         )
+
+
+def test_path_only_build_cannot_write_replacement_workspace_after_real_directory_swap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "identity-only-source.tif"
+    source.write_bytes(b"identity-only source; build is intercepted\n")
+    workspace = tmp_path / "workflow"
+    workspace.mkdir()
+    workspace_stat = workspace.stat()
+    workspace_identity = (workspace_stat.st_dev, workspace_stat.st_ino)
+    retained_workspace = tmp_path / "retained-workflow"
+    victim_payload = b"external victim must remain unchanged\n"
+    observed: dict[str, Path] = {}
+
+    def swap_workspace_during_build(config: BuildConfig) -> None:
+        private_output = config.output_dir.resolve()
+        workspace.rename(retained_workspace)
+        workspace.mkdir()
+        replacement_output = workspace / "stages" / "10-build" / private_output.name
+        replacement_output.mkdir(parents=True)
+        victim = replacement_output / "external-victim.txt"
+        victim.write_bytes(victim_payload)
+
+        private_output.mkdir(parents=True)
+        private_write = private_output / "external-victim.txt"
+        private_write.write_bytes(b"write remained in the private stage\n")
+        observed["victim"] = victim
+        observed["private_write"] = private_write
+
+    monkeypatch.setattr(local_workflow_module, "build_local_terrain", swap_workspace_during_build)
+    workflow = LocalWorkflowConfig(
+        workspace_dir=workspace,
+        build=BuildConfig(
+            dem_path=source,
+            output_dir=workspace,
+            model_width_mm=40.0,
+            max_height_mm=20.0,
+        ),
+        slicing_enabled=False,
+    )
+
+    with pytest.raises(ConfigurationError, match=r"build stage completion.*original workflow"):
+        run_local_workflow(workflow, workspace_identity=workspace_identity)
+
+    assert observed["victim"].read_bytes() == victim_payload
+    assert not observed["private_write"].is_relative_to(workspace)
+    assert not observed["private_write"].is_relative_to(retained_workspace)
+    assert observed["private_write"].read_bytes() == b"write remained in the private stage\n"
+    assert not (workspace / "workflow-status.json").exists()
 
 
 def test_local_run_resumes_after_slice_failure_and_reuses_verified_stages(

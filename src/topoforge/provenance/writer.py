@@ -4,20 +4,52 @@ from __future__ import annotations
 
 import html
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
 
+def _atomic_write_text(path: Path, content: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=path.parent,
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        temporary = None
+        if os.name != "nt":
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+    except BaseException as error:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError as cleanup_error:
+                error.add_note(f"failed to remove temporary output {temporary}: {cleanup_error}")
+        raise
+    return path
+
+
 def write_json(path: Path, value: Any) -> Path:
     """Atomically write stable, UTF-8, newline-terminated JSON."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(
+    return _atomic_write_text(
+        path,
         json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False, default=str) + "\n",
-        encoding="utf-8",
     )
-    temporary.replace(path)
-    return path
 
 
 def write_validation_html(path: Path, report: dict[str, Any]) -> Path:
@@ -68,8 +100,4 @@ code { white-space: pre-wrap; }
 </body>
 </html>
 """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(document, encoding="utf-8")
-    temporary.replace(path)
-    return path
+    return _atomic_write_text(path, document)

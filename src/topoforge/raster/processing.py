@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -16,6 +17,7 @@ from rasterio.enums import Resampling
 from rasterio.errors import RasterioError, WindowError
 from rasterio.features import geometry_window
 from rasterio.io import DatasetReader
+from rasterio.transform import array_bounds
 from rasterio.warp import calculate_default_transform, reproject, transform_bounds, transform_geom
 from rasterio.windows import Window
 from rasterio.windows import bounds as window_bounds
@@ -61,8 +63,22 @@ class _SourceFacts:
     aoi_report: dict[str, object] | None
 
 
+@dataclass(frozen=True, slots=True)
+class _SourceSelection:
+    """One pixel-aligned source selection, possibly split at the antimeridian."""
+
+    windows: tuple[Window, ...]
+    coverage_status: str
+    multipart_antimeridian: bool = False
+
+
 def _is_north_up(transform: Affine) -> bool:
-    return abs(transform.b) < 1e-12 and abs(transform.d) < 1e-12 and transform.e < 0
+    return (
+        transform.a > 0
+        and transform.e < 0
+        and abs(transform.b) < 1e-12
+        and abs(transform.d) < 1e-12
+    )
 
 
 def _uses_metre_axes(crs: CRS) -> bool:
@@ -122,17 +138,23 @@ def largest_true_rectangle(mask: BoolArray) -> tuple[int, int, int, int]:
 def _crop_to_source_coverage(
     elevations: FloatArray,
     coverage: BoolArray,
+    nodata_mask: BoolArray,
     transform: Affine,
-) -> tuple[FloatArray, Affine]:
+) -> tuple[FloatArray, BoolArray, Affine]:
     """Remove reprojection-only corner gaps using the largest covered rectangle."""
     if bool(np.all(coverage)):
-        return elevations, transform
+        return elevations, nodata_mask, transform
     top, bottom, left, right = largest_true_rectangle(coverage)
     if bottom - top < 2 or right - left < 2:
         raise RasterProcessingError("Metric reprojection left fewer than 2 x 2 covered cells")
     cropped = elevations[top:bottom, left:right]
+    cropped_mask = nodata_mask[top:bottom, left:right]
     cropped_transform = transform * Affine.translation(left, top)
-    return np.asarray(cropped, dtype=np.float32), cropped_transform
+    return (
+        np.asarray(cropped, dtype=np.float32),
+        np.asarray(cropped_mask, dtype=np.bool_),
+        cropped_transform,
+    )
 
 
 def _pixel_resolution_m(transform: Affine, crs: CRS, shape_: tuple[int, int]) -> float:
@@ -192,62 +214,176 @@ def _aoi_bbox_parts(aoi: AreaOfInterest) -> list[tuple[float, float, float, floa
     return [(west, south, east, north)]
 
 
-def _combine_windows(windows: list[Window], full_window: Window) -> Window:
-    column_start = max(int(full_window.col_off), min(int(window.col_off) for window in windows))
-    row_start = max(int(full_window.row_off), min(int(window.row_off) for window in windows))
-    column_stop = min(
-        int(full_window.col_off + full_window.width),
-        max(int(window.col_off + window.width) for window in windows),
-    )
-    row_stop = min(
-        int(full_window.row_off + full_window.height),
-        max(int(window.row_off + window.height) for window in windows),
-    )
-    return Window.from_slices(
-        (row_start, row_stop),
-        (column_start, column_stop),
-    )
-
-
-def _window_for_aoi(source: DatasetReader, aoi: AreaOfInterest) -> tuple[Window, str]:
-    windows: list[Window] = []
-    for bounds_wgs84 in _aoi_bbox_parts(aoi):
-        geometry_wgs84 = box(*bounds_wgs84)
-        transformed = transform_geom(
-            "EPSG:4326",
-            source.crs,
-            geometry_wgs84.__geo_interface__,
-            precision=15,
-        )
-        try:
-            candidate = geometry_window(source, [transformed])
-        except WindowError:
+def _geographic_longitude_period(crs: CRS) -> float:
+    """Return one complete longitude revolution in the CRS angular unit."""
+    for axis in crs.axis_info:
+        if axis.direction.casefold() not in {"east", "west"}:
             continue
-        windows.append(candidate)
+        factor = axis.unit_conversion_factor
+        if factor is not None and math.isfinite(factor) and factor > 0:
+            return math.tau / factor
+    raise RasterProcessingError(
+        "Geographic source CRS has no usable longitude angular unit; reproject the "
+        "source to a conventional longitude/latitude grid before building"
+    )
+
+
+def _geographic_bounds_in_source_domain(
+    source: DatasetReader,
+    bounds_native: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    """Map one native geographic bbox into the longitude domain used by a source raster."""
+    west, south, east, north = bounds_native
+    source_crs = CRS.from_user_input(source.crs)
+    period = _geographic_longitude_period(source_crs)
+    candidates = [(west + shift, south, east + shift, north) for shift in (-period, 0.0, period)]
+    source_left, _, source_right, _ = source.bounds
+    source_west = min(float(source_left), float(source_right))
+    source_east = max(float(source_left), float(source_right))
+
+    def overlap_width(candidate: tuple[float, float, float, float]) -> float:
+        return max(
+            0.0,
+            min(candidate[2], source_east) - max(candidate[0], source_west),
+        )
+
+    return max(candidates, key=overlap_width)
+
+
+def _clipped_window(source: DatasetReader, candidate: Window) -> Window | None:
+    row_start = max(0, int(candidate.row_off))
+    column_start = max(0, int(candidate.col_off))
+    row_stop = min(source.height, int(candidate.row_off + candidate.height))
+    column_stop = min(source.width, int(candidate.col_off + candidate.width))
+    if row_stop <= row_start or column_stop <= column_start:
+        return None
+    return Window.from_slices((row_start, row_stop), (column_start, column_stop))
+
+
+def _axis_aligned_window_for_bounds(
+    source: DatasetReader,
+    bounds: tuple[float, float, float, float],
+) -> Window:
+    """Map native bounds to a pixel window for any axis direction."""
+    inverse = ~source.transform
+    west, south, east, north = bounds
+    pixel_corners = [
+        inverse * (x, y) for x, y in ((west, south), (west, north), (east, south), (east, north))
+    ]
+    columns = [float(column) for column, _row in pixel_corners]
+    rows = [float(row) for _column, row in pixel_corners]
+    return Window.from_slices(
+        (math.floor(min(rows)), math.ceil(max(rows))),
+        (math.floor(min(columns)), math.ceil(max(columns))),
+        boundless=True,
+    )
+
+
+def _window_for_aoi(source: DatasetReader, aoi: AreaOfInterest) -> _SourceSelection:
+    requested_parts = _aoi_bbox_parts(aoi)
+    windows: list[Window] = []
+    fully_covered: list[bool] = []
+    source_crs = CRS.from_user_input(source.crs)
+    source_left, source_bottom, source_right, source_top = source.bounds
+    source_extent = box(
+        min(source_left, source_right),
+        min(source_bottom, source_top),
+        max(source_left, source_right),
+        max(source_bottom, source_top),
+    )
+    for bounds_wgs84 in requested_parts:
+        native_geometry = shape(
+            transform_geom(
+                "EPSG:4326",
+                source.crs,
+                box(*bounds_wgs84).__geo_interface__,
+                precision=15,
+            )
+        )
+        if source_crs.is_geographic:
+            mapped_bounds = _geographic_bounds_in_source_domain(
+                source, cast(tuple[float, float, float, float], native_geometry.bounds)
+            )
+            transformed_geometry = box(*mapped_bounds)
+        else:
+            transformed_geometry = native_geometry
+        if math.isclose(source.transform.b, 0.0) and math.isclose(source.transform.d, 0.0):
+            candidate = _axis_aligned_window_for_bounds(
+                source,
+                cast(tuple[float, float, float, float], transformed_geometry.bounds),
+            )
+        else:
+            try:
+                candidate = geometry_window(source, [transformed_geometry.__geo_interface__])
+            except WindowError:
+                continue
+        selected = _clipped_window(source, candidate)
+        if selected is None:
+            continue
+        windows.append(selected)
+        fully_covered.append(source_extent.covers(transformed_geometry))
     if not windows:
         raise RasterProcessingError(
             "AOI does not intersect the local raster; choose overlapping WGS84 bounds"
         )
-    full_window = Window.from_slices((0, source.height), (0, source.width))
-    selected = _combine_windows(windows, full_window)
-    if selected.width < 2 or selected.height < 2:
-        raise RasterProcessingError("AOI intersection contains fewer than 2 x 2 raster cells")
 
-    source_geometry_wgs84 = shape(
-        transform_geom(
-            source.crs,
-            "EPSG:4326",
-            box(*source.bounds).__geo_interface__,
-            precision=15,
-        )
+    multipart_antimeridian = len(requested_parts) > 1
+    if len(windows) > 1:
+        if not source_crs.is_geographic or not _is_north_up(source.transform):
+            raise RasterProcessingError(
+                "Antimeridian AOIs require a north-up geographic source raster; reproject the "
+                "source to a continuous longitude grid before building"
+            )
+        row_start = max(int(window.row_off) for window in windows)
+        row_stop = min(int(window.row_off + window.height) for window in windows)
+        if row_stop <= row_start:
+            raise RasterProcessingError(
+                "Antimeridian source windows do not share a usable latitude range; choose a "
+                "raster that continuously covers the AOI"
+            )
+        windows = [
+            Window.from_slices(
+                (row_start, row_stop),
+                (int(window.col_off), int(window.col_off + window.width)),
+            )
+            for window in windows
+        ]
+        column_intervals = [
+            (int(window.col_off), int(window.col_off + window.width)) for window in windows
+        ]
+        overlap_start = max(interval[0] for interval in column_intervals)
+        overlap_stop = min(interval[1] for interval in column_intervals)
+        if overlap_start < overlap_stop:
+            column_start = min(interval[0] for interval in column_intervals)
+            column_stop = max(interval[1] for interval in column_intervals)
+            windows = [Window.from_slices((row_start, row_stop), (column_start, column_stop))]
+        else:
+            first_bounds = window_bounds(windows[0], source.transform)
+            second_bounds = window_bounds(windows[1], source.transform)
+            seam_gap = second_bounds[0] - first_bounds[2]
+            longitude_period = _geographic_longitude_period(source_crs)
+            half_period = longitude_period / 2.0
+            wrapped_gap = ((seam_gap + half_period) % longitude_period) - half_period
+            tolerance = max(longitude_period * 1e-12, abs(float(source.transform.a)) * 1e-9)
+            if abs(wrapped_gap) > tolerance:
+                raise RasterProcessingError(
+                    "Antimeridian source windows are not continuous at the longitude seam; "
+                    "normalize the raster longitude domain before building"
+                )
+
+    selected_rows = int(windows[0].height)
+    selected_columns = sum(int(window.width) for window in windows)
+    if selected_columns < 2 or selected_rows < 2:
+        raise RasterProcessingError("AOI intersection contains fewer than 2 x 2 raster cells")
+    return _SourceSelection(
+        windows=tuple(windows),
+        coverage_status=(
+            "within-source"
+            if len(fully_covered) == len(requested_parts) and all(fully_covered)
+            else "partial-source-overlap"
+        ),
+        multipart_antimeridian=multipart_antimeridian,
     )
-    requested_geometry = shape(aoi.normalized_geometry_geojson)
-    coverage_status = (
-        "within-source"
-        if source_geometry_wgs84.covers(requested_geometry)
-        else "partial-source-overlap"
-    )
-    return selected, coverage_status
 
 
 def _read_source(
@@ -267,21 +403,50 @@ def _read_source(
             )
         source_crs = CRS.from_user_input(source.crs)
         full_shape = (source.height, source.width)
-        coverage_status = "full-source"
-        selected_window = Window.from_slices((0, source.height), (0, source.width))
+        selection = _SourceSelection(
+            windows=(Window.from_slices((0, source.height), (0, source.width)),),
+            coverage_status="full-source",
+        )
         if aoi is not None:
-            selected_window, coverage_status = _window_for_aoi(source, aoi)
-        source_array = source.read(1, window=selected_window, masked=True).astype(np.float32)
-        source_data = np.asarray(source_array.filled(np.nan), dtype=np.float32)
+            selection = _window_for_aoi(source, aoi)
+        source_parts = [
+            np.asarray(
+                source.read(1, window=window, masked=True).astype(np.float32).filled(np.nan),
+                dtype=np.float32,
+            )
+            for window in selection.windows
+        ]
+        source_data = (
+            source_parts[0]
+            if len(source_parts) == 1
+            else np.concatenate(source_parts, axis=1, dtype=np.float32)
+        )
         if source_data.shape[0] < 2 or source_data.shape[1] < 2:
             raise RasterProcessingError("Selected source raster contains fewer than 2 x 2 cells")
         if not bool(np.any(np.isfinite(source_data))):
             raise RasterProcessingError("Selected AOI intersects only source NoData cells")
-        selected_transform = window_transform(selected_window, source.transform)
+        selected_transform = window_transform(selection.windows[0], source.transform)
+        raw_selected_bounds = tuple(
+            float(value)
+            for value in array_bounds(
+                source_data.shape[0],
+                source_data.shape[1],
+                selected_transform,
+            )
+        )
         selected_bounds = cast(
             tuple[float, float, float, float],
-            tuple(float(value) for value in window_bounds(selected_window, source.transform)),
+            (
+                min(raw_selected_bounds[0], raw_selected_bounds[2]),
+                min(raw_selected_bounds[1], raw_selected_bounds[3]),
+                max(raw_selected_bounds[0], raw_selected_bounds[2]),
+                max(raw_selected_bounds[1], raw_selected_bounds[3]),
+            ),
         )
+        selected_part_bounds = [
+            [float(value) for value in window_bounds(window, source.transform)]
+            for window in selection.windows
+        ]
         bounds_wgs84 = tuple(
             float(value)
             for value in transform_bounds(
@@ -298,21 +463,34 @@ def _read_source(
         aoi_report: dict[str, object] | None = None
         if aoi is not None:
             aoi_report = aoi_provenance(aoi)
-            aoi_report["clip"] = {
-                "coverage_status": coverage_status,
+            source_windows = [
+                [
+                    int(window.col_off),
+                    int(window.row_off),
+                    int(window.width),
+                    int(window.height),
+                ]
+                for window in selection.windows
+            ]
+            clip: dict[str, object] = {
+                "coverage_status": selection.coverage_status,
                 "source_full_grid_shape": list(full_shape),
                 "selected_source_grid_shape": list(source_data.shape),
-                "source_pixel_window": [
-                    int(selected_window.col_off),
-                    int(selected_window.row_off),
-                    int(selected_window.width),
-                    int(selected_window.height),
-                ],
+                "source_pixel_windows": source_windows,
                 "selected_pixel_bounds_native": list(selected_bounds),
+                "selected_pixel_bounds_native_parts": selected_part_bounds,
                 "selected_pixel_bounds_wgs84": list(bounds_wgs84),
+                "selection_mode": (
+                    "multipart-antimeridian"
+                    if selection.multipart_antimeridian
+                    else "single-window"
+                ),
                 "pixel_aligned_crop": True,
                 "silent_expansion": False,
             }
+            if len(source_windows) == 1 and not selection.multipart_antimeridian:
+                clip["source_pixel_window"] = source_windows[0]
+            aoi_report["clip"] = clip
         facts = _SourceFacts(
             full_shape=full_shape,
             selected_shape=(source_data.shape[0], source_data.shape[1]),
@@ -334,16 +512,17 @@ def _read_source(
 
 def _read_to_metric_grid(
     path: Path, aoi: AreaOfInterest | None
-) -> tuple[FloatArray, Affine, CRS, _SourceFacts]:
+) -> tuple[FloatArray, BoolArray, Affine, CRS, _SourceFacts]:
     source_data, source_transform, source_crs, facts = _read_source(path, aoi)
+    source_nodata_mask = ~np.isfinite(source_data)
     if aoi is not None:
         target_crs = CRS.from_user_input(aoi.target_local_crs)
     else:
         target_crs = _choose_metric_crs(source_crs, facts.native_bounds)
     if source_crs == target_crs and _uses_metre_axes(source_crs) and _is_north_up(source_transform):
-        return source_data, source_transform, source_crs, facts
+        return source_data, source_nodata_mask, source_transform, source_crs, facts
     if aoi is None and _uses_metre_axes(source_crs) and _is_north_up(source_transform):
-        return source_data, source_transform, source_crs, facts
+        return source_data, source_nodata_mask, source_transform, source_crs, facts
 
     transform, width, height = calculate_default_transform(
         source_crs,
@@ -353,6 +532,7 @@ def _read_to_metric_grid(
         *facts.native_bounds,
     )
     destination = np.full((height, width), np.nan, dtype=np.float32)
+    destination_nodata = np.zeros((height, width), dtype=np.uint8)
     coverage = np.zeros((height, width), dtype=np.uint8)
     reproject(
         source=source_data,
@@ -366,6 +546,16 @@ def _read_to_metric_grid(
         resampling=Resampling.bilinear,
     )
     reproject(
+        source=source_nodata_mask.astype(np.uint8),
+        destination=destination_nodata,
+        src_transform=source_transform,
+        src_crs=source_crs,
+        dst_transform=transform,
+        dst_crs=target_crs,
+        dst_nodata=0,
+        resampling=Resampling.max,
+    )
+    reproject(
         source=np.ones(source_data.shape, dtype=np.uint8),
         destination=coverage,
         src_transform=source_transform,
@@ -376,12 +566,15 @@ def _read_to_metric_grid(
         dst_nodata=0,
         resampling=Resampling.nearest,
     )
-    destination, transform = _crop_to_source_coverage(
+    destination_mask = destination_nodata.astype(bool)
+    destination[destination_mask] = np.nan
+    destination, destination_mask, transform = _crop_to_source_coverage(
         destination,
         coverage.astype(bool),
+        destination_mask,
         transform,
     )
-    return destination, transform, target_crs, facts
+    return destination, destination_mask, transform, target_crs, facts
 
 
 def _resample_to_shape(
@@ -408,6 +601,32 @@ def _resample_to_shape(
         resampling=Resampling.average,
     )
     return target, target_transform
+
+
+def _resample_mask_to_shape(
+    mask: BoolArray,
+    transform: Affine,
+    crs: CRS,
+    target_shape: tuple[int, int],
+) -> BoolArray:
+    """Conservatively retain any pre-sampling NoData footprint in the output grid."""
+    rows, columns = mask.shape
+    target_rows, target_columns = target_shape
+    if (rows, columns) == target_shape:
+        return mask.copy()
+    target = np.zeros((target_rows, target_columns), dtype=np.uint8)
+    target_transform = transform * Affine.scale(columns / target_columns, rows / target_rows)
+    reproject(
+        source=mask.astype(np.uint8),
+        destination=target,
+        src_transform=transform,
+        src_crs=crs,
+        dst_transform=target_transform,
+        dst_crs=crs,
+        dst_nodata=0,
+        resampling=Resampling.max,
+    )
+    return target.astype(bool)
 
 
 def _fill_small_nodata(
@@ -492,14 +711,16 @@ def _write_processed_raster(
             UNITS="metre",
             ORIGINAL_NODATA_MASK=mask_path.name,
             PROCESSING=(
-                "metric reprojection; deterministic sampling; conservative small-hole interpolation"
+                "metric reprojection; conservative small-hole interpolation; deterministic sampling"
             ),
             ORIENTATION="row 0 is north; model export maps north to +Y",
             ESTIMATED_TRIANGLE_COUNT=str(decision.estimated_triangle_count),
         )
     with rasterio.open(mask_path, "w", dtype="uint8", **common) as target:
         target.write(original_mask.astype(np.uint8), 1)
-        target.update_tags(MASK_MEANING="1=source/reprojection NoData before interpolation")
+        target.update_tags(
+            MASK_MEANING="1=source/reprojection NoData before interpolation, conservatively sampled"
+        )
 
 
 def _coordinate_value(coordinate: dict[str, object], key: str) -> float:
@@ -528,7 +749,18 @@ def process_local_raster(config: BuildConfig) -> ProcessedRaster:
     if not source_path.is_file():
         raise RasterProcessingError(f"DEM file does not exist: {source_path}")
     normalized_aoi = normalize_area_of_interest(config.aoi) if config.aoi is not None else None
-    elevations, transform, crs, source = _read_to_metric_grid(source_path, normalized_aoi)
+    elevations, propagated_mask, transform, crs, source = _read_to_metric_grid(
+        source_path, normalized_aoi
+    )
+    filled_metric, original_metric_mask, interpolated_fraction = _fill_small_nodata(
+        elevations,
+        config.nodata_max_fraction,
+        config.nodata_max_hole_pixels,
+    )
+    if not np.array_equal(propagated_mask, original_metric_mask):
+        raise RasterProcessingError(
+            "Internal NoData mask propagation disagrees with the metric elevation grid"
+        )
     metric_rows, metric_columns = elevations.shape
     metric_pixel_x_m = float(abs(transform.a))
     metric_pixel_y_m = float(abs(transform.e))
@@ -540,11 +772,17 @@ def process_local_raster(config: BuildConfig) -> ProcessedRaster:
         ground_depth_m=metric_ground_depth_m,
         config=config,
     )
-    elevations, transform = _resample_to_shape(elevations, transform, crs, decision.target_shape)
-    filled, original_mask, interpolated_fraction = _fill_small_nodata(
-        elevations,
-        config.nodata_max_fraction,
-        config.nodata_max_hole_pixels,
+    original_mask = _resample_mask_to_shape(
+        original_metric_mask,
+        transform,
+        crs,
+        decision.target_shape,
+    )
+    filled, transform = _resample_to_shape(
+        filled_metric,
+        transform,
+        crs,
+        decision.target_shape,
     )
     output_dir = config.output_dir.expanduser().resolve()
     processed_path = output_dir / "processed_dem.tif"
@@ -564,8 +802,9 @@ def process_local_raster(config: BuildConfig) -> ProcessedRaster:
     pixel_y_m = float(abs(transform.e))
     ground_width_m = pixel_x_m * columns
     ground_depth_m = pixel_y_m * rows
-    finite_count = int(np.count_nonzero(np.isfinite(elevations)))
-    original_nodata_fraction = 1.0 - finite_count / elevations.size
+    original_nodata_fraction = float(
+        np.count_nonzero(original_metric_mask) / original_metric_mask.size
+    )
     processed_resolution_m = (pixel_x_m + pixel_y_m) / 2.0
     processed_peak = _peak_record(filled, transform, crs)
     peak_loss_m = max(0.0, source.raw_elevation_max_m - float(np.max(filled)))

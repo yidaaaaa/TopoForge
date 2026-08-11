@@ -19,9 +19,28 @@ def evaluate_bambu_p2s_release_gate(
     slicer = _mapping(result.get("slicer"))
     checks: list[dict[str, Any]] = []
 
+    def group_for(name: str) -> str:
+        if name == "slicer.name":
+            return "validator"
+        if name.startswith("slice."):
+            return "slice"
+        return "parameter"
+
     def exact(name: str, actual: Any, expected: Any) -> None:
+        if isinstance(expected, bool):
+            passed = actual is expected
+        elif isinstance(expected, int):
+            passed = isinstance(actual, int) and not isinstance(actual, bool) and actual == expected
+        else:
+            passed = actual == expected
         checks.append(
-            {"name": name, "expected": expected, "actual": actual, "passed": actual == expected}
+            {
+                "name": name,
+                "group": group_for(name),
+                "expected": expected,
+                "actual": actual,
+                "passed": passed,
+            }
         )
 
     def close(name: str, actual: Any, expected: float, tolerance: float = 1e-6) -> None:
@@ -29,7 +48,26 @@ def evaluate_bambu_p2s_release_gate(
             passed = abs(float(actual) - expected) <= tolerance
         except (TypeError, ValueError):
             passed = False
-        checks.append({"name": name, "expected": expected, "actual": actual, "passed": passed})
+        checks.append(
+            {
+                "name": name,
+                "group": group_for(name),
+                "expected": expected,
+                "actual": actual,
+                "passed": passed,
+            }
+        )
+
+    def positive_integer(name: str, actual: Any) -> None:
+        checks.append(
+            {
+                "name": name,
+                "group": group_for(name),
+                "expected": "positive integer",
+                "actual": actual,
+                "passed": (isinstance(actual, int) and not isinstance(actual, bool) and actual > 0),
+            }
+        )
 
     exact("slicer.name", slicer.get("name"), "BambuStudio")
     exact("slice.status", result.get("status"), "succeeded")
@@ -81,15 +119,19 @@ def evaluate_bambu_p2s_release_gate(
     exact("slice.out_of_bed", metrics.get("out_of_bed"), False)
     exact("slice.empty_layer_warning", metrics.get("empty_layer_warning"), False)
     exact("slice.floating_region_warning", metrics.get("floating_region_warning"), False)
+    exact("slice.support_material", metrics.get("support_material"), False)
+    positive_integer("slice.layer_count", metrics.get("layer_count"))
 
     required = printer_profile_id == DEFAULT_RELEASE_PROFILE_ID
-    parameter_checks_passed = all(check["passed"] for check in checks[4:])
-    slice_checks_passed = all(check["passed"] for check in checks[:4]) and all(
-        check["passed"] for check in checks[-3:]
+    parameter_checks_passed = all(
+        check["passed"] for check in checks if check["group"] == "parameter"
+    )
+    slice_checks_passed = all(
+        check["passed"] for check in checks if check["group"] in {"validator", "slice"}
     )
     release_gate_passed = required and all(check["passed"] for check in checks)
     return {
-        "policy_id": "bambu-p2s-official-release-v1",
+        "policy_id": "bambu-p2s-official-release-v2",
         "required": required,
         "required_validator": "BambuStudio",
         "printer_profile_id": printer_profile_id,

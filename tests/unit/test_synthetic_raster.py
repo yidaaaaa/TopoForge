@@ -58,3 +58,36 @@ def test_large_or_edge_nodata_is_rejected(tmp_path: Path) -> None:
         dataset.write(values, 1)
     with pytest.raises(Exception, match="edge gap"):
         process_local_raster(BuildConfig(dem_path=source, output_dir=tmp_path / "output"))
+
+
+def test_downsampling_preserves_source_nodata_evidence_and_enforces_policy(
+    tmp_path: Path,
+) -> None:
+    source = create_synthetic_geotiff(tmp_path / "downsample-source.tif", rows=8, columns=8)
+    with rasterio.open(source, "r+") as dataset:
+        values = dataset.read(1)
+        values[3, 3] = np.nan
+        dataset.write(values, 1)
+
+    result = process_local_raster(
+        BuildConfig(
+            dem_path=source,
+            output_dir=tmp_path / "downsample-output",
+            max_grid_cells=16,
+        )
+    )
+
+    assert result.report.processed_grid_shape == (4, 4)
+    assert result.report.original_nodata_fraction == pytest.approx(1 / 64)
+    assert bool(np.any(result.original_nodata_mask))
+    assert bool(np.all(np.isfinite(result.elevations_m)))
+
+    with pytest.raises(Exception, match="safe local interpolation policy"):
+        process_local_raster(
+            BuildConfig(
+                dem_path=source,
+                output_dir=tmp_path / "rejected-downsample-output",
+                max_grid_cells=16,
+                nodata_max_hole_pixels=0,
+            )
+        )

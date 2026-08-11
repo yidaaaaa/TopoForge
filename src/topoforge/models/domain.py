@@ -206,7 +206,7 @@ class BuildConfig(BaseModel):
     resource_budget_mode: ResourceBudgetMode = ResourceBudgetMode.ADAPT
     aoi: AreaOfInterestInput | None = None
     printer_profile: PrinterProfile = Field(default_factory=PrinterProfile)
-    output_formats: list[str] = Field(default_factory=lambda: ["stl", "3mf", "glb"])
+    output_formats: list[str] = Field(default_factory=lambda: ["stl", "3mf", "glb"], min_length=1)
 
     @model_validator(mode="after")
     def validate_cross_fields(self) -> BuildConfig:

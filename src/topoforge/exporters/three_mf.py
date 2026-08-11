@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Any
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
@@ -19,6 +22,34 @@ CORE_NS = "http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
 MODEL_PATH = "3D/3dmodel.model"
 METADATA_NS = "https://topoforge.dev/ns/3mf/1"
 _UUID_NAMESPACE = uuid.UUID("d70c7f97-1a8c-5b66-8e4d-fde90514c885")
+_MAX_3MF_MEMBERS = 256
+_MAX_3MF_UNCOMPRESSED_BYTES = 1_610_612_736
+_MAX_3MF_MEMBER_BYTES = 1_073_741_824
+_MAX_3MF_COMPRESSION_RATIO = 2_000.0
+
+
+def _write_lib3mf_model(model: Any, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    writer = model.QueryWriter("3mf")
+    writer.SetStrictModeActive(True)
+    with tempfile.TemporaryDirectory(
+        prefix=f".{destination.name}.",
+        dir=destination.parent,
+    ) as staging_directory:
+        temporary = Path(staging_directory) / f"{destination.stem}.tmp.3mf"
+        writer.WriteToFile(str(temporary))
+        if writer.GetWarningCount() != 0:
+            warnings = [writer.GetWarning(index) for index in range(writer.GetWarningCount())]
+            raise ValueError(f"lib3mf writer emitted strict warnings: {warnings}")
+        with temporary.open("rb") as stream:
+            os.fsync(stream.fileno())
+        os.replace(temporary, destination)
+    if os.name != "nt":
+        directory_fd = os.open(destination.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,16 +187,7 @@ def export_3mf(
     build_item.SetPartNumber("topoforge-terrain-instance")
     build_item.SetUUID(item_uuid)
 
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(f".{destination.stem}.tmp.3mf")
-    writer = model.QueryWriter("3mf")
-    writer.SetStrictModeActive(True)
-    writer.WriteToFile(str(temporary))
-    if writer.GetWarningCount() != 0:
-        warnings = [writer.GetWarning(index) for index in range(writer.GetWarningCount())]
-        temporary.unlink(missing_ok=True)
-        raise ValueError(f"lib3mf writer emitted strict warnings: {warnings}")
-    temporary.replace(destination)
+    _write_lib3mf_model(model, destination)
     inspect_3mf(destination)
     return destination
 
@@ -264,16 +286,7 @@ def export_3mf_objects(
     build_item.SetPartNumber("topoforge-assembly-instance")
     build_item.SetUUID(str(build_item_uuid))
 
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(f".{destination.stem}.tmp.3mf")
-    writer = model.QueryWriter("3mf")
-    writer.SetStrictModeActive(True)
-    writer.WriteToFile(str(temporary))
-    if writer.GetWarningCount() != 0:
-        warnings = [writer.GetWarning(index) for index in range(writer.GetWarningCount())]
-        temporary.unlink(missing_ok=True)
-        raise ValueError(f"lib3mf writer emitted strict warnings: {warnings}")
-    temporary.replace(destination)
+    _write_lib3mf_model(model, destination)
     inspection = inspect_3mf(destination)
     if (
         inspection.object_names != tuple(names)
@@ -288,14 +301,29 @@ def export_3mf_objects(
     return destination
 
 
-def _inspect_package(path: Path) -> ET.Element:
+def _inspect_package(
+    path: Path,
+    *,
+    max_uncompressed_bytes: int = _MAX_3MF_UNCOMPRESSED_BYTES,
+) -> ET.Element:
+    if max_uncompressed_bytes <= 0:
+        raise ValueError("3MF uncompressed byte limit must be positive")
     with ZipFile(path, "r") as package:
-        names = set(package.namelist())
+        infos = package.infolist()
+        if len(infos) > _MAX_3MF_MEMBERS:
+            raise ValueError(
+                f"3MF package has {len(infos)} members, above the safe limit {_MAX_3MF_MEMBERS}"
+            )
+        member_names = [info.filename for info in infos]
+        if len(member_names) != len(set(member_names)):
+            raise ValueError("3MF package contains duplicate member names")
+        names = set(member_names)
         required = {"[Content_Types].xml", "_rels/.rels", MODEL_PATH}
         if not required.issubset(names):
             missing = ", ".join(sorted(required - names))
             raise ValueError(f"3MF package is missing required parts: {missing}")
-        for info in package.infolist():
+        total_uncompressed_bytes = 0
+        for info in infos:
             member = PurePosixPath(info.filename)
             if member.is_absolute() or ".." in member.parts:
                 raise ValueError(f"3MF package contains an unsafe path: {info.filename}")
@@ -306,6 +334,21 @@ def _inspect_package(path: Path) -> ET.Element:
                     "3MF package uses unsupported compression "
                     f"{info.compress_type}: {info.filename}"
                 )
+            if info.file_size > _MAX_3MF_MEMBER_BYTES:
+                raise ValueError(f"3MF member is too large after decompression: {info.filename}")
+            total_uncompressed_bytes += info.file_size
+            if total_uncompressed_bytes > max_uncompressed_bytes:
+                raise ValueError(
+                    "3MF package exceeds the bounded uncompressed-size limit; "
+                    "rebuild with a smaller grid"
+                )
+            if info.file_size and info.compress_size == 0:
+                raise ValueError(f"3MF member has an invalid compressed size: {info.filename}")
+            if (
+                info.compress_size > 0
+                and info.file_size / info.compress_size > _MAX_3MF_COMPRESSION_RATIO
+            ):
+                raise ValueError(f"3MF member has an unsafe compression ratio: {info.filename}")
             if info.filename.endswith(".rels"):
                 relationships = ET.fromstring(package.read(info.filename))
                 for relationship in relationships:
@@ -314,10 +357,14 @@ def _inspect_package(path: Path) -> ET.Element:
         return ET.fromstring(package.read(MODEL_PATH))
 
 
-def inspect_3mf(path: str | Path) -> ThreeMFInspection:
+def inspect_3mf(
+    path: str | Path,
+    *,
+    max_uncompressed_bytes: int = _MAX_3MF_UNCOMPRESSED_BYTES,
+) -> ThreeMFInspection:
     """Strict-read with lib3mf, harden the OPC package, and independently measure XML."""
     source = Path(path)
-    root = _inspect_package(source)
+    root = _inspect_package(source, max_uncompressed_bytes=max_uncompressed_bytes)
     wrapper = get_wrapper()
     model = wrapper.CreateModel()
     if model is None:
