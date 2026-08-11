@@ -4,6 +4,8 @@ import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import pytest
+
 from topoforge.validation.slicers import (
     BambuStudioAdapter,
     CommandExecution,
@@ -13,6 +15,7 @@ from topoforge.validation.slicers import (
     parse_gcode_generator,
     parse_gcode_metrics,
 )
+from topoforge.validation.slicers.bambu import parse_bambu_studio_version
 
 BAMBU_GCODE = """; HEADER_BLOCK_START
 ; BambuStudio 02.07.01.62
@@ -150,3 +153,40 @@ def test_bambu_probe_rejects_success_without_a_parseable_version(tmp_path: Path)
     assert info.version is None
     assert info.detail is not None
     assert "did not emit a parseable" in info.detail
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        "BambuStudio-02.07.01:",
+        "BambuStudio-02..07.01.62:",
+        "BambuStudio-02.07.01.62beta:",
+        "prefixBambuStudio-02.07.01.62:",
+        "BambuStudio-02.07.01.62:\nBambuStudio-03.00.00.01:",
+        "BambuStudio-02.07.01.62:\nBambuStudio-:",
+        "BambuStudio-02.07.01.62:\nBambuStudio-",
+        "Bambu\u017fstudio-02.07.01.62:",
+    ],
+)
+def test_bambu_version_parser_rejects_malformed_or_conflicting_banners(
+    output: str,
+) -> None:
+    assert parse_bambu_studio_version(output) is None
+
+
+def test_bambu_version_parser_accepts_identical_repeated_banners() -> None:
+    output = "BambuStudio-02.07.01.62:\nBambuStudio-02.07.01.62 help"
+
+    assert parse_bambu_studio_version(output) == "02.07.01.62"
+
+
+def test_bambu_probe_rejects_conflicting_success_banners(tmp_path: Path) -> None:
+    adapter = BambuStudioAdapter(
+        _executable(tmp_path),
+        runner=FakeBambuRunner(probe_stdout=("BambuStudio-02.07.01.62:\nBambuStudio-03.00.00.01:")),
+    )
+
+    info = adapter.probe()
+
+    assert info.status is SlicerAvailability.FAILED
+    assert info.version is None

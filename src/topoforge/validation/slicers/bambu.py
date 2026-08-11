@@ -18,11 +18,20 @@ from topoforge.validation.slicers.base import (
 )
 from topoforge.validation.slicers.orca import OrcaSlicerAdapter
 
+_BAMBU_VERSION = re.compile(r"[0-9]{1,3}(?:\.[0-9]{1,3}){3}")
+_BAMBU_BANNER = re.compile(
+    r"(?<![A-Za-z0-9_])BambuStudio-([^\s:]*)",
+    re.IGNORECASE | re.ASCII,
+)
+
 
 def parse_bambu_studio_version(output: str) -> str | None:
-    """Return the Bambu Studio version parsed from a literal CLI banner."""
-    match = re.search(r"BambuStudio-([0-9][0-9.]*)", output, re.IGNORECASE)
-    return None if match is None else match.group(1).rstrip(".")
+    """Return one unambiguous four-component version from literal CLI banners."""
+    candidates = [match.group(1) for match in _BAMBU_BANNER.finditer(output)]
+    if not candidates or any(_BAMBU_VERSION.fullmatch(value) is None for value in candidates):
+        return None
+    versions = set(candidates)
+    return candidates[0] if len(versions) == 1 else None
 
 
 def macos_bambu_executable_candidates(
