@@ -157,7 +157,18 @@ def test_native_macos_ci_uses_only_frozen_arm64_runner_labels() -> None:
     assert 'test "$(uname -m)" = "arm64"' in workflow_text
     assert "scripts/verify_macos_support_matrix.py" in workflow_text
     assert "scripts/collect_macos_ci_evidence.py" in workflow_text
-    assert "actions/upload-artifact@v4" in workflow_text
+    expected_action_revisions = {
+        "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
+        "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",
+        "astral-sh/setup-uv": "d0d8abe699bfb85fec6de9f7adb5ae17292296ff",
+        "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
+    }
+    for action, revision in expected_action_revisions.items():
+        assert f"{action}@{revision}" in workflow_text
+    assert "uses: actions/checkout@v4" not in workflow_text
+    assert "uses: actions/setup-python@v5" not in workflow_text
+    assert "uses: astral-sh/setup-uv@v6" not in workflow_text
+    assert "uses: actions/upload-artifact@v4" not in workflow_text
     assert "if: always()" in workflow_text
     assert "runtime-evidence" in workflow_text
     assert "topoforge web --check --no-open" in workflow_text
