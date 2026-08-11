@@ -2,16 +2,36 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import pytest
 
+import topoforge.validation.bambu_projects as bambu_projects_module
 from topoforge.validation.bambu_projects import (
     frozen_source_bambu_version,
     isolated_environment,
     probe_bambu_studio,
     release_gate,
 )
+from topoforge.validation.slicers import CommandExecution
+
+
+class _ProbeRunner:
+    def __init__(self) -> None:
+        self.calls: list[tuple[tuple[str, ...], Mapping[str, str] | None]] = []
+
+    def __call__(
+        self,
+        command: Sequence[str],
+        *,
+        timeout_seconds: float,
+        env: Mapping[str, str] | None = None,
+        cwd: Path | None = None,
+    ) -> CommandExecution:
+        del timeout_seconds, cwd
+        self.calls.append((tuple(command), env))
+        return CommandExecution(0, "BambuStudio-02.07.01.62:", "", 0.01)
 
 
 def test_darwin_bambu_environment_uses_private_macos_user_directories(tmp_path: Path) -> None:
@@ -62,10 +82,13 @@ def test_frozen_source_version_requires_available_bambu_probe() -> None:
         frozen_source_bambu_version(manifest)
 
 
-def test_probe_record_is_version_parsed_and_hash_bound(tmp_path: Path) -> None:
+def test_probe_record_is_version_parsed_and_hash_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = _ProbeRunner()
+    monkeypatch.setattr(bambu_projects_module, "run_command", runner)
     executable = tmp_path / "BambuStudio"
-    executable.write_text("#!/bin/sh\nprintf BambuStudio-02.07.01.62:\n\n", encoding="utf-8")
-    executable.chmod(0o755)
+    executable.write_bytes(b"test executable identity\n")
 
     report = probe_bambu_studio(
         executable,
@@ -83,3 +106,5 @@ def test_probe_record_is_version_parsed_and_hash_bound(tmp_path: Path) -> None:
     assert (tmp_path / "evidence" / report["stdout_path"]).read_text() == (
         "BambuStudio-02.07.01.62:"
     )
+    assert runner.calls[0][0] == (str(executable), "--help")
+    assert runner.calls[0][1] is not None

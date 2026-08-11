@@ -9,7 +9,13 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from topoforge.validation.slicers._bambu_windows import discover_windows_bambu_studio
-from topoforge.validation.slicers.base import CommandRunner, SlicerProfile, run_command
+from topoforge.validation.slicers.base import (
+    CommandRunner,
+    SlicerAvailability,
+    SlicerInfo,
+    SlicerProfile,
+    run_command,
+)
 from topoforge.validation.slicers.orca import OrcaSlicerAdapter
 
 
@@ -72,6 +78,22 @@ class BambuStudioAdapter(OrcaSlicerAdapter):
         if discovered is not None:
             self.executable = discovered
             self._resolution_detail = None
+
+    def probe(self, *, refresh: bool = False) -> SlicerInfo:
+        """Require the official Bambu CLI probe to expose a parseable version."""
+        info = super().probe(refresh=refresh)
+        if info.status is SlicerAvailability.AVAILABLE and info.version is None:
+            info = info.model_copy(
+                update={
+                    "status": SlicerAvailability.FAILED,
+                    "detail": (
+                        "Bambu Studio exited successfully but did not emit a parseable "
+                        "BambuStudio-<version> banner; verify the official executable"
+                    ),
+                }
+            )
+            self._probe_cache = info
+        return info
 
     def _version_from_output(self, output: str) -> str | None:
         return parse_bambu_studio_version(output)

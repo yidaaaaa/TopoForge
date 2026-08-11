@@ -7,6 +7,7 @@ from pathlib import Path
 from topoforge.validation.slicers import (
     BambuStudioAdapter,
     CommandExecution,
+    SlicerAvailability,
     SlicerProfile,
     SliceStatus,
     parse_gcode_generator,
@@ -53,8 +54,9 @@ BAMBU_GCODE = """; HEADER_BLOCK_START
 
 
 class FakeBambuRunner:
-    def __init__(self) -> None:
+    def __init__(self, *, probe_stdout: str = "BambuStudio-02.07.01.62:") -> None:
         self.calls: list[tuple[tuple[str, ...], Mapping[str, str] | None]] = []
+        self.probe_stdout = probe_stdout
 
     def __call__(
         self,
@@ -68,7 +70,7 @@ class FakeBambuRunner:
         normalized = tuple(command)
         self.calls.append((normalized, env))
         if "--help" in normalized:
-            return CommandExecution(0, "BambuStudio-02.07.01.62:", "", 0.01)
+            return CommandExecution(0, self.probe_stdout, "", 0.01)
         output_dir = Path(normalized[normalized.index("--outputdir") + 1])
         output_dir.joinpath("plate_1.gcode").write_text(BAMBU_GCODE, encoding="utf-8")
         output_dir.joinpath("result.json").write_text(
@@ -134,3 +136,17 @@ def test_bambu_gcode_parser_captures_release_parameters() -> None:
     assert metrics.settings.process_settings_id == "0.20mm Standard @BBL P2S"
     assert metrics.settings.filament_settings_ids == ("Bambu PLA Basic @BBL P2S",)
     assert metrics.settings.support_enabled is False
+
+
+def test_bambu_probe_rejects_success_without_a_parseable_version(tmp_path: Path) -> None:
+    adapter = BambuStudioAdapter(
+        _executable(tmp_path),
+        runner=FakeBambuRunner(probe_stdout="Bambu Studio command line help"),
+    )
+
+    info = adapter.probe()
+
+    assert info.status is SlicerAvailability.FAILED
+    assert info.version is None
+    assert info.detail is not None
+    assert "did not emit a parseable" in info.detail
