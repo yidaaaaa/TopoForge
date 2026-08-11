@@ -3,13 +3,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./components/MapPanel", () => ({
   MapPanel: ({
+    manifest,
     selectedTileId,
     onSelectedTileChange,
   }: {
+    manifest: { job_id: string } | null;
     selectedTileId: string | null;
     onSelectedTileChange: (tileId: string) => void;
   }) => (
-    <div data-testid="map-panel" data-selected-tile={selectedTileId ?? ""}>
+    <div
+      data-testid="map-panel"
+      data-job-id={manifest?.job_id ?? ""}
+      data-selected-tile={selectedTileId ?? ""}
+    >
       map
       <button
         type="button"
@@ -177,6 +183,7 @@ const maintenanceOverview = {
     backup_input_bytes: 8192,
   },
   cleanup: {
+    plan_id: "a".repeat(64),
     workflow_id: "workflow-phase10",
     workspace: "/tmp/workspaces/phase10",
     current_workspace_bytes: 8192,
@@ -417,6 +424,102 @@ describe("TopoForge bilingual workspace", () => {
     expect(screen.getByTestId("map-panel")).toHaveAttribute(
       "data-selected-tile",
       "tile-r0000-c0000",
+    );
+  });
+
+  it("clears a previous map while the newly selected job visualization loads", async () => {
+    const secondJob = {
+      ...completedJob,
+      job_id: "job-phase10-second",
+      created_at: "2026-08-02T00:02:00Z",
+      updated_at: "2026-08-02T00:03:00Z",
+      workspace_dir: "/tmp/workspaces/phase10-second",
+    };
+    let resolveSecondMap!: (value: Response) => void;
+    const secondMapResponse = new Promise<Response>((resolve) => {
+      resolveSecondMap = resolve;
+    });
+    let resolveSecondMaintenance!: (value: Response) => void;
+    const secondMaintenanceResponse = new Promise<Response>((resolve) => {
+      resolveSecondMaintenance = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.endsWith("/api/v1/health")) {
+          return response(health);
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10/map/manifest")) {
+          return response(mapManifest);
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10/assembly")) {
+          return response(assembly);
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10/maintenance")) {
+          return response(maintenanceOverview);
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10-second/map/manifest")) {
+          return secondMapResponse;
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10-second/assembly")) {
+          return response({ ...assembly, job_id: secondJob.job_id });
+        }
+        if (path.endsWith("/api/v1/jobs/job-phase10-second/maintenance")) {
+          return secondMaintenanceResponse;
+        }
+        if (path.endsWith("/api/v1/jobs")) {
+          return response([completedJob, secondJob]);
+        }
+        if (path.endsWith("/api/v1/lifecycle/trash")) {
+          return response([]);
+        }
+        return response({});
+      }),
+    );
+
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByTestId("map-panel")).toHaveAttribute(
+        "data-job-id",
+        completedJob.job_id,
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "清理旧阶段" })).toBeEnabled(),
+    );
+
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /phase10-second/ }),
+    );
+    expect(screen.getByTestId("map-panel")).toHaveAttribute(
+      "data-job-id",
+      "",
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "清理旧阶段" }),
+    ).not.toBeInTheDocument();
+
+    resolveSecondMaintenance(
+      response({ ...maintenanceOverview, job_id: secondJob.job_id }),
+    );
+    resolveSecondMap(
+      response({
+        ...mapManifest,
+        job_id: secondJob.job_id,
+        cache_key: "f".repeat(64),
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("map-panel")).toHaveAttribute(
+        "data-job-id",
+        secondJob.job_id,
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "清理旧阶段" })).toBeEnabled(),
     );
   });
 
@@ -741,7 +844,10 @@ describe("TopoForge bilingual workspace", () => {
       }
       if (path.endsWith("/api/v1/jobs/job-phase10/cleanup")) {
         expect(init?.body).toBe(
-          JSON.stringify({ confirm_workflow_id: "workflow-phase10" }),
+          JSON.stringify({
+            confirm_workflow_id: "workflow-phase10",
+            confirm_plan_id: "a".repeat(64),
+          }),
         );
         return response({
           workflow_id: "workflow-phase10",

@@ -57,7 +57,7 @@ interface ResultsPanelProps {
   onRestoreTrash: (batchId: string) => void;
   onPurgeTrash: (batchId: string) => void;
   onBackup: (jobId: string) => void;
-  onCleanup: (jobId: string, workflowId: string) => void;
+  onCleanup: (jobId: string, workflowId: string, planId: string) => void;
   onRestore: (backupId: string) => void;
 }
 
@@ -104,11 +104,12 @@ type JobSort = "newest" | "oldest" | "name" | "status";
 const terminalStates = new Set(["cancelled", "failed", "completed"]);
 const statusOrder: Record<JobRecord["state"], number> = {
   running: 0,
-  queued: 1,
-  cancelling: 2,
-  failed: 3,
-  cancelled: 4,
-  completed: 5,
+  starting: 1,
+  queued: 2,
+  cancelling: 3,
+  failed: 4,
+  cancelled: 5,
+  completed: 6,
 };
 
 function matchesStatus(job: JobRecord, filter: JobStatusFilter): boolean {
@@ -116,7 +117,7 @@ function matchesStatus(job: JobRecord, filter: JobStatusFilter): boolean {
     return true;
   }
   if (filter === "active") {
-    return ["queued", "running", "cancelling"].includes(job.state);
+    return ["queued", "starting", "running", "cancelling"].includes(job.state);
   }
   return job.state === filter;
 }
@@ -508,7 +509,7 @@ export function ResultsPanel({
               <code>{selectedJob.job_id.slice(0, 12)}</code>
             </div>
             <div className="detail-header-actions">
-              {["queued", "running", "cancelling"].includes(selectedJob.state) && (
+              {["queued", "starting", "running", "cancelling"].includes(selectedJob.state) && (
                 <button
                   type="button"
                   className="danger-button"
@@ -626,7 +627,11 @@ export function ResultsPanel({
                         maintenance.cleanup.reclaimable_bytes === 0
                       }
                       onClick={() =>
-                        onCleanup(selectedJob.job_id, maintenance.cleanup.workflow_id)
+                        onCleanup(
+                          selectedJob.job_id,
+                          maintenance.cleanup.workflow_id,
+                          maintenance.cleanup.plan_id,
+                        )
                       }
                     >
                       <Trash2 size={14} />

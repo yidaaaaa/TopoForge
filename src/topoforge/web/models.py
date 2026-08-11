@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime
 from enum import StrEnum
-from pathlib import Path
-from typing import Any
+from pathlib import Path, PurePosixPath
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -23,7 +23,13 @@ from topoforge.workflow import (
     WorkflowStorageEstimate,
 )
 
-_JOB_SCHEMA_VERSION = "topoforge-web-job-v1"
+_JOB_SCHEMA_VERSION = "topoforge-web-job-v5"
+_SUPPORTED_JOB_SCHEMA_VERSIONS = frozenset(
+    {
+        "topoforge-web-job-v1",
+        _JOB_SCHEMA_VERSION,
+    }
+)
 _EVENT_SCHEMA_VERSION = "topoforge-web-job-event-v1"
 
 
@@ -36,6 +42,7 @@ class JobState(StrEnum):
     """Lifecycle states for an isolated local workflow process."""
 
     QUEUED = "queued"
+    STARTING = "starting"
     RUNNING = "running"
     CANCELLING = "cancelling"
     CANCELLED = "cancelled"
@@ -108,12 +115,30 @@ class JobRecord(BaseModel):
     progress_fraction: float = Field(ge=0, le=1)
     current_stage: WorkflowStage | None = None
     ready_stages: tuple[WorkflowStage, ...] = ()
+    request_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    launch_nonce: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    worker_ready_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    launch_gate_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    launch_gate_deadline: datetime | None = None
+    launch_parent_pid: int | None = Field(default=None, ge=1)
+    launch_parent_identity: str | None = None
     pid: int | None = Field(default=None, ge=1)
+    process_identity: str | None = None
+    process_group_id: int | None = Field(default=None, ge=1)
     exit_code: int | None = None
     cancellation_requested: bool = False
     error: JobError | None = None
     summary: WorkflowRunSummary | None = None
     artifacts: tuple[JobArtifact, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_schema_version(self) -> JobRecord:
+        """Accept the deployed v1 record and the current format, but no unknown schema."""
+        if self.schema_version not in _SUPPORTED_JOB_SCHEMA_VERSIONS:
+            raise ValueError(
+                f"job record schema_version must be topoforge-web-job-v1 or {_JOB_SCHEMA_VERSION}"
+            )
+        return self
 
 
 class WorkflowBackupRecord(BaseModel):
@@ -209,6 +234,20 @@ class JobBatchDeleteApplyRequest(JobBatchDeletePlanRequest):
     confirm_plan_id: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+class JobDeletionInventory(BaseModel):
+    """Stable no-follow identity for one recursively inspected deletion root."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    size_bytes: int = Field(ge=0)
+    entry_count: int = Field(ge=1)
+    inventory_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    device: int = Field(ge=0)
+    inode: int = Field(ge=0)
+    link_count: int = Field(ge=1)
+    modified_time_ns: int = Field(ge=0)
+
+
 class JobBatchDeletePlanItem(BaseModel):
     """Measured deletion eligibility and blockers for one selected job."""
 
@@ -220,6 +259,8 @@ class JobBatchDeletePlanItem(BaseModel):
     workspace_existed: bool
     job_record_bytes: int = Field(ge=0)
     workspace_bytes: int = Field(ge=0)
+    job_record_inventory: JobDeletionInventory | None = None
+    workspace_inventory: JobDeletionInventory | None = None
     workspace_reference_job_ids: tuple[str, ...] = ()
     unselected_reference_job_ids: tuple[str, ...] = ()
     verified_backup_ids: tuple[str, ...] = ()
@@ -248,6 +289,15 @@ class JobBatchDeletePlan(BaseModel):
     required_checks_passed: bool
 
 
+class JobTrashJobInventory(BaseModel):
+    """Expected durable inventory for one quarantined job record."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    job_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    inventory: JobDeletionInventory
+
+
 class JobTrashWorkspace(BaseModel):
     """Original and same-filesystem quarantine identity for one workspace."""
 
@@ -257,6 +307,7 @@ class JobTrashWorkspace(BaseModel):
     quarantined_workspace: Path | None = None
     workspace_existed: bool
     size_bytes: int = Field(ge=0)
+    inventory: JobDeletionInventory | None = None
 
 
 class JobTrashRecord(BaseModel):
@@ -264,7 +315,7 @@ class JobTrashRecord(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: str = "topoforge-web-job-trash-v1"
+    schema_version: str = "topoforge-web-job-trash-v2"
     batch_id: str = Field(pattern=r"^[0-9a-f]{32}$")
     plan_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     mode: JobBatchDeleteMode
@@ -272,11 +323,52 @@ class JobTrashRecord(BaseModel):
     purge_after: datetime
     job_ids: tuple[str, ...]
     job_record_bytes: int = Field(ge=0)
+    job_inventories: tuple[JobTrashJobInventory, ...] = ()
     workspaces: tuple[JobTrashWorkspace, ...]
     backup_ids: tuple[str, ...] = ()
     total_quarantined_bytes: int = Field(ge=0)
     backups_preserved: bool
     required_checks_passed: bool
+
+    @model_validator(mode="after")
+    def validate_v2_inventories(self) -> JobTrashRecord:
+        """Require new records to bind every quarantined tree exactly once."""
+        if self.schema_version == "topoforge-web-job-trash-v1":
+            return self
+        if self.schema_version != "topoforge-web-job-trash-v2":
+            raise ValueError("unsupported job trash schema version")
+        inventory_ids = tuple(item.job_id for item in self.job_inventories)
+        if self.job_ids != tuple(sorted(set(self.job_ids))):
+            raise ValueError("trash v2 job ids must be unique and sorted")
+        if inventory_ids != self.job_ids:
+            raise ValueError("trash v2 inventories must match job ids in exact order")
+        if self.job_record_bytes != sum(item.inventory.size_bytes for item in self.job_inventories):
+            raise ValueError("trash v2 job bytes do not match its inventories")
+        originals = tuple(str(item.original_workspace) for item in self.workspaces)
+        if originals != tuple(sorted(set(originals))):
+            raise ValueError("trash v2 workspaces must be unique and sorted")
+        workspace_bytes = 0
+        quarantines: set[str] = set()
+        for workspace in self.workspaces:
+            frozen = self.mode is not JobBatchDeleteMode.RECORD_ONLY and workspace.workspace_existed
+            if frozen != (
+                workspace.quarantined_workspace is not None and workspace.inventory is not None
+            ):
+                raise ValueError("trash v2 workspace inventory is incomplete")
+            if workspace.inventory is None:
+                if workspace.size_bytes != 0:
+                    raise ValueError("unfrozen trash v2 workspace bytes must be zero")
+                continue
+            quarantine = str(workspace.quarantined_workspace)
+            if quarantine in quarantines:
+                raise ValueError("trash v2 quarantine paths must be unique")
+            quarantines.add(quarantine)
+            if workspace.size_bytes != workspace.inventory.size_bytes:
+                raise ValueError("trash v2 workspace bytes do not match its inventory")
+            workspace_bytes += workspace.inventory.size_bytes
+        if self.total_quarantined_bytes != self.job_record_bytes + workspace_bytes:
+            raise ValueError("trash v2 total bytes do not match its inventories")
+        return self
 
 
 class JobTrashTransactionMove(BaseModel):
@@ -305,6 +397,88 @@ class JobTrashTransaction(BaseModel):
     trash_record: JobTrashRecord
 
 
+class JobTrashActionKind(StrEnum):
+    """Durable post-quarantine maintenance action."""
+
+    RESTORE = "restore"
+    PURGE = "purge"
+
+
+class JobTrashActionPhase(StrEnum):
+    """Replay-safe phase of one post-quarantine action."""
+
+    PREPARED = "prepared"
+    MOVING = "moving"
+    FINALIZING = "finalizing"
+
+
+class JobTrashPurgeEntry(BaseModel):
+    """One exact leaf or directory removed by a resumable purge."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    root: str = Field(pattern=r"^(state|workspace)$")
+    relative_path: str = Field(min_length=1)
+    kind: str = Field(pattern=r"^(file|directory)$")
+    size_bytes: int = Field(ge=0)
+    sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    device: int = Field(ge=0)
+    inode: int = Field(ge=0)
+    link_count: int = Field(ge=1)
+    modified_time_ns: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_relative_identity(self) -> JobTrashPurgeEntry:
+        """Reject path traversal and inconsistent file/directory hashes."""
+        raw_path = self.relative_path
+        if raw_path != ".":
+            components = raw_path.split("/")
+            path = PurePosixPath(raw_path)
+            if (
+                raw_path.startswith("/")
+                or raw_path.endswith("/")
+                or "\\" in raw_path
+                or ":" in raw_path
+                or "\x00" in raw_path
+                or any(component in {"", ".", ".."} for component in components)
+                or path.is_absolute()
+                or path.as_posix() != raw_path
+            ):
+                raise ValueError("purge entry path must be '.' or a canonical relative POSIX path")
+        if (self.kind == "file") != (self.sha256 is not None):
+            raise ValueError("purge entry hash must be present only for files")
+        return self
+
+
+class JobTrashActionTransaction(BaseModel):
+    """Durable intent used to finish restore or purge after a crash."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: str = "topoforge-web-job-trash-action-transaction-v1"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    action: JobTrashActionKind
+    phase: JobTrashActionPhase = JobTrashActionPhase.PREPARED
+    created_at: datetime
+    affected_bytes: int = Field(ge=0)
+    record_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    audit_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    state_root_device: int = Field(ge=0)
+    state_root_inode: int = Field(ge=0)
+    workspace_root_device: int = Field(ge=0)
+    workspace_root_inode: int = Field(ge=0)
+    state_batch: Path
+    workspace_batch: Path
+    state_purging: Path
+    workspace_purging: Path
+    state_batch_inventory: JobDeletionInventory
+    workspace_batch_inventory: JobDeletionInventory | None = None
+    purge_entries: tuple[JobTrashPurgeEntry, ...] = ()
+    purge_index: int = Field(default=0, ge=0)
+    audit_path: Path
+    trash_record: JobTrashRecord
+
+
 class JobTrashActionRequest(BaseModel):
     """Exact batch-id confirmation for restore or permanent purge."""
 
@@ -329,11 +503,12 @@ class JobTrashActionResult(BaseModel):
 
 
 class WorkflowCleanupRequest(BaseModel):
-    """Exact workflow-id confirmation required before cleanup."""
+    """Exact workflow and cleanup-plan confirmation required before cleanup."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     confirm_workflow_id: str
+    confirm_plan_id: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class WorkflowRestoreRequest(BaseModel):
@@ -403,8 +578,8 @@ class WebAppConfig(BaseModel):
         """Return absolute normalized path boundaries without filesystem mutation."""
         return self.model_copy(
             update={
-                "state_dir": self.state_dir.expanduser().resolve(),
-                "workspace_root": self.workspace_root.expanduser().resolve(),
+                "state_dir": Path(os.path.abspath(self.state_dir.expanduser())),
+                "workspace_root": Path(os.path.abspath(self.workspace_root.expanduser())),
                 "input_roots": tuple(
                     dict.fromkeys(path.expanduser().resolve() for path in self.input_roots)
                 ),
@@ -455,12 +630,33 @@ class FileListing(BaseModel):
     entries: tuple[FileEntry, ...]
 
 
+class WorkerReady(BaseModel):
+    """Canonical proof that a worker established containment before release."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["topoforge-web-worker-ready-v1"] = "topoforge-web-worker-ready-v1"
+    job_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    launch_nonce: str = Field(pattern=r"^[0-9a-f]{32}$")
+    request_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    pid: int = Field(ge=1)
+    process_identity: str = Field(min_length=1)
+    process_group_id: int = Field(ge=1)
+    jobs_root_device: int = Field(ge=0)
+    jobs_root_inode: int = Field(ge=0)
+
+
 class WorkerResult(BaseModel):
     """Atomic terminal record written by an isolated worker process."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: str = "topoforge-web-worker-result-v1"
+    schema_version: Literal["topoforge-web-worker-result-v3"] = "topoforge-web-worker-result-v3"
+    job_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    launch_nonce: str = Field(pattern=r"^[0-9a-f]{32}$")
+    request_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    worker_ready_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    launch_gate_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     ok: bool
     exit_code: int
     completed_at: datetime

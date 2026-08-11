@@ -4,8 +4,23 @@ from __future__ import annotations
 
 import os
 import platform
+import stat
 from collections.abc import Mapping
 from pathlib import Path
+
+_FILE_ATTRIBUTE_REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
+
+
+def stat_result_is_link_like(result: object) -> bool:
+    """Return whether an lstat result is a symlink or Windows reparse point."""
+    mode = getattr(result, "st_mode", 0)
+    attributes = getattr(result, "st_file_attributes", 0)
+    return stat.S_ISLNK(mode) or bool(attributes & _FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def path_is_link_like(path: Path) -> bool:
+    """Detect symlinks, junctions, and other reparse points without following them."""
+    return stat_result_is_link_like(path.lstat())
 
 
 def _system_name(system: str | None) -> str:

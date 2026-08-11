@@ -180,10 +180,11 @@ export function createJobBackup(jobId: string): Promise<WorkflowBackupRecord> {
 export function cleanupJob(
   jobId: string,
   workflowId: string,
+  planId: string,
 ): Promise<WorkflowCleanupResult> {
   return request<WorkflowCleanupResult>(`/api/v1/jobs/${jobId}/cleanup`, {
     method: "POST",
-    body: JSON.stringify({ confirm_workflow_id: workflowId }),
+    body: JSON.stringify({ confirm_workflow_id: workflowId, confirm_plan_id: planId }),
   });
 }
 

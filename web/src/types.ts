@@ -16,6 +16,7 @@ export type MapTileStyle = "terrain" | "elevation" | "hillshade";
 export type AssemblyMode = "2d" | "3d";
 export type JobState =
   | "queued"
+  | "starting"
   | "running"
   | "cancelling"
   | "cancelled"
@@ -194,6 +195,7 @@ export interface WorkflowCleanupCandidate {
 }
 
 export interface WorkflowCleanupPlan {
+  plan_id: string;
   workflow_id: string;
   workspace: string;
   current_workspace_bytes: number;

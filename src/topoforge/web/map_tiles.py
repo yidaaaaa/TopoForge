@@ -5,10 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import threading
 from enum import StrEnum
+from io import BytesIO
 from pathlib import Path
-from typing import Annotated, Any, Literal, Self, TypeVar
+from typing import Annotated, Any, BinaryIO, Literal, Self, TypeVar
 
 import numpy as np
 import numpy.typing as npt
@@ -25,8 +27,7 @@ from topoforge.tiling.connectors import (
     PrintTileAssemblyManifest,
     PrintTileAssemblyValidation,
 )
-from topoforge.util import sha256_file
-from topoforge.web.jobs import LocalJobManager
+from topoforge.web.jobs import LocalJobManager, VerifiedFileDownload
 from topoforge.web.models import JobRecord, JobState
 from topoforge.workflow import LocalWorkflowManifest, WorkflowStage
 
@@ -192,28 +193,34 @@ def _canonical_bytes(value: BaseModel | dict[str, Any]) -> bytes:
     ).encode("utf-8")
 
 
-def _read_canonical(path: Path, model_type: type[_ModelT]) -> _ModelT:
+def _read_canonical_bytes(
+    payload: bytes,
+    model_type: type[_ModelT],
+    *,
+    context: str,
+) -> _ModelT:
     try:
-        value = model_type.model_validate_json(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        raise ConfigurationError(f"visualization record is unreadable: {path}") from exc
-    if path.read_bytes() != _canonical_bytes(value):
-        raise ConfigurationError(f"visualization source JSON is not canonical: {path}")
+        value = model_type.model_validate_json(payload)
+    except ValueError as exc:
+        raise ConfigurationError(f"{context} is unreadable") from exc
+    if payload != _canonical_bytes(value):
+        raise ConfigurationError(f"{context} is not canonical")
     return value
 
 
-def _within(root: Path, path: Path) -> bool:
-    resolved = path.resolve()
-    return resolved != root and root in resolved.parents
+def _open_pinned_raster(stream: BinaryIO) -> Any:
+    """Open Rasterio over duplicate descriptors without buffering the DEM in memory."""
+    token = f"topoforge-pinned-{stream.fileno()}.tif"
 
+    def opener(requested: str, mode: str = "rb") -> BinaryIO:
+        if os.fspath(requested) != token or mode not in {"r", "rb"}:
+            raise FileNotFoundError(requested)
+        descriptor = os.dup(stream.fileno())
+        os.set_inheritable(descriptor, False)
+        return os.fdopen(descriptor, "rb", closefd=True)
 
-def _verify_relative(root: Path, relative: str, expected_sha256: str) -> Path:
-    path = (root / relative).resolve()
-    if not _within(root, path) or not path.is_file():
-        raise ConfigurationError(f"assembly artifact is missing or unsafe: {relative}")
-    if sha256_file(path) != expected_sha256:
-        raise ConfigurationError(f"assembly artifact checksum changed: {relative}")
-    return path
+    stream.seek(0)
+    return rasterio.open(token, opener=opener, sharing=False)
 
 
 def _tile_mercator_bounds(z: int, x: int, y: int) -> tuple[float, float, float, float]:
@@ -349,9 +356,55 @@ class WebVisualizationService:
 
     def __init__(self, manager: LocalJobManager) -> None:
         self.manager = manager
-        self.cache_root = manager.config.state_dir / "map-tiles"
+
+        self.cache_root = manager.map_tiles_dir
         self._lock = threading.RLock()
         self._raster_info_cache: dict[str, _RasterInfo] = {}
+
+    def _read_workspace_model(
+        self,
+        path: Path,
+        expected_sha256: str,
+        model_type: type[_ModelT],
+        *,
+        context: str,
+        max_bytes: int = 8 * 1024 * 1024,
+    ) -> _ModelT:
+        payload = self.manager.read_workspace_file(
+            path,
+            expected_sha256=expected_sha256,
+            max_bytes=max_bytes,
+            context=context,
+        )
+        return _read_canonical_bytes(payload, model_type, context=context)
+
+    def _verify_workspace_file(
+        self,
+        path: Path,
+        expected_sha256: str,
+        *,
+        context: str,
+    ) -> int:
+        download = self.manager.open_owned_download(
+            path,
+            root=self.manager.config.workspace_root,
+            expected_sha256=expected_sha256,
+            expected_size=None,
+            context=context,
+        )
+        try:
+            return download.size_bytes
+        finally:
+            download.close()
+
+    def _relative_workspace_path(
+        self,
+        root: Path,
+        relative: str,
+        *,
+        context: str,
+    ) -> Path:
+        return self.manager.workspace_relative_path(root, relative, context=context)
 
     def _completed(self, job_id: str) -> JobRecord:
         record = self.manager.get(job_id)
@@ -369,39 +422,108 @@ class WebVisualizationService:
     ]:
         record = self._completed(job_id)
         root, _ = self.manager.directory_artifact_path(job_id, "print_tiles_directory")
-        manifest_path = root / "print-tile-assembly-manifest.json"
-        workflow_path, _ = self.manager.artifact_path(job_id, "workflow_manifest")
-        workflow = _read_canonical(workflow_path, LocalWorkflowManifest)
+        manifest_path = self._relative_workspace_path(
+            root,
+            "print-tile-assembly-manifest.json",
+            context="assembly manifest",
+        )
+        workflow_download, workflow_artifact = self.manager.open_artifact_download(
+            job_id,
+            "workflow_manifest",
+        )
+        try:
+            if workflow_download.size_bytes > 8 * 1024 * 1024:
+                raise ConfigurationError("workflow manifest exceeds its safety limit")
+            workflow_payload = workflow_download.stream.read(8 * 1024 * 1024 + 1)
+            if len(workflow_payload) != workflow_download.size_bytes:
+                raise ConfigurationError("workflow manifest changed while it was read")
+        finally:
+            workflow_download.close()
+        if workflow_artifact.sha256 is None:
+            raise ConfigurationError("workflow manifest artifact has no SHA-256")
+        workflow = _read_canonical_bytes(
+            workflow_payload,
+            LocalWorkflowManifest,
+            context="workflow manifest",
+        )
         connect = next(
             (item for item in workflow.stages if item.name is WorkflowStage.CONNECT),
             None,
         )
-        workspace = record.workspace_dir.resolve()
+        workspace = self.manager.workspace_relative_path(
+            record.workspace_dir,
+            ".",
+            context="completed workflow workspace",
+        )
         if workflow.required_checks_passed is not True or connect is None:
             raise ConfigurationError("workflow has no validated connect stage")
-        connect_output = (workspace / connect.output_path).resolve()
-        connect_manifest = (workspace / connect.manifest_path).resolve()
+        connect_output = self._relative_workspace_path(
+            workspace,
+            connect.output_path,
+            context="connect output",
+        )
+        connect_manifest = self._relative_workspace_path(
+            workspace,
+            connect.manifest_path,
+            context="connect manifest",
+        )
         if (
             connect.required_checks_passed is not True
             or connect_output != root
             or connect_manifest != manifest_path
-            or not _within(workspace, connect_manifest)
-            or sha256_file(manifest_path) != connect.manifest_sha256
         ):
             raise ConfigurationError("assembly manifest is not bound to the connect stage")
-        manifest = _read_canonical(manifest_path, PrintTileAssemblyManifest)
-        plan_path = _verify_relative(
-            root, manifest.connector_plan_path, manifest.connector_plan_sha256
+        try:
+            manifest = self._read_workspace_model(
+                manifest_path,
+                connect.manifest_sha256,
+                PrintTileAssemblyManifest,
+                context="assembly manifest",
+            )
+        except ConfigurationError as exc:
+            raise ConfigurationError("assembly manifest is not bound to the connect stage") from exc
+        plan_path = self._relative_workspace_path(
+            root,
+            manifest.connector_plan_path,
+            context="assembly connector plan",
         )
-        plan = _read_canonical(plan_path, ConnectorPlan)
-        _verify_relative(root, manifest.assembly_preview_path, manifest.assembly_preview_sha256)
-        _verify_relative(root, manifest.connector_map_path, manifest.connector_map_sha256)
-        validation_path = _verify_relative(
+        plan = self._read_workspace_model(
+            plan_path,
+            manifest.connector_plan_sha256,
+            ConnectorPlan,
+            context="assembly connector plan",
+        )
+        preview_path = self._relative_workspace_path(
+            root,
+            manifest.assembly_preview_path,
+            context="assembly preview",
+        )
+        self._verify_workspace_file(
+            preview_path,
+            manifest.assembly_preview_sha256,
+            context="assembly preview",
+        )
+        connector_map_path = self._relative_workspace_path(
+            root,
+            manifest.connector_map_path,
+            context="assembly connector map",
+        )
+        self._verify_workspace_file(
+            connector_map_path,
+            manifest.connector_map_sha256,
+            context="assembly connector map",
+        )
+        validation_path = self._relative_workspace_path(
             root,
             manifest.assembly_validation_path,
-            manifest.assembly_validation_sha256,
+            context="assembly validation",
         )
-        validation = _read_canonical(validation_path, PrintTileAssemblyValidation)
+        validation = self._read_workspace_model(
+            validation_path,
+            manifest.assembly_validation_sha256,
+            PrintTileAssemblyValidation,
+            context="assembly validation",
+        )
         if plan.layout_id != manifest.layout_id:
             raise ConfigurationError("connector plan and assembly layout ids differ")
         if (
@@ -413,7 +535,16 @@ class WebVisualizationService:
         ):
             raise ConfigurationError("assembly validation does not match the published manifest")
         for tile in manifest.tiles:
-            _verify_relative(root, tile.tile_manifest, tile.tile_manifest_sha256)
+            tile_manifest_path = self._relative_workspace_path(
+                root,
+                tile.tile_manifest,
+                context=f"assembly tile manifest {tile.tile_id}",
+            )
+            self._verify_workspace_file(
+                tile_manifest_path,
+                tile.tile_manifest_sha256,
+                context=f"assembly tile manifest {tile.tile_id}",
+            )
         return root, manifest, plan, validation
 
     def assembly(self, job_id: str) -> JobAssemblyOverview:
@@ -426,7 +557,12 @@ class WebVisualizationService:
         for tile in manifest.tiles:
             relative = tile.files["global_glb"]
             expected_sha256 = tile.sha256["global_glb"]
-            _verify_relative(root, relative, expected_sha256)
+            glb_path = self._relative_workspace_path(
+                root,
+                relative,
+                context=f"assembly tile GLB {tile.tile_id}",
+            )
+            self._verify_workspace_file(glb_path, expected_sha256, context="assembly tile GLB")
             x_min, y_min, _, x_max, y_max, _ = tile.global_bounds_mm
             maximum_x = max(maximum_x, x_max)
             maximum_y = max(maximum_y, y_max)
@@ -488,26 +624,83 @@ class WebVisualizationService:
             required_checks_passed=validation.required_checks_passed,
         )
 
-    def assembly_tile_path(self, job_id: str, tile_id: str) -> tuple[Path, str]:
-        """Strictly resolve one per-tile global GLB from the assembly manifest."""
+    def assembly_tile_download(
+        self,
+        job_id: str,
+        tile_id: str,
+    ) -> tuple[VerifiedFileDownload, str, str]:
+        """Retain one checksum-bound assembly GLB handle for HTTP streaming."""
         self._completed(job_id)
         root, manifest, _, _ = self._assembly_sources(job_id)
         tile = next((item for item in manifest.tiles if item.tile_id == tile_id), None)
         if tile is None:
             raise KeyError(tile_id)
         expected = tile.sha256["global_glb"]
-        return _verify_relative(root, tile.files["global_glb"], expected), expected
+        path = self._relative_workspace_path(
+            root,
+            tile.files["global_glb"],
+            context=f"assembly tile GLB {tile_id}",
+        )
+        download = self.manager.open_owned_download(
+            path,
+            root=self.manager.config.workspace_root,
+            expected_sha256=expected,
+            expected_size=None,
+            context=f"assembly tile GLB {tile_id}",
+        )
+        return download, expected, path.name
 
-    def _raster_info(self, path: Path, source_sha256: str) -> _RasterInfo:
+    def assembly_tile_path(self, job_id: str, tile_id: str) -> tuple[Path, str]:
+        """Verify one assembly GLB through a pinned handle and return its lexical path."""
+        root, manifest, _, _ = self._assembly_sources(job_id)
+        tile = next((item for item in manifest.tiles if item.tile_id == tile_id), None)
+        if tile is None:
+            raise KeyError(tile_id)
+        expected = tile.sha256["global_glb"]
+        path = self._relative_workspace_path(
+            root,
+            tile.files["global_glb"],
+            context=f"assembly tile GLB {tile_id}",
+        )
+        download = self.manager.open_owned_download(
+            path,
+            root=self.manager.config.workspace_root,
+            expected_sha256=expected,
+            expected_size=None,
+            context=f"assembly tile GLB {tile_id}",
+        )
+        download.close()
+        return path, expected
+
+    def _raster_info(self, source: Path | BinaryIO, source_sha256: str) -> _RasterInfo:
         cached = self._raster_info_cache.get(source_sha256)
         if cached is not None:
             return cached
-        with rasterio.open(path) as dataset:
+        opened = rasterio.open(source) if isinstance(source, Path) else _open_pinned_raster(source)
+        with opened as dataset:
             if dataset.count != 1 or dataset.crs is None:
                 raise ConfigurationError("processed DEM must be one georeferenced raster band")
-            values = dataset.read(1, masked=True)
-            valid_values = np.asarray(values.compressed(), dtype=np.float64)
-            if valid_values.size == 0:
+            elevation_min_m = math.inf
+            elevation_max_m = -math.inf
+            valid_pixel_count = 0
+            chunk_size = 1024
+            for row_offset in range(0, dataset.height, chunk_size):
+                for column_offset in range(0, dataset.width, chunk_size):
+                    window = (
+                        (row_offset, min(row_offset + chunk_size, dataset.height)),
+                        (
+                            column_offset,
+                            min(column_offset + chunk_size, dataset.width),
+                        ),
+                    )
+                    values = dataset.read(1, window=window, masked=True)
+                    block = np.asarray(values.compressed(), dtype=np.float64)
+                    if block.size == 0:
+                        continue
+                    valid_pixel_count += int(block.size)
+                    elevation_min_m = min(elevation_min_m, float(np.min(block)))
+                    elevation_max_m = max(elevation_max_m, float(np.max(block)))
+            if valid_pixel_count == 0:
                 raise ConfigurationError("processed DEM has no valid elevations for map tiles")
             west, raw_south, east, raw_north = transform_bounds(
                 dataset.crs,
@@ -538,8 +731,8 @@ class WebVisualizationService:
                 center_wgs84=(_longitude_center(west, east), center_latitude),
                 crosses_antimeridian=crosses_antimeridian,
                 web_mercator_latitude_clipped=(south != raw_south or north != raw_north),
-                elevation_min_m=float(np.min(valid_values)),
-                elevation_max_m=float(np.max(valid_values)),
+                elevation_min_m=elevation_min_m,
+                elevation_max_m=elevation_max_m,
                 minzoom=max(0, maxzoom - 5),
                 maxzoom=maxzoom,
             )
@@ -548,11 +741,11 @@ class WebVisualizationService:
 
     def _footprints(
         self,
-        path: Path,
+        source: BinaryIO,
         assembly: JobAssemblyOverview,
     ) -> dict[str, Any]:
         features: list[dict[str, Any]] = []
-        with rasterio.open(path) as dataset:
+        with _open_pinned_raster(source) as dataset:
             if dataset.crs is None:
                 raise ConfigurationError("processed DEM CRS is missing")
             transformer = Transformer.from_crs(dataset.crs, "EPSG:4326", always_xy=True)
@@ -592,17 +785,30 @@ class WebVisualizationService:
     def manifest(self, job_id: str) -> JobMapManifest:
         """Return one deterministic TileJSON-like manifest and assembly footprints."""
         self._completed(job_id)
-        raster_path, artifact = self.manager.artifact_path(job_id, "processed_dem")
+        download, artifact = self.manager.open_artifact_download(job_id, "processed_dem")
         if artifact.sha256 is None:
+            download.close()
             raise ConfigurationError("processed DEM artifact has no SHA-256")
-        info = self._raster_info(raster_path, artifact.sha256)
+        try:
+            return self._manifest_from_download(job_id, download, artifact.sha256)
+        finally:
+            download.close()
+
+    def _manifest_from_download(
+        self,
+        job_id: str,
+        download: VerifiedFileDownload,
+        source_sha256: str,
+    ) -> JobMapManifest:
+        info = self._raster_info(download.stream, source_sha256)
         assembly = self.assembly(job_id)
+        footprints = self._footprints(download.stream, assembly)
         cache_key = hashlib.sha256(
-            f"{_GENERATOR_VERSION}:{artifact.sha256}".encode("ascii")
+            f"{_GENERATOR_VERSION}:{source_sha256}".encode("ascii")
         ).hexdigest()
         return JobMapManifest(
             job_id=job_id,
-            source_sha256=artifact.sha256,
+            source_sha256=source_sha256,
             cache_key=cache_key,
             bounds_wgs84=info.bounds_wgs84,
             center_wgs84=info.center_wgs84,
@@ -614,7 +820,7 @@ class WebVisualizationService:
             layout_id=assembly.layout_id,
             tile_grid_shape=assembly.tile_grid_shape,
             tile_count=assembly.tile_count,
-            tile_footprints_geojson=self._footprints(raster_path, assembly),
+            tile_footprints_geojson=footprints,
             attribution="TopoForge processed DEM; dataset attribution remains in provenance",
             crosses_antimeridian=info.crosses_antimeridian,
             web_mercator_latitude_clipped=info.web_mercator_latitude_clipped,
@@ -637,25 +843,50 @@ class WebVisualizationService:
         z: int,
         x: int,
         y: int,
-    ) -> MapTileCacheRecord | None:
-        if not png_path.is_file() or not record_path.is_file():
-            return None
+    ) -> tuple[MapTileCacheRecord | None, bool]:
+        png_payload = self.manager.read_optional_owned_file(
+            png_path,
+            root=self.cache_root,
+            context="map tile cache PNG",
+            max_bytes=2 * 1024 * 1024,
+        )
+        record_payload = self.manager.read_optional_owned_file(
+            record_path,
+            root=self.cache_root,
+            context="map tile cache record",
+            max_bytes=64 * 1024,
+        )
+        present = png_payload is not None or record_payload is not None
+        if png_payload is None or record_payload is None:
+            return None, present
         try:
-            record = _read_canonical(record_path, MapTileCacheRecord)
+            record = _read_canonical_bytes(
+                record_payload,
+                MapTileCacheRecord,
+                context="map tile cache record",
+            )
             if (
                 record.source_sha256 != source_sha256
                 or record.style is not style
                 or (record.z, record.x, record.y) != (z, x, y)
-                or record.png_size_bytes != png_path.stat().st_size
-                or record.png_sha256 != sha256_file(png_path)
+                or record.png_size_bytes != len(png_payload)
+                or record.png_sha256 != hashlib.sha256(png_payload).hexdigest()
             ):
-                return None
-            with Image.open(png_path) as image:
+                return None, present
+            with Image.open(BytesIO(png_payload)) as image:
+                image.load()
                 if image.mode != "RGBA" or image.size != (_TILE_SIZE, _TILE_SIZE):
-                    return None
-            return record
+                    return None, present
+            return record, present
         except (OSError, ValueError, ConfigurationError):
-            return None
+            return None, present
+
+    def _ensure_cache_parent(self, path: Path) -> None:
+        self.manager.ensure_owned_directory_tree(
+            path.parent,
+            root=self.cache_root,
+            context="map tile cache directory",
+        )
 
     def tile(
         self,
@@ -668,19 +899,42 @@ class WebVisualizationService:
         """Return a verified cached tile, generating it atomically when required."""
         if z < 0 or z > 22 or x < 0 or y < 0:
             raise MapTileNotFoundError("XYZ coordinate is invalid")
-        raster_path, artifact = self.manager.artifact_path(job_id, "processed_dem")
+        download, artifact = self.manager.open_artifact_download(job_id, "processed_dem")
         if artifact.sha256 is None:
+            download.close()
             raise ConfigurationError("processed DEM artifact has no SHA-256")
-        info = self._raster_info(raster_path, artifact.sha256)
+        try:
+            return self._tile_from_download(
+                download,
+                artifact.sha256,
+                style,
+                z,
+                x,
+                y,
+            )
+        finally:
+            download.close()
+
+    def _tile_from_download(
+        self,
+        download: VerifiedFileDownload,
+        source_sha256: str,
+        style: MapTileStyle,
+        z: int,
+        x: int,
+        y: int,
+    ) -> tuple[Path, MapTileCacheRecord, str]:
+        info = self._raster_info(download.stream, source_sha256)
         tile_bounds = _tile_mercator_bounds(z, x, y)
         if not any(_bounds_intersect(tile_bounds, coverage) for coverage in info.bounds_mercator_m):
             raise MapTileNotFoundError("XYZ tile is outside processed DEM coverage")
-        png_path, record_path = self._cache_paths(artifact.sha256, style, z, x, y)
+        png_path, record_path = self._cache_paths(source_sha256, style, z, x, y)
         with self._lock:
-            cached = self._valid_cache(
+            self._ensure_cache_parent(png_path)
+            cached, previous_cache_present = self._valid_cache(
                 png_path,
                 record_path,
-                source_sha256=artifact.sha256,
+                source_sha256=source_sha256,
                 style=style,
                 z=z,
                 x=x,
@@ -688,13 +942,9 @@ class WebVisualizationService:
             )
             if cached is not None:
                 return png_path, cached, "hit"
-            previous_cache_present = png_path.exists() or record_path.exists()
-            png_path.unlink(missing_ok=True)
-            record_path.unlink(missing_ok=True)
-            png_path.parent.mkdir(parents=True, exist_ok=True)
             destination = np.full((_TILE_SIZE, _TILE_SIZE), np.nan, dtype=np.float32)
             transform = from_bounds(*tile_bounds, _TILE_SIZE, _TILE_SIZE)
-            with rasterio.open(raster_path) as dataset:
+            with _open_pinned_raster(download.stream) as dataset:
                 reproject(
                     source=rasterio.band(dataset, 1),
                     destination=destination,
@@ -721,16 +971,16 @@ class WebVisualizationService:
                 elevation_max_m=info.elevation_max_m,
                 pixel_size_m=pixel_size_m,
             )
-            temporary_png = png_path.with_name(f".{png_path.name}.tmp")
+            png_buffer = BytesIO()
             Image.fromarray(rgba).save(
-                temporary_png,
+                png_buffer,
                 format="PNG",
                 compress_level=9,
                 optimize=False,
             )
-            temporary_png.replace(png_path)
+            png_payload = png_buffer.getvalue()
             cache_record = MapTileCacheRecord(
-                source_sha256=artifact.sha256,
+                source_sha256=source_sha256,
                 style=style,
                 z=z,
                 x=x,
@@ -738,16 +988,25 @@ class WebVisualizationService:
                 elevation_min_m=info.elevation_min_m,
                 elevation_max_m=info.elevation_max_m,
                 valid_pixel_count=valid_count,
-                png_sha256=sha256_file(png_path),
-                png_size_bytes=png_path.stat().st_size,
+                png_sha256=hashlib.sha256(png_payload).hexdigest(),
+                png_size_bytes=len(png_payload),
             )
-            temporary_record = record_path.with_name(f".{record_path.name}.tmp")
-            temporary_record.write_bytes(_canonical_bytes(cache_record))
-            temporary_record.replace(record_path)
-            reopened = self._valid_cache(
+            self.manager.write_owned_file(
+                png_path,
+                png_payload,
+                root=self.cache_root,
+                context="map tile cache PNG publication",
+            )
+            self.manager.write_owned_file(
+                record_path,
+                _canonical_bytes(cache_record),
+                root=self.cache_root,
+                context="map tile cache record publication",
+            )
+            reopened, _ = self._valid_cache(
                 png_path,
                 record_path,
-                source_sha256=artifact.sha256,
+                source_sha256=source_sha256,
                 style=style,
                 z=z,
                 x=x,
@@ -756,3 +1015,22 @@ class WebVisualizationService:
             if reopened is None:
                 raise ConfigurationError("generated map tile did not pass cache reread")
             return png_path, reopened, ("regenerated-corrupt" if previous_cache_present else "miss")
+
+    def tile_download(
+        self,
+        job_id: str,
+        style: MapTileStyle,
+        z: int,
+        x: int,
+        y: int,
+    ) -> tuple[VerifiedFileDownload, MapTileCacheRecord, str]:
+        """Retain the exact verified cache handle that the HTTP response will stream."""
+        png_path, record, cache_state = self.tile(job_id, style, z, x, y)
+        download = self.manager.open_owned_download(
+            png_path,
+            root=self.cache_root,
+            expected_sha256=record.png_sha256,
+            expected_size=record.png_size_bytes,
+            context="map tile cache download",
+        )
+        return download, record, cache_state

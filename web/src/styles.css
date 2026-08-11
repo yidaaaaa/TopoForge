@@ -1355,6 +1355,7 @@ input:checked + .toggle::after {
 }
 
 .state-badge.running,
+.state-badge.starting,
 .state-badge.cancelling {
   color: #175c70;
   background: #e5f5fa;

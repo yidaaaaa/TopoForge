@@ -462,6 +462,7 @@ export function MapPanel({
       data-testid="map-panel"
       data-offline-reference="natural-earth-countries-and-graticule"
       data-has-terrain={manifest ? "true" : "false"}
+      data-job-id={manifest?.job_id ?? ""}
       data-tile-style={terrainStyle}
     >
       <div ref={containerRef} className="map-canvas" />

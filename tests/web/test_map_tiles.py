@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import math
+import os
 import time
 from pathlib import Path
 
@@ -86,7 +87,7 @@ def test_completed_job_map_tiles_cache_and_assembly_contract(
         )
     )
     app = create_app(web_config, static_dir=web_static_dir)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://localhost") as client:
         submitted = client.post(
             "/api/v1/jobs",
             json=request.model_dump(mode="json"),
@@ -136,11 +137,23 @@ def test_completed_job_map_tiles_cache_and_assembly_contract(
 
         service = app.state.visualization_service
         tile_path, _, _ = service.tile(job_id, MapTileStyle.TERRAIN, zoom, x, y)
+        external_png = web_config.state_dir.parent / "external-map-png.bin"
+        external_record = web_config.state_dir.parent / "external-map-record.bin"
+        external_png.write_bytes(b"external PNG marker")
+        external_record.write_bytes(b"external record marker")
+        fixed_png_temporary = tile_path.with_name(f".{tile_path.name}.tmp")
+        fixed_record_temporary = tile_path.with_suffix(".json").with_name(
+            f".{tile_path.with_suffix('.json').name}.tmp"
+        )
+        os.link(external_png, fixed_png_temporary)
+        os.link(external_record, fixed_record_temporary)
         tile_path.write_bytes(b"corrupt")
         regenerated = client.get(f"/api/v1/jobs/{job_id}/map/tiles/terrain/{zoom}/{x}/{y}.png")
         assert regenerated.status_code == 200
         assert regenerated.headers["x-topoforge-cache"] == "regenerated-corrupt"
         assert hashlib.sha256(regenerated.content).hexdigest() == first_hashes["terrain"]
+        assert external_png.read_bytes() == b"external PNG marker"
+        assert external_record.read_bytes() == b"external record marker"
 
         record_path = tile_path.with_suffix(".json")
         cache_record = json.loads(record_path.read_text(encoding="utf-8"))

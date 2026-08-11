@@ -147,6 +147,7 @@ export default function App() {
   const jobsLoadGeneration = useRef(0);
   const lifecycleMutationInProgress = useRef(false);
   const selectionClearedByUser = useRef(false);
+  const selectedJobIdRef = useRef<string | null>(null);
   const t = useCallback(
     (key: TranslationKey) => translate(language, key),
     [language],
@@ -218,6 +219,12 @@ export default function App() {
     () => jobs.find((job) => job.job_id === selectedJobId) ?? null,
     [jobs, selectedJobId],
   );
+  selectedJobIdRef.current = selectedJobId;
+  const visibleMaintenance =
+    maintenance?.job_id === selectedJob?.job_id ? maintenance : null;
+  const visibleJobMap = jobMap?.job_id === selectedJob?.job_id ? jobMap : null;
+  const visibleJobAssembly =
+    jobAssembly?.job_id === selectedJob?.job_id ? jobAssembly : null;
 
   const handleJobSelect = useCallback((jobId: string | null) => {
     selectionClearedByUser.current = jobId === null;
@@ -228,12 +235,19 @@ export default function App() {
     async (jobId: string) => {
       setMaintenanceLoading(true);
       try {
-        setMaintenance(await fetchJobMaintenance(jobId));
+        const overview = await fetchJobMaintenance(jobId);
+        if (selectedJobIdRef.current === jobId) {
+          setMaintenance(overview);
+        }
       } catch (reason) {
-        setMaintenance(null);
-        setNotice({ tone: "error", text: errorMessage(reason, language) });
+        if (selectedJobIdRef.current === jobId) {
+          setMaintenance(null);
+          setNotice({ tone: "error", text: errorMessage(reason, language) });
+        }
       } finally {
-        setMaintenanceLoading(false);
+        if (selectedJobIdRef.current === jobId) {
+          setMaintenanceLoading(false);
+        }
       }
     },
     [language],
@@ -247,6 +261,7 @@ export default function App() {
     }
     let active = true;
     const controller = new AbortController();
+    setMaintenance(null);
     setMaintenanceLoading(true);
     void fetchJobMaintenance(selectedJob.job_id, controller.signal)
       .then((overview) => {
@@ -283,6 +298,9 @@ export default function App() {
     }
     let active = true;
     const controller = new AbortController();
+    setJobMap(null);
+    setJobAssembly(null);
+    setSelectedTileId(null);
     setVisualizationLoading(true);
     setVisualizationError(null);
     void Promise.all([
@@ -421,14 +439,14 @@ export default function App() {
     }
   };
 
-  const handleCleanup = async (jobId: string, workflowId: string) => {
+  const handleCleanup = async (jobId: string, workflowId: string, planId: string) => {
     const confirmation = t("confirmCleanup").replace("{workflowId}", workflowId);
     if (!window.confirm(confirmation)) {
       return;
     }
     setMaintenanceBusy("cleanup");
     try {
-      await cleanupJob(jobId, workflowId);
+      await cleanupJob(jobId, workflowId, planId);
       await loadMaintenance(jobId);
       setNotice({ tone: "success", text: t("cleanupCompleted") });
     } catch (reason) {
@@ -656,7 +674,7 @@ export default function App() {
                 normalizedAoi={normalizedAoi}
                 basemapEnabled={basemapEnabled}
                 drawMode={drawMode}
-                manifest={jobMap}
+                manifest={visibleJobMap}
                 selectedTileId={selectedTileId}
                 visualizationLoading={visualizationLoading}
                 visualizationError={visualizationError}
@@ -683,7 +701,7 @@ export default function App() {
                 <Suspense fallback={<div className="empty-state">{t("loading")}</div>}>
                   <AssemblyPanel
                     language={language}
-                    assembly={jobAssembly}
+                    assembly={visibleJobAssembly}
                     selectedTileId={selectedTileId}
                     loading={visualizationLoading}
                     error={visualizationError}
@@ -699,7 +717,7 @@ export default function App() {
           language={language}
           jobs={jobs}
           selectedJob={selectedJob}
-          maintenance={maintenance}
+          maintenance={visibleMaintenance}
           loading={jobsLoading}
           maintenanceLoading={maintenanceLoading}
           maintenanceBusy={maintenanceBusy}
@@ -710,7 +728,9 @@ export default function App() {
           onSelect={handleJobSelect}
           onCancel={(jobId) => void handleCancel(jobId)}
           onBackup={(jobId) => void handleBackup(jobId)}
-          onCleanup={(jobId, workflowId) => void handleCleanup(jobId, workflowId)}
+          onCleanup={(jobId, workflowId, planId) =>
+            void handleCleanup(jobId, workflowId, planId)
+          }
           onRestore={(backupId) => void handleRestore(backupId)}
           onPlanBatch={(jobIds, mode) => void handlePlanBatch(jobIds, mode)}
           onApplyBatch={() => void handleApplyBatch()}

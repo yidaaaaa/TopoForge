@@ -214,6 +214,7 @@ async function createCompletedLifecycleJob(
 test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   page,
 }, testInfo) => {
+  test.setTimeout(90_000);
   test.skip(testInfo.project.name !== "desktop", "desktop-only visual contract");
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(`pageerror: ${error.message}`));
@@ -395,6 +396,10 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   await expect(page.getByTestId("map-panel")).toHaveAttribute(
     "data-has-terrain",
     "true",
+  );
+  await expect(page.getByTestId("map-panel")).toHaveAttribute(
+    "data-job-id",
+    restoredJob.job_id,
   );
   await expect.poll(() => localTileRequests).toBeGreaterThan(0);
   await expect

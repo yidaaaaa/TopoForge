@@ -85,7 +85,7 @@ def verify_lifecycle(root: Path) -> dict[str, Any]:
     request = JobCreateRequest(launch=launch)
     statuses: dict[str, int] = {}
 
-    with TestClient(create_app(config)) as client:
+    with TestClient(create_app(config), base_url="http://localhost") as client:
         created_response = client.post(
             "/api/v1/jobs",
             json=request.model_dump(mode="json"),

@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import hashlib
+import io
+import os
 import time
 from pathlib import Path
+from typing import cast
 
 import pytest
+from fastapi.responses import StreamingResponse
 from fastapi.testclient import TestClient
+from starlette.requests import ClientDisconnect, Request
+from starlette.types import Message, Scope
 
 from topoforge.exceptions import ConfigurationError
 from topoforge.overlays import (
@@ -19,12 +28,114 @@ from topoforge.validation.slicers import (
     SlicerAvailability,
     SlicerInfo,
 )
-from topoforge.web.api import create_app, verify_static_assets
-from topoforge.web.jobs import LocalJobManager
-from topoforge.web.models import JobRecord, JobState, WebAppConfig, utc_now
+from topoforge.web import api as api_module
+from topoforge.web.api import (
+    _stream_verified_download,
+    create_app,
+    verify_static_assets,
+)
+from topoforge.web.jobs import LocalJobManager, VerifiedFileDownload
+from topoforge.web.models import JobArtifact, JobRecord, JobState, WebAppConfig, utc_now
+from topoforge.web.security import (
+    host_header_is_allowed,
+    request_host_is_allowed,
+    request_mutation_is_allowed,
+)
 from topoforge.workflow import write_workflow_launch_config
 
 from .conftest import make_job_request
+
+
+def test_verified_stream_closes_pinned_handle_on_asgi_disconnect() -> None:
+    stream = io.BytesIO(b"x" * (1024 * 1024 + 1))
+    download = VerifiedFileDownload(
+        stream=stream,
+        size_bytes=1024 * 1024 + 1,
+        sha256="0" * 64,
+        _context=contextlib.closing(stream),
+    )
+    response = _stream_verified_download(download, media_type="application/octet-stream")
+    scope = cast(Scope, {"type": "http", "asgi": {"spec_version": "2.4"}})
+
+    async def receive() -> Message:
+        return {"type": "http.disconnect"}
+
+    async def send(message: Message) -> None:
+        if message["type"] == "http.response.body":
+            raise OSError("simulated client disconnect")
+
+    async def exercise_disconnect() -> None:
+        await response(scope, receive, send)
+
+    with pytest.raises(ClientDisconnect):
+        asyncio.run(exercise_disconnect())
+    assert stream.closed is True
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows denies renaming this shared pinned handle")
+def test_artifact_response_streams_verified_handle_after_path_swap(
+    web_config: WebAppConfig,
+    web_static_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = LocalJobManager(web_config)
+    workspace = web_config.workspace_root / "pinned-artifact-response"
+    workspace.mkdir(parents=True)
+    artifact_path = workspace / "artifact.bin"
+    original_payload = b"verified artifact bytes"
+    replacement_payload = b"replacement path bytes"
+    artifact_path.write_bytes(original_payload)
+    now = utc_now()
+    job_id = "e" * 32
+    manager._write_record(
+        JobRecord(
+            job_id=job_id,
+            created_at=now,
+            updated_at=now,
+            state=JobState.COMPLETED,
+            workspace_dir=workspace,
+            expected_stages=(),
+            progress_fraction=1.0,
+            artifacts=(
+                JobArtifact(
+                    artifact_id="race_fixture",
+                    relative_path="artifact.bin",
+                    filename="artifact.bin",
+                    kind="file",
+                    media_type="application/octet-stream",
+                    size_bytes=len(original_payload),
+                    sha256=hashlib.sha256(original_payload).hexdigest(),
+                    download_url=f"/api/v1/jobs/{job_id}/artifacts/race_fixture",
+                ),
+            ),
+        )
+    )
+    retained_path = workspace / "verified-open-handle.bin"
+    original_streamer = api_module._stream_verified_download
+
+    def swap_after_verification(
+        download: VerifiedFileDownload,
+        *,
+        media_type: str | None,
+        filename: str | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> StreamingResponse:
+        artifact_path.replace(retained_path)
+        artifact_path.write_bytes(replacement_payload)
+        return original_streamer(
+            download,
+            media_type=media_type,
+            filename=filename,
+            headers=headers,
+        )
+
+    monkeypatch.setattr(api_module, "_stream_verified_download", swap_after_verification)
+    app = create_app(web_config, manager=manager, static_dir=web_static_dir)
+    with TestClient(app, base_url="http://localhost") as client:
+        response = client.get(f"/api/v1/jobs/{job_id}/artifacts/race_fixture")
+        assert response.status_code == 200
+        assert response.content == original_payload
+        assert artifact_path.read_bytes() == replacement_payload
 
 
 def test_health_capabilities_static_app_and_security_headers(
@@ -32,11 +143,17 @@ def test_health_capabilities_static_app_and_security_headers(
     web_static_dir: Path,
 ) -> None:
     app = create_app(web_config, static_dir=web_static_dir)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://localhost") as client:
         health = client.get("/api/v1/health")
         assert health.status_code == 200
         assert health.json()["loopback_only"] is True
         assert health.json()["languages"] == ["zh-CN", "en"]
+        ipv6_health = client.get(
+            "/api/v1/health",
+            headers={"host": "[::1]:8765"},
+        )
+        assert ipv6_health.status_code == 200
+        assert ipv6_health.json()["loopback_only"] is True
         content_security_policy = health.headers["content-security-policy"]
         assert "default-src 'self'" in content_security_policy
         assert "connect-src 'self' https://tile.openstreetmap.org" in content_security_policy
@@ -58,13 +175,172 @@ def test_health_capabilities_static_app_and_security_headers(
         assert rejected_host.status_code == 400
 
 
+@pytest.mark.parametrize(
+    "host",
+    [
+        "localhost",
+        "LOCALHOST:8765",
+        "127.0.0.1",
+        "127.255.255.254:65535",
+        "::1",
+        "[::1]",
+        "[::1]:8765",
+        "[0:0:0:0:0:0:0:1]:443",
+    ],
+)
+def test_loopback_host_parser_accepts_only_explicit_loopback_authorities(host: str) -> None:
+    assert host_header_is_allowed(host)
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        None,
+        "",
+        " localhost",
+        "localhost ",
+        "localhost.",
+        "localhost.evil.example",
+        "127.0.0.1.evil.example",
+        "user@localhost",
+        "localhost@outside.example",
+        "http://localhost",
+        "localhost/path",
+        "localhost?query",
+        "localhost#fragment",
+        "localhost:",
+        "localhost:+80",
+        "localhost:0",
+        "localhost:65536",
+        "localhost:9999999999999999999999999999999999999999",
+        "[::1",
+        "::1]",
+        "[::1]outside.example",
+        "[::1]:not-a-port",
+        "[::1]:65536",
+        "localhost,outside.example",
+        "192.168.1.2",
+        "[fe80::1]",
+        "testserver",
+    ],
+)
+def test_loopback_host_parser_rejects_malformed_and_non_loopback_authorities(
+    host: str | None,
+) -> None:
+    assert not host_header_is_allowed(host)
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        (),
+        ((b"host", b"localhost"), (b"host", b"outside.example")),
+        ((b"Host", b"localhost"), (b"HOST", b"localhost")),
+    ],
+)
+def test_raw_host_validation_rejects_missing_and_duplicate_authorities(
+    headers: tuple[tuple[bytes, bytes], ...],
+) -> None:
+    request = Request(
+        cast(
+            Scope,
+            {"type": "http", "headers": list(headers)},
+        )
+    )
+    assert not request_host_is_allowed(request)
+
+
+def test_testserver_host_requires_explicit_test_factory_opt_in(
+    web_config: WebAppConfig,
+    web_static_dir: Path,
+) -> None:
+    strict_app = create_app(web_config, static_dir=web_static_dir)
+    with TestClient(strict_app, base_url="http://localhost") as client:
+        assert client.get("/api/v1/health", headers={"host": "testserver"}).status_code == 400
+
+    test_app = create_app(
+        web_config,
+        static_dir=web_static_dir,
+        allow_testserver_host=True,
+    )
+    with TestClient(test_app) as client:
+        assert client.get("/api/v1/health").status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("headers", "allowed"),
+    [
+        ((), True),
+        (((b"origin", b"http://localhost"),), True),
+        (((b"origin", b"http://localhost:80"),), True),
+        (((b"origin", b"https://localhost"),), False),
+        (((b"origin", b"http://outside.example"),), False),
+        (((b"origin", b"null"),), False),
+        (((b"origin", b"http://localhost/"),), False),
+        (((b"origin", b"http://localhost"), (b"origin", b"http://localhost")), False),
+        (((b"sec-fetch-site", b"same-origin"),), True),
+        (((b"sec-fetch-site", b"same-site"),), False),
+        (((b"sec-fetch-site", b"cross-site"),), False),
+        (((b"sec-fetch-site", b"none"),), False),
+    ],
+)
+def test_mutation_origin_validation_is_fail_closed_for_browser_headers(
+    headers: tuple[tuple[bytes, bytes], ...],
+    allowed: bool,
+) -> None:
+    request = Request(
+        cast(
+            Scope,
+            {
+                "type": "http",
+                "method": "POST",
+                "scheme": "http",
+                "server": ("localhost", 80),
+                "path": "/api/v1/jobs/example/cancel",
+                "query_string": b"",
+                "headers": [(b"host", b"localhost"), *headers],
+            },
+        )
+    )
+    assert request_mutation_is_allowed(request) is allowed
+
+
+def test_cross_origin_mutations_are_rejected_before_endpoint_dispatch(
+    web_config: WebAppConfig,
+    web_static_dir: Path,
+) -> None:
+    app = create_app(web_config, static_dir=web_static_dir)
+    with TestClient(app, base_url="http://localhost") as client:
+        same_origin = client.post(
+            "/api/v1/aoi/normalize",
+            json={"bbox_wgs84": [0.0, 0.0, 1.0, 1.0]},
+            headers={"origin": "http://localhost", "sec-fetch-site": "same-origin"},
+        )
+        assert same_origin.status_code == 200
+
+        for headers in (
+            {"origin": "http://outside.example", "sec-fetch-site": "cross-site"},
+            {"origin": "null"},
+            {"sec-fetch-site": "cross-site"},
+        ):
+            rejected = client.post(
+                "/api/v1/jobs/not-a-job/cancel",
+                headers=headers,
+            )
+            assert rejected.status_code == 403
+            assert rejected.json()["detail"] == "Cross-origin browser mutation rejected"
+
+        headerless_local_client = client.post("/api/v1/jobs/not-a-job/cancel")
+        assert headerless_local_client.status_code == 404
+
+
 def test_aoi_normalization_and_launch_validation_reuse_core_contracts(
     web_config: WebAppConfig,
     web_static_dir: Path,
 ) -> None:
     app = create_app(web_config, static_dir=web_static_dir)
     request = make_job_request(web_config, name="validate")
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://localhost") as client:
         bbox = client.post(
             "/api/v1/aoi/normalize",
             json={"bbox_wgs84": [179.8, -1.0, -179.7, 1.0]},
@@ -147,7 +423,7 @@ def test_bambu_validation_requires_and_reuses_server_tool_configuration(
         }
     )
     missing_app = create_app(web_config, static_dir=web_static_dir)
-    with TestClient(missing_app) as client:
+    with TestClient(missing_app, base_url="http://localhost") as client:
         validation = client.post(
             "/api/v1/jobs/validate",
             json=explicit_profiles.model_dump(mode="json"),
@@ -181,7 +457,7 @@ def test_bambu_validation_requires_and_reuses_server_tool_configuration(
         }
     )
     configured_app = create_app(configured, static_dir=web_static_dir)
-    with TestClient(configured_app) as client:
+    with TestClient(configured_app, base_url="http://localhost") as client:
         validation = client.post(
             "/api/v1/jobs/validate",
             json=implicit_profiles.model_dump(mode="json"),
@@ -203,7 +479,7 @@ def test_input_listing_and_traversal_rejection(
     root = web_config.input_roots[0]
     (root / "terrain.tif").write_bytes(b"fixture")
     app = create_app(web_config, static_dir=web_static_dir)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://localhost") as client:
         roots = client.get("/api/v1/files")
         assert roots.status_code == 200
         assert roots.json()["entries"][0]["path"] == str(root.resolve())
@@ -231,7 +507,7 @@ def test_asset_manifest_and_job_api_not_found_contract(
         manager=manager,
         static_dir=web_static_dir,
     )
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://localhost") as client:
         response = client.get("/api/v1/jobs/" + "0" * 32)
         assert response.status_code == 404
 
@@ -264,7 +540,7 @@ def test_batch_lifecycle_api_plans_restores_and_purges_terminal_workspaces(
         )
     app = create_app(web_config, manager=manager, static_dir=web_static_dir)
     request = {"job_ids": list(job_ids), "mode": "quarantine-workspace"}
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://localhost") as client:
         capabilities = client.get("/api/v1/capabilities").json()
         assert capabilities["lifecycle"]["recoverable_trash"] is True
 
@@ -347,7 +623,7 @@ def test_config_loader_reopens_launch_and_overlay_yaml(
         root / "overlay.yaml",
     )
     app = create_app(web_config, static_dir=web_static_dir)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://localhost") as client:
         launch = client.post(
             "/api/v1/config/load",
             json={"kind": "launch", "path": str(launch_path)},
@@ -380,7 +656,7 @@ def test_completed_job_maintenance_routes_backup_restore_and_cleanup(
 ) -> None:
     app = create_app(web_config, static_dir=web_static_dir)
     request = make_job_request(web_config, name="api-maintenance")
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://localhost") as client:
         created = client.post(
             "/api/v1/jobs",
             json=request.model_dump(mode="json"),
@@ -410,6 +686,7 @@ def test_completed_job_maintenance_routes_backup_restore_and_cleanup(
         assert overview["required_checks_passed"] is True
         assert overview["cleanup"]["reclaimable_bytes"] > 0
         workflow_id = overview["cleanup"]["workflow_id"]
+        cleanup_plan_id = overview["cleanup"]["plan_id"]
 
         backup_response = client.post(f"/api/v1/jobs/{job_id}/backup")
         assert backup_response.status_code == 201
@@ -438,13 +715,19 @@ def test_completed_job_maintenance_routes_backup_restore_and_cleanup(
 
         rejected = client.post(
             f"/api/v1/jobs/{job_id}/cleanup",
-            json={"confirm_workflow_id": "wrong"},
+            json={
+                "confirm_workflow_id": "wrong",
+                "confirm_plan_id": cleanup_plan_id,
+            },
         )
         assert rejected.status_code == 422
 
         cleaned = client.post(
             f"/api/v1/jobs/{job_id}/cleanup",
-            json={"confirm_workflow_id": workflow_id},
+            json={
+                "confirm_workflow_id": workflow_id,
+                "confirm_plan_id": cleanup_plan_id,
+            },
         )
         assert cleaned.status_code == 200
         assert cleaned.json()["removed_paths"] == ["stages/99-unused/api-stale"]

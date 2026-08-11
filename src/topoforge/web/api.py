@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import asynccontextmanager
 from importlib.resources import files
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi import Path as PathParameter
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
+from starlette.types import Receive, Scope, Send
 
 from topoforge import __version__
 from topoforge.exceptions import ConfigurationError
@@ -22,7 +24,11 @@ from topoforge.models import AreaOfInterest, AreaOfInterestInput
 from topoforge.raster import normalize_area_of_interest
 from topoforge.util import sha256_file
 from topoforge.web.configuration import LocalConfigLoadRequest, load_local_config
-from topoforge.web.jobs import LocalJobManager, expected_workflow_stages
+from topoforge.web.jobs import (
+    LocalJobManager,
+    VerifiedFileDownload,
+    expected_workflow_stages,
+)
 from topoforge.web.map_tiles import (
     JobAssemblyOverview,
     JobMapManifest,
@@ -48,7 +54,53 @@ from topoforge.web.models import (
     WorkflowCleanupRequest,
     WorkflowRestoreRequest,
 )
+from topoforge.web.security import request_host_is_allowed, request_mutation_is_allowed
 from topoforge.workflow import WorkflowCleanupResult
+
+
+class _PinnedStreamingResponse(StreamingResponse):
+    """Close a verified download even when ASGI send reports a disconnect."""
+
+    def __init__(self, download: VerifiedFileDownload, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._download = download
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self._download.close()
+
+
+def _stream_verified_download(
+    download: VerifiedFileDownload,
+    *,
+    media_type: str | None,
+    filename: str | None = None,
+    headers: dict[str, str] | None = None,
+) -> StreamingResponse:
+    """Stream one already verified handle and close it on completion or disconnect."""
+    response_headers = dict(headers or {})
+    response_headers["Content-Length"] = str(download.size_bytes)
+    if filename is not None:
+        response_headers["Content-Disposition"] = "attachment; filename*=utf-8''" + quote(
+            filename, safe=""
+        )
+
+    def generate() -> Iterator[bytes]:
+        try:
+            while block := download.stream.read(1024 * 1024):
+                yield block
+        finally:
+            download.close()
+
+    return _PinnedStreamingResponse(
+        download,
+        content=generate(),
+        media_type=media_type,
+        headers=response_headers,
+        background=BackgroundTask(download.close),
+    )
 
 
 def bundled_static_dir() -> Path:
@@ -106,6 +158,7 @@ def create_app(
     *,
     manager: LocalJobManager | None = None,
     static_dir: Path | None = None,
+    allow_testserver_host: bool = False,
 ) -> FastAPI:
     """Create the loopback application without duplicating workflow algorithms."""
     resolved = (config or WebAppConfig()).resolved()
@@ -134,10 +187,33 @@ def create_app(
     app.state.job_manager = jobs
     app.state.web_config = resolved
     app.state.visualization_service = visualization
-    app.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=["127.0.0.1", "localhost", "[::1]", "::1", "testserver"],
-    )
+
+    @app.middleware("http")
+    async def loopback_host(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        if not request_host_is_allowed(
+            request,
+            allow_testserver=allow_testserver_host,
+        ):
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"detail": "Invalid or non-loopback Host header"},
+            )
+        return await call_next(request)
+
+    @app.middleware("http")
+    async def same_origin_mutations(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        if not request_mutation_is_allowed(request):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "Cross-origin browser mutation rejected"},
+            )
+        return await call_next(request)
 
     @app.middleware("http")
     async def security_headers(
@@ -366,6 +442,7 @@ def create_app(
             return jobs.cleanup(
                 job_id,
                 confirm_workflow_id=request.confirm_workflow_id,
+                confirm_plan_id=request.confirm_plan_id,
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="job not found") from exc
@@ -375,15 +452,15 @@ def create_app(
         return jobs.list_backups()
 
     @app.get("/api/v1/backups/{backup_id}")
-    def get_backup(backup_id: str) -> FileResponse:
+    def get_backup(backup_id: str) -> StreamingResponse:
         try:
-            path, backup = jobs.backup_archive_path(backup_id)
+            download, backup = jobs.open_backup_download(backup_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="backup not found") from exc
-        return FileResponse(
-            path,
+        return _stream_verified_download(
+            download,
             media_type="application/zip",
-            filename=(f"topoforge-{backup.workflow_id[:12]}-{backup.backup_id[:12]}.zip"),
+            filename=f"topoforge-{backup.workflow_id[:12]}-{backup.backup_id[:12]}.zip",
             headers={
                 "ETag": f'"{backup.archive_sha256}"',
                 "Cache-Control": "private, no-cache",
@@ -434,13 +511,13 @@ def create_app(
         return StreamingResponse(generate(), media_type="text/event-stream")
 
     @app.get("/api/v1/jobs/{job_id}/artifacts/{artifact_id}")
-    def get_artifact(job_id: str, artifact_id: str) -> FileResponse:
+    def get_artifact(job_id: str, artifact_id: str) -> StreamingResponse:
         try:
-            path, artifact = jobs.artifact_path(job_id, artifact_id)
+            download, artifact = jobs.open_artifact_download(job_id, artifact_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="artifact not found") from exc
-        return FileResponse(
-            path,
+        return _stream_verified_download(
+            download,
             media_type=artifact.media_type,
             filename=artifact.filename,
         )
@@ -459,13 +536,13 @@ def create_app(
         z: Annotated[int, PathParameter(ge=0, le=22)],
         x: Annotated[int, PathParameter(ge=0)],
         y: Annotated[int, PathParameter(ge=0)],
-    ) -> FileResponse:
+    ) -> StreamingResponse:
         try:
-            tile_path, record, cache_state = visualization.tile(job_id, style, z, x, y)
+            download, record, cache_state = visualization.tile_download(job_id, style, z, x, y)
         except (KeyError, MapTileNotFoundError) as exc:
             raise HTTPException(status_code=404, detail="map tile not found") from exc
-        return FileResponse(
-            tile_path,
+        return _stream_verified_download(
+            download,
             media_type="image/png",
             headers={
                 "ETag": f'"{record.png_sha256}"',
@@ -483,15 +560,17 @@ def create_app(
             raise HTTPException(status_code=404, detail="job assembly not found") from exc
 
     @app.get("/api/v1/jobs/{job_id}/assembly/tiles/{tile_id}.glb")
-    def get_assembly_tile(job_id: str, tile_id: str) -> FileResponse:
+    def get_assembly_tile(job_id: str, tile_id: str) -> StreamingResponse:
         try:
-            tile_path, expected_sha256 = visualization.assembly_tile_path(job_id, tile_id)
+            download, expected_sha256, filename = visualization.assembly_tile_download(
+                job_id, tile_id
+            )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="assembly tile not found") from exc
-        return FileResponse(
-            tile_path,
+        return _stream_verified_download(
+            download,
             media_type="model/gltf-binary",
-            filename=tile_path.name,
+            filename=filename,
             headers={
                 "ETag": f'"{expected_sha256}"',
                 "Cache-Control": "private, max-age=31536000, immutable",
