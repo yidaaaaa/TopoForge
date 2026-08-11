@@ -15,7 +15,8 @@ EXPECTED_TARGETS = {
     "macos-15-arm64": ("15.7.9", "arm64", "macos-15"),
     "macos-26-arm64": ("26.6.1", "arm64", "macos-26"),
 }
-EXPECTED_CI_STATUS = "passed-hosted-core-unverified"
+EXPECTED_CI_STATUS = "historical-hosted-core-pass-rerun-required"
+EXPECTED_SHARED_FOUNDATION = "da6999101ee28b1309798e66900edc6b53052d48"
 EXPECTED_PHASE13A_STATUS = "in-progress-unverified"
 EXPECTED_HOSTED_CI_RUN = (
     31419016599,
@@ -148,7 +149,20 @@ def verify_macos_support_matrix(
     ) != EXPECTED_HOSTED_CI_RUN:
         problems.append("hosted CI run identity differs from the retained passing evidence")
     if hosted_ci.get("status") != EXPECTED_CI_STATUS:
-        problems.append("hosted CI evidence status is not passed-hosted-core-unverified")
+        problems.append("hosted CI evidence is not marked historical and rerun-required")
+    if hosted_ci.get("shared_foundation_sha") != EXPECTED_SHARED_FOUNDATION:
+        problems.append("hosted CI evidence does not bind the original shared foundation")
+    for field, expected in (
+        ("source_tree_evidence", True),
+        ("package_evidence", False),
+        ("persistent_release_evidence", False),
+        ("report_sha256_bound", False),
+        ("artifact_retention_days", 30),
+        ("must_rerun_after_phase12_integration", True),
+        ("final_phase13_gate_eligible", False),
+    ):
+        if hosted_ci.get(field) != expected:
+            problems.append(f"hosted CI evidence boundary changed: {field}")
 
     raw_hosted_targets = hosted_ci.get("targets")
     hosted_targets = (
@@ -169,6 +183,10 @@ def verify_macos_support_matrix(
         )
         if actual != expected:
             problems.append(f"{target_id} hosted CI job or artifact evidence changed")
+        if evidence.get("report_sha256") is not None:
+            problems.append(f"{target_id} historical report must not invent a SHA-256")
+        if evidence.get("package_evidence") is not False:
+            problems.append(f"{target_id} historical run must remain source-tree-only")
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -180,6 +198,7 @@ def verify_macos_support_matrix(
         "hosted_ci_status": hosted_ci.get("status"),
         "hosted_ci_run_id": hosted_ci.get("run_id"),
         "hosted_ci_head_sha": hosted_ci.get("head_sha"),
+        "hosted_ci_rerun_required": hosted_ci.get("must_rerun_after_phase12_integration"),
         "problems": problems,
         "required_checks_passed": not problems,
     }

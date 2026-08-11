@@ -16,9 +16,10 @@ def test_frozen_macos_matrix_matches_repository_identities() -> None:
     assert report["required_checks_passed"] is True
     assert report["public_support_status"] == "unverified"
     assert report["target_ids"] == ["macos-15-arm64", "macos-26-arm64"]
-    assert report["hosted_ci_status"] == "passed-hosted-core-unverified"
+    assert report["hosted_ci_status"] == "historical-hosted-core-pass-rerun-required"
     assert report["hosted_ci_run_id"] == 31419016599
     assert report["hosted_ci_head_sha"] == ("5df03c40536363d63678f0b23b69b228ee008e6a")
+    assert report["hosted_ci_rerun_required"] is True
 
 
 def test_matrix_keeps_targets_unverified_and_exclusions_explicit() -> None:
@@ -27,7 +28,7 @@ def test_matrix_keeps_targets_unverified_and_exclusions_explicit() -> None:
 
     assert all(target["architecture"] == "arm64" for target in matrix["phase13a_targets"])
     assert all(
-        target["ci_status"] == "passed-hosted-core-unverified"
+        target["ci_status"] == "historical-hosted-core-pass-rerun-required"
         and target["phase13a_status"] == "in-progress-unverified"
         and target["phase13b_status"] == "planned-unverified"
         for target in matrix["phase13a_targets"]
@@ -36,6 +37,13 @@ def test_matrix_keeps_targets_unverified_and_exclusions_explicit() -> None:
     assert hosted_ci["run_id"] == 31419016599
     assert hosted_ci["head_sha"] == "5df03c40536363d63678f0b23b69b228ee008e6a"
     assert hosted_ci["conclusion"] == "success"
+    assert hosted_ci["shared_foundation_sha"] == ("da6999101ee28b1309798e66900edc6b53052d48")
+    assert hosted_ci["source_tree_evidence"] is True
+    assert hosted_ci["package_evidence"] is False
+    assert hosted_ci["persistent_release_evidence"] is False
+    assert hosted_ci["report_sha256_bound"] is False
+    assert hosted_ci["must_rerun_after_phase12_integration"] is True
+    assert hosted_ci["final_phase13_gate_eligible"] is False
     assert {
         item["id"]: (
             item["runner"],
@@ -53,7 +61,7 @@ def test_matrix_keeps_targets_unverified_and_exclusions_explicit() -> None:
         "macos-intel-x86-64": "unsupported-for-0.12.x",
         "macos-27-beta-arm64": "unsupported-preview",
     }
-    assert matrix["ci_capacity"]["status"] == "passed-hosted-core-unverified"
+    assert matrix["ci_capacity"]["status"] == "historical-hosted-core-pass-rerun-required"
     assert matrix["clean_system_capacity"]["status"] == "not-provisioned"
     assert matrix["bambu_studio"]["phase13b_status"] == "unverified"
 
@@ -104,6 +112,8 @@ def test_native_macos_ci_uses_only_frozen_arm64_runner_labels() -> None:
     assert "if: always()" in workflow_text
     assert "runtime-evidence" in workflow_text
     assert "topoforge web --check --no-open" in workflow_text
+    assert "Probe app-bundle working directory without an input-root override" in workflow_text
+    assert "runtime.json.sha256" in workflow_text
     assert "TopoForge Phase 13/地形" in workflow_text
     assert workflow_text.count('cmp "') == 3
     assert "support unverified" in workflow_text
@@ -112,12 +122,15 @@ def test_native_macos_ci_uses_only_frozen_arm64_runner_labels() -> None:
 def test_documentation_does_not_promote_macos_support() -> None:
     root = Path(__file__).parents[2]
     documentation = (root / "docs/macos-support.md").read_text(encoding="utf-8")
+    normalized = " ".join(documentation.split())
 
     assert "does **not** currently claim macOS support" in documentation
     assert "Native hosted macOS core CI has passed" in documentation
     assert "actions/runs/31419016599" in documentation
-    assert "This closes only the hosted native core portion of Phase 13A" in documentation
+    assert "must be rerun after the audited Phase 12 fixes are integrated" in documentation
+    assert "not durable release evidence" in normalized
+    assert "`/bin/ps -ww -o command=`" in documentation
     assert "unsupported today" in documentation
     assert "Intel x86_64 is unsupported for 0.12.x" in documentation
-    assert "README and release metadata must continue to say macOS is" in documentation
+    assert "release metadata must continue to say macOS is unverified" in documentation
     assert "unverified" in documentation

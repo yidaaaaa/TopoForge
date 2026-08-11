@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import importlib.metadata
 import json
@@ -27,6 +28,34 @@ NATIVE_IMPORTS = {
     "shapely": "shapely",
     "trimesh": "trimesh",
 }
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _valid_sha256(value: object) -> bool:
+    if not isinstance(value, str) or len(value) != 64:
+        return False
+    try:
+        int(value, 16)
+    except ValueError:
+        return False
+    return True
+
+
+def _valid_git_sha(value: object) -> bool:
+    if not isinstance(value, str) or len(value) != 40:
+        return False
+    try:
+        int(value, 16)
+    except ValueError:
+        return False
+    return True
 
 
 def _command_output(command: Sequence[str], *, optional: bool = False) -> str | None:
@@ -114,6 +143,20 @@ def evaluate_macos_ci_snapshot(
     if snapshot.get("translated") == "1":
         problems.append("runtime is translated under Rosetta instead of native arm64")
 
+    source_commit = snapshot.get("source_commit_sha")
+    if not _valid_git_sha(source_commit):
+        problems.append("source commit SHA is missing or invalid")
+    github_sha = snapshot.get("github_sha")
+    if not _valid_git_sha(github_sha):
+        problems.append("GitHub workflow SHA is missing or invalid")
+    elif github_sha != source_commit:
+        problems.append("source commit differs from the GitHub workflow SHA")
+    if snapshot.get("source_tree_dirty") is not False:
+        problems.append("source tree is dirty during hosted evidence collection")
+    for field in ("matrix_sha256", "collector_sha256", "workflow_sha256"):
+        if not _valid_sha256(snapshot.get(field)):
+            problems.append(f"source identity hash is missing or invalid: {field}")
+
     for distribution in NATIVE_IMPORTS:
         package = packages.get(distribution)
         if not isinstance(package, Mapping) or package.get("imported") is not True:
@@ -129,14 +172,18 @@ def evaluate_macos_ci_snapshot(
         "target_architecture": target.get("architecture"),
         "snapshot": dict(snapshot),
         "packages": {key: dict(value) for key, value in packages.items()},
+        "source_tree_evidence": True,
         "clean_system_evidence": False,
         "package_evidence": False,
+        "persistent_release_evidence": False,
         "gatekeeper_evidence": False,
         "bambu_phase13b_evidence": False,
         "limitations": [
             "Hosted runner patch versions are implementation evidence, not the public matrix.",
             "This report does not establish clean-system, package, signing, notarization, "
             "Gatekeeper, or Bambu Studio support.",
+            "This source-tree run must be repeated after the audited Phase 12 foundation "
+            "is integrated and cannot close a final Phase 13 gate.",
         ],
         "problems": problems,
         "required_checks_passed": not problems,
@@ -146,6 +193,21 @@ def evaluate_macos_ci_snapshot(
 def collect_macos_ci_evidence(matrix_path: Path, runner_label: str) -> dict[str, Any]:
     """Collect and validate the active native macOS runner."""
     matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
+    matrix_path = matrix_path.resolve()
+    repository_root = matrix_path.parents[1]
+    collector_path = Path(__file__).resolve()
+    workflow_path = repository_root / ".github" / "workflows" / "macos.yml"
+    source_commit = _command_output(("git", "-C", str(repository_root), "rev-parse", "HEAD"))
+    source_status = _command_output(
+        (
+            "git",
+            "-C",
+            str(repository_root),
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+        )
+    )
     snapshot = {
         "system": platform.system(),
         "machine": platform.machine(),
@@ -159,6 +221,12 @@ def collect_macos_ci_evidence(matrix_path: Path, runner_label: str) -> dict[str,
         "python_platform": sysconfig.get_platform(),
         "deployment_target": os.environ.get("MACOSX_DEPLOYMENT_TARGET"),
         "translated": _command_output(("sysctl", "-in", "sysctl.proc_translated"), optional=True),
+        "source_commit_sha": source_commit,
+        "github_sha": os.environ.get("GITHUB_SHA"),
+        "source_tree_dirty": bool(source_status),
+        "matrix_sha256": _sha256(matrix_path),
+        "collector_sha256": _sha256(collector_path),
+        "workflow_sha256": _sha256(workflow_path),
     }
     return evaluate_macos_ci_snapshot(
         matrix,
@@ -166,6 +234,17 @@ def collect_macos_ci_evidence(matrix_path: Path, runner_label: str) -> dict[str,
         snapshot=snapshot,
         packages=_package_imports(),
     )
+
+
+def write_evidence_report(path: Path, report: Mapping[str, Any]) -> str:
+    """Write canonical JSON plus a detached SHA-256 sidecar and return the JSON."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
+    path.write_text(rendered, encoding="utf-8")
+    digest = _sha256(path)
+    sidecar = path.with_name(f"{path.name}.sha256")
+    sidecar.write_text(f"{digest}  {path.name}\n", encoding="utf-8")
+    return rendered
 
 
 def main() -> int:
@@ -177,9 +256,7 @@ def main() -> int:
     args = parser.parse_args()
 
     report = collect_macos_ci_evidence(args.matrix.resolve(), args.runner_label)
-    args.report.parent.mkdir(parents=True, exist_ok=True)
-    rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
-    args.report.write_text(rendered, encoding="utf-8")
+    rendered = write_evidence_report(args.report, report)
     print(rendered, end="")
     return 0 if report["required_checks_passed"] else 1
 

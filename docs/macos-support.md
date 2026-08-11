@@ -6,7 +6,8 @@ Frozen: 2026-08-10
 
 TopoForge does **not** currently claim macOS support. Linux x86_64 remains the only verified
 platform and Windows Phase 12 is unfinished. Native hosted macOS core CI has passed on both frozen
-arm64 runner labels, but clean-system, application-package, Gatekeeper, signing/notarization,
+arm64 runner labels as historical source-tree feasibility evidence, but clean-system,
+application-package, Gatekeeper, signing/notarization,
 first-launch, and Bambu Studio gates have not passed. The machine-readable contract is
 [`macos-support-matrix.json`](macos-support-matrix.json).
 
@@ -17,8 +18,8 @@ metadata.
 
 | Target | Phase 13A | Phase 13B | Clean-system capacity | Public status |
 | --- | --- | --- | --- | --- |
-| macOS Sequoia 15.7.9, Apple Silicon arm64 | hosted core passed; overall unverified | planned, unverified | not provisioned | unsupported today |
-| macOS Tahoe 26.6.1, Apple Silicon arm64 | hosted core passed; overall unverified | planned, unverified | not provisioned | unsupported today |
+| macOS Sequoia 15.7.9, Apple Silicon arm64 | historical source-tree pass; rerun required; overall unverified | planned, unverified | not provisioned | unsupported today |
+| macOS Tahoe 26.6.1, Apple Silicon arm64 | historical source-tree pass; rerun required; overall unverified | planned, unverified | not provisioned | unsupported today |
 
 The exact patch versions are the current Apple security releases at the freeze date. Later patch
 versions do not inherit support automatically; the matrix and matching evidence must be updated.
@@ -70,12 +71,17 @@ runners, so hosted CI cannot create the required clean-system or Gatekeeper evid
 completed successfully at commit `5df03c40536363d63678f0b23b69b228ee008e6a` on both `macos-15`
 and `macos-26`. It verified native arm64 identity, the locked all-groups environment, all direct
 native dependency imports, doctor, deterministic STL/3MF/GLB generation and reopen checks, the
-packaged local Web check, Ruff, formatting, Pyright, all 273 Python tests, and recovered-worker
-cancellation. The retained artifacts are `macos-macos-15-runtime-evidence` and
+source-tree Web asset and configuration check, Ruff, formatting, Pyright, all 273 Python tests, and
+recovered-worker cancellation. The retained artifacts are `macos-macos-15-runtime-evidence` and
 `macos-macos-26-runtime-evidence`.
 
-This closes only the hosted native core portion of Phase 13A. Hosted runner labels and their image
-patch versions remain implementation evidence, not public support targets.
+This historical run is feasibility evidence only and does not close any Phase 13A item. It used
+shared foundation `da6999101ee28b1309798e66900edc6b53052d48`, before the current Phase 12 audit
+fixes. It must be rerun after the audited Phase 12 fixes are integrated. The uploaded JSON
+files had a 30-day retention window and no retained SHA-256 identities, so they are not durable
+release evidence.
+Hosted runner labels and their image patch versions remain implementation evidence, not public
+support targets.
 
 Phase 13 therefore still requires clean Apple Silicon installations at Sequoia 15.7.9 and Tahoe
 26.6.1. No such capacity, Developer ID signing identity, notarization credentials, quarantine
@@ -97,6 +103,11 @@ describes the batch options TopoForge uses. Availability is not Phase 13B eviden
 been installed or invoked on either target, profiles have not been resolved, and no normative
 slice, project export, standalone reopen, or reslice has passed on macOS.
 
+`02.07.01.62` is only the frozen expected identity. Project evidence must derive the version from
+the exact executable probe and independently parse both the primary and reopened G-code; all three
+values must match the source slice manifest. The doctor command reports `.app` discovery path, probe
+version, and availability but keeps automation support explicitly `unverified`.
+
 Phase 13A covers Generic Core STL/3MF/GLB plus manual import. Phase 13B remains a separate gate for
 automatic `.app` discovery, official profile provenance, normative slicing, project export, and
 reopen/reslice on both advertised targets.
@@ -109,7 +120,10 @@ suite on both runner labels. For each literal clean-system target, one release c
 pass application-data and temporary-path behavior, paths with spaces and non-ASCII text,
 backup/restore, native `TopoForge.app`, signed/notarized distribution, quarantine, normal
 Gatekeeper first launch, and packaged worker/browser behavior. Phase 13B then adds the complete
-official Bambu workflow.
+official Bambu workflow. The common Phase 12 Darwin worker-identity fix must also be exercised
+after integration: `/bin/ps -ww -o command=` must return the untruncated command line used by
+PID-reuse, recovery, and cancellation protections.
 
-Until every matching report exists, README and release metadata must continue to say macOS is
-unverified.
+The source-tree hosted suite must also be rerun after the audited Phase 12 foundation is integrated,
+with commit, input-file, and report hashes. Until every matching report exists, README and
+release metadata must continue to say macOS is unverified.

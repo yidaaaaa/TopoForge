@@ -76,10 +76,14 @@ def _write_sdist(
     path: Path,
     *,
     forbidden: str | None = None,
+    missing: str | None = None,
     extra_members: list[tuple[tarfile.TarInfo, bytes | None]] | None = None,
 ) -> None:
+    names = _required_sdist_files() | ({forbidden} if forbidden else set())
+    if missing is not None:
+        names.remove(missing)
     with tarfile.open(path, "w:gz") as archive:
-        for name in sorted(_required_sdist_files() | ({forbidden} if forbidden else set())):
+        for name in sorted(names):
             payload = b"fixture\n"
             info = tarfile.TarInfo(f"topoforge-{VERSION}/{name}")
             info.size = len(payload)
@@ -174,6 +178,14 @@ def test_release_archive_contracts_reject_private_generated_content(
     _write_sdist(forbidden, forbidden=forbidden_member)
     with pytest.raises(ValueError, match="forbidden"):
         inspect_sdist(forbidden, VERSION)
+
+
+def test_release_archive_rejects_missing_phase13_contract_file(tmp_path: Path) -> None:
+    missing = "docs/macos-support-matrix.json"
+    archive = tmp_path / f"topoforge-{VERSION}-missing-phase13.tar.gz"
+    _write_sdist(archive, missing=missing)
+    with pytest.raises(ValueError, match="missing required files"):
+        inspect_sdist(archive, VERSION)
 
 
 def test_wheel_metadata_and_license_contract(tmp_path: Path) -> None:

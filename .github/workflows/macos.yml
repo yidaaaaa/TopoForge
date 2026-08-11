@@ -90,8 +90,24 @@ jobs:
           cmp "$primary/model.stl" "$repeat/model.stl"
           cmp "$primary/model.3mf" "$repeat/model.3mf"
           cmp "$primary/preview.glb" "$repeat/preview.glb"
-      - name: Check the packaged local Web application with macOS defaults
+      - name: Check source-tree local Web assets and explicit input boundary
         run: uv run topoforge web --check --no-open --input-root "$GITHUB_WORKSPACE"
+      - name: Probe app-bundle working directory without an input-root override
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe_home="$RUNNER_TEMP/TopoForge App Probe/用户"
+          app_working_directory="$RUNNER_TEMP/TopoForge.app/Contents/MacOS"
+          report="$RUNNER_TEMP/topoforge-app-defaults.json"
+          mkdir -p "$probe_home" "$app_working_directory"
+          (
+            cd "$app_working_directory"
+            HOME="$probe_home" CFFIXED_USER_HOME="$probe_home" \
+              "$GITHUB_WORKSPACE/.venv/bin/topoforge" web --check --no-open > "$report"
+          )
+          uv run python -c \
+            'import json, pathlib, sys; report=json.loads(pathlib.Path(sys.argv[1]).read_text()); expected=str(pathlib.Path(sys.argv[2]).resolve()); assert report["input_roots"] == [expected], report' \
+            "$report" "$probe_home"
       - name: Run Ruff lint gate
         run: uv run ruff check .
       - name: Run Ruff format gate
@@ -122,11 +138,13 @@ jobs:
         run: uv run pytest tests/providers
       - name: Run integration regression suite
         run: uv run pytest tests/integration
-      - name: Retain bounded native runtime evidence
+      - name: Retain temporary source-tree runtime diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.runner }}-runtime-evidence
-          path: artifacts/logs/macos-${{ matrix.runner }}-runtime.json
+          path: |
+            artifacts/logs/macos-${{ matrix.runner }}-runtime.json
+            artifacts/logs/macos-${{ matrix.runner }}-runtime.json.sha256
           if-no-files-found: warn
           retention-days: 30

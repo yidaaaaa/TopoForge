@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 import pytest
-from scripts.collect_macos_ci_evidence import NATIVE_IMPORTS, evaluate_macos_ci_snapshot
+from scripts.collect_macos_ci_evidence import (
+    NATIVE_IMPORTS,
+    evaluate_macos_ci_snapshot,
+    write_evidence_report,
+)
 
 
 def _matrix() -> dict[str, Any]:
@@ -30,6 +35,12 @@ def _snapshot() -> dict[str, Any]:
         "python_platform": "macosx-15.0-arm64",
         "deployment_target": "15.0",
         "translated": "0",
+        "source_commit_sha": "a" * 40,
+        "github_sha": "a" * 40,
+        "source_tree_dirty": False,
+        "matrix_sha256": "b" * 64,
+        "collector_sha256": "c" * 64,
+        "workflow_sha256": "d" * 64,
     }
 
 
@@ -73,6 +84,8 @@ def test_native_arm64_snapshot_passes_without_promoting_support(
     assert report["public_support_status"] == "unverified"
     assert report["clean_system_evidence"] is False
     assert report["package_evidence"] is False
+    assert report["source_tree_evidence"] is True
+    assert report["persistent_release_evidence"] is False
     assert report["gatekeeper_evidence"] is False
     assert report["bambu_phase13b_evidence"] is False
 
@@ -119,3 +132,33 @@ def test_snapshot_rejects_unknown_runner_and_failed_native_import() -> None:
     assert report["required_checks_passed"] is False
     assert "runner label is outside the frozen matrix: macos-latest" in report["problems"]
     assert "native dependency import failed: rasterio" in report["problems"]
+
+
+def test_snapshot_rejects_unbound_or_dirty_source_identity() -> None:
+    snapshot = _snapshot()
+    snapshot["source_tree_dirty"] = True
+    snapshot["github_sha"] = None
+    snapshot["workflow_sha256"] = None
+
+    report = evaluate_macos_ci_snapshot(
+        _matrix(),
+        runner_label="macos-15",
+        snapshot=snapshot,
+        packages=_packages(),
+    )
+
+    assert report["required_checks_passed"] is False
+    assert "source tree is dirty during hosted evidence collection" in report["problems"]
+    assert "GitHub workflow SHA is missing or invalid" in report["problems"]
+    assert any("workflow_sha256" in problem for problem in report["problems"])
+
+
+def test_evidence_writer_emits_detached_report_hash(tmp_path: Path) -> None:
+    path = tmp_path / "runtime.json"
+    rendered = write_evidence_report(path, {"required_checks_passed": True})
+
+    assert path.read_text(encoding="utf-8") == rendered
+    sidecar = path.with_name("runtime.json.sha256")
+    digest, name = sidecar.read_text(encoding="utf-8").split()
+    assert digest == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert name == path.name
