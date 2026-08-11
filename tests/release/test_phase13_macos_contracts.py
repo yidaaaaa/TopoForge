@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
+import pytest
 import yaml
 from scripts.verify_macos_support_matrix import verify_macos_support_matrix
 
@@ -20,6 +22,53 @@ def test_frozen_macos_matrix_matches_repository_identities() -> None:
     assert report["hosted_ci_run_id"] == 31419016599
     assert report["hosted_ci_head_sha"] == ("5df03c40536363d63678f0b23b69b228ee008e6a")
     assert report["hosted_ci_rerun_required"] is True
+
+
+@pytest.mark.parametrize(
+    ("path", "label"),
+    [
+        (("phase13a_targets",), "phase13a_targets"),
+        (("excluded_targets",), "excluded_targets"),
+        (("hosted_ci_evidence", "targets"), "hosted_ci_evidence.targets"),
+    ],
+)
+def test_matrix_verifier_rejects_duplicate_list_ids_before_indexing(
+    tmp_path: Path,
+    path: tuple[str, ...],
+    label: str,
+) -> None:
+    root = Path(__file__).parents[2]
+    matrix = json.loads((root / "docs/macos-support-matrix.json").read_text(encoding="utf-8"))
+    records = matrix
+    for component in path:
+        records = records[component]
+    records.append(deepcopy(records[0]))
+    candidate = tmp_path / "duplicate-matrix.json"
+    candidate.write_text(json.dumps(matrix), encoding="utf-8")
+
+    report = verify_macos_support_matrix(root, candidate)
+
+    assert report["required_checks_passed"] is False
+    assert f"{label} contains duplicate id" in "\n".join(report["problems"])
+
+
+def test_matrix_verifier_rejects_extra_target_fields_and_duplicate_runners(
+    tmp_path: Path,
+) -> None:
+    root = Path(__file__).parents[2]
+    matrix = json.loads((root / "docs/macos-support-matrix.json").read_text(encoding="utf-8"))
+    matrix["phase13a_targets"][0]["unexpected"] = True
+    hosted_targets = matrix["hosted_ci_evidence"]["targets"]
+    hosted_targets[1]["runner"] = hosted_targets[0]["runner"]
+    candidate = tmp_path / "mutated-matrix.json"
+    candidate.write_text(json.dumps(matrix), encoding="utf-8")
+
+    report = verify_macos_support_matrix(root, candidate)
+    problems = "\n".join(report["problems"])
+
+    assert report["required_checks_passed"] is False
+    assert "phase13a_targets[0] fields differ from the frozen schema" in problems
+    assert "hosted CI target evidence contains duplicate runner labels" in problems
 
 
 def test_matrix_keeps_targets_unverified_and_exclusions_explicit() -> None:

@@ -12,12 +12,17 @@ from typing import Any
 
 SCHEMA_VERSION = "topoforge-macos-support-matrix-v1"
 EXPECTED_TARGETS = {
-    "macos-15-arm64": ("15.7.9", "arm64", "macos-15"),
-    "macos-26-arm64": ("26.6.1", "arm64", "macos-26"),
+    "macos-15-arm64": ("macOS Sequoia", "15.7.9", "arm64", "15.0", "macos-15"),
+    "macos-26-arm64": ("macOS Tahoe", "26.6.1", "arm64", "15.0", "macos-26"),
 }
 EXPECTED_CI_STATUS = "historical-hosted-core-pass-rerun-required"
 EXPECTED_SHARED_FOUNDATION = "da6999101ee28b1309798e66900edc6b53052d48"
 EXPECTED_PHASE13A_STATUS = "in-progress-unverified"
+EXPECTED_EXCLUSIONS = {
+    "macos-14-arm64": ("macOS Sonoma", "14.8.9", "arm64", "unsupported-for-0.12.x"),
+    "macos-intel-x86-64": ("macOS", "all", "x86_64", "unsupported-for-0.12.x"),
+    "macos-27-beta-arm64": ("macOS 27 beta", "27 beta", "arm64", "unsupported-preview"),
+}
 EXPECTED_HOSTED_CI_RUN = (
     31419016599,
     "5df03c40536363d63678f0b23b69b228ee008e6a",
@@ -40,6 +45,36 @@ EXPECTED_HOSTED_CI_TARGETS = {
     ),
 }
 
+TARGET_FIELDS = frozenset(
+    {
+        "id",
+        "os_name",
+        "os_version",
+        "architecture",
+        "deployment_target",
+        "ci_runner",
+        "ci_status",
+        "clean_system_status",
+        "phase13a_status",
+        "phase13b_status",
+    }
+)
+EXCLUSION_FIELDS = frozenset(
+    {"id", "os_name", "os_version", "architecture", "disposition", "reason"}
+)
+HOSTED_TARGET_FIELDS = frozenset(
+    {
+        "id",
+        "runner",
+        "job_id",
+        "job_conclusion",
+        "artifact_name",
+        "artifact_size_bytes",
+        "report_sha256",
+        "package_evidence",
+    }
+)
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -47,6 +82,42 @@ def _sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _indexed_records(
+    raw: Any,
+    *,
+    label: str,
+    expected_ids: tuple[str, ...],
+    fields: frozenset[str],
+    problems: list[str],
+) -> dict[str, dict[str, Any]]:
+    """Validate one frozen object list before building its lookup index."""
+    if not isinstance(raw, list):
+        problems.append(f"{label} must be a list")
+        return {}
+    if len(raw) != len(expected_ids):
+        problems.append(f"{label} length differs from the frozen matrix")
+    indexed: dict[str, dict[str, Any]] = {}
+    observed_ids: list[str] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            problems.append(f"{label}[{index}] must be an object")
+            continue
+        if set(item) != fields:
+            problems.append(f"{label}[{index}] fields differ from the frozen schema")
+        identifier = item.get("id")
+        if not isinstance(identifier, str) or not identifier:
+            problems.append(f"{label}[{index}] has no valid id")
+            continue
+        observed_ids.append(identifier)
+        if identifier in indexed:
+            problems.append(f"{label} contains duplicate id: {identifier}")
+            continue
+        indexed[identifier] = item
+    if tuple(observed_ids) != expected_ids:
+        problems.append(f"{label} ids or order differ from the frozen matrix")
+    return indexed
 
 
 def verify_macos_support_matrix(
@@ -64,26 +135,26 @@ def verify_macos_support_matrix(
     if payload.get("public_support_status") != "unverified":
         problems.append("matrix must not advertise verified macOS support")
 
-    raw_targets = payload.get("phase13a_targets")
-    targets = (
-        {
-            item.get("id"): item
-            for item in raw_targets
-            if isinstance(raw_targets, list) and isinstance(item, dict)
-        }
-        if isinstance(raw_targets, list)
-        else {}
+    targets = _indexed_records(
+        payload.get("phase13a_targets"),
+        label="phase13a_targets",
+        expected_ids=tuple(EXPECTED_TARGETS),
+        fields=TARGET_FIELDS,
+        problems=problems,
     )
     if set(targets) != set(EXPECTED_TARGETS):
         problems.append("Phase 13A target ids differ from the frozen arm64 matrix")
-    for target_id, (version, architecture, runner) in EXPECTED_TARGETS.items():
+    for target_id, expected in EXPECTED_TARGETS.items():
         target = targets.get(target_id, {})
-        if (
+        actual = (
+            target.get("os_name"),
             target.get("os_version"),
             target.get("architecture"),
+            target.get("deployment_target"),
             target.get("ci_runner"),
-        ) != (version, architecture, runner):
-            problems.append(f"{target_id} OS, architecture, or CI identity changed")
+        )
+        if actual != expected:
+            problems.append(f"{target_id} OS, architecture, deployment, or CI identity changed")
         if target.get("ci_status") != EXPECTED_CI_STATUS:
             problems.append(f"{target_id} hosted CI status is not the retained passing result")
         if target.get("clean_system_status") != "not-provisioned":
@@ -93,22 +164,27 @@ def verify_macos_support_matrix(
         if target.get("phase13b_status") != "planned-unverified":
             problems.append(f"{target_id} Phase 13B status must remain planned and unverified")
 
-    excluded = payload.get("excluded_targets")
-    exclusions = (
-        {
-            item.get("id"): item.get("disposition")
-            for item in excluded
-            if isinstance(excluded, list) and isinstance(item, dict)
-        }
-        if isinstance(excluded, list)
-        else {}
+    exclusions = _indexed_records(
+        payload.get("excluded_targets"),
+        label="excluded_targets",
+        expected_ids=tuple(EXPECTED_EXCLUSIONS),
+        fields=EXCLUSION_FIELDS,
+        problems=problems,
     )
-    if exclusions.get("macos-intel-x86-64") != "unsupported-for-0.12.x":
-        problems.append("Intel x86_64 must have an explicit unsupported 0.12.x disposition")
-    if exclusions.get("macos-14-arm64") != "unsupported-for-0.12.x":
-        problems.append("macOS 14 arm64 must remain outside the frozen 0.12.x matrix")
-    if exclusions.get("macos-27-beta-arm64") != "unsupported-preview":
-        problems.append("macOS 27 beta must remain an unsupported preview")
+    if set(exclusions) != set(EXPECTED_EXCLUSIONS):
+        problems.append("excluded target ids differ from the frozen matrix")
+    for target_id, expected in EXPECTED_EXCLUSIONS.items():
+        exclusion = exclusions.get(target_id, {})
+        actual = (
+            exclusion.get("os_name"),
+            exclusion.get("os_version"),
+            exclusion.get("architecture"),
+            exclusion.get("disposition"),
+        )
+        if actual != expected:
+            problems.append(f"{target_id} exclusion identity or disposition changed")
+        if not isinstance(exclusion.get("reason"), str) or not exclusion.get("reason"):
+            problems.append(f"{target_id} exclusion reason is missing")
 
     lock_path = root / "uv.lock"
     lock_sha256 = _sha256(lock_path)
@@ -140,6 +216,9 @@ def verify_macos_support_matrix(
     ci_capacity = payload.get("ci_capacity", {})
     if ci_capacity.get("status") != EXPECTED_CI_STATUS:
         problems.append("CI capacity does not record the retained hosted core success")
+    expected_runners = [item[4] for item in EXPECTED_TARGETS.values()]
+    if ci_capacity.get("arm64_runner_labels") != expected_runners:
+        problems.append("CI capacity runner labels differ from the frozen unique runner list")
 
     hosted_ci = payload.get("hosted_ci_evidence", {})
     if (
@@ -164,12 +243,16 @@ def verify_macos_support_matrix(
         if hosted_ci.get(field) != expected:
             problems.append(f"hosted CI evidence boundary changed: {field}")
 
-    raw_hosted_targets = hosted_ci.get("targets")
-    hosted_targets = (
-        {item.get("id"): item for item in raw_hosted_targets if isinstance(item, dict)}
-        if isinstance(raw_hosted_targets, list)
-        else {}
+    hosted_targets = _indexed_records(
+        hosted_ci.get("targets"),
+        label="hosted_ci_evidence.targets",
+        expected_ids=tuple(EXPECTED_HOSTED_CI_TARGETS),
+        fields=HOSTED_TARGET_FIELDS,
+        problems=problems,
     )
+    hosted_runners = [item.get("runner") for item in hosted_targets.values()]
+    if len(hosted_runners) != len(set(hosted_runners)):
+        problems.append("hosted CI target evidence contains duplicate runner labels")
     if set(hosted_targets) != set(EXPECTED_HOSTED_CI_TARGETS):
         problems.append("hosted CI target evidence differs from the frozen target set")
     for target_id, expected in EXPECTED_HOSTED_CI_TARGETS.items():

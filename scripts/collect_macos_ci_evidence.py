@@ -18,6 +18,10 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = "topoforge-macos-ci-runtime-v1"
+EXPECTED_TARGET_RUNNERS = {
+    "macos-15-arm64": "macos-15",
+    "macos-26-arm64": "macos-26",
+}
 NATIVE_IMPORTS = {
     "lib3mf": "lib3mf",
     "numpy": "numpy",
@@ -108,18 +112,26 @@ def evaluate_macos_ci_snapshot(
     """Validate one hosted-runner snapshot against the frozen candidate matrix."""
     problems: list[str] = []
     raw_targets = matrix.get("phase13a_targets")
-    targets = raw_targets if isinstance(raw_targets, list) else []
-    target = next(
-        (
-            item
-            for item in targets
-            if isinstance(item, dict) and item.get("ci_runner") == runner_label
-        ),
-        None,
+    targets: list[Mapping[str, Any]] = (
+        [item for item in raw_targets if isinstance(item, Mapping)]
+        if isinstance(raw_targets, list)
+        else []
     )
-    if target is None:
-        problems.append(f"runner label is outside the frozen matrix: {runner_label}")
+    if not isinstance(raw_targets, list) or len(targets) != len(raw_targets):
+        problems.append("frozen matrix targets must be an object list")
+    observed_target_runners = [(item.get("id"), item.get("ci_runner")) for item in targets]
+    if observed_target_runners != list(EXPECTED_TARGET_RUNNERS.items()):
+        problems.append("frozen matrix target ids or runner labels are duplicated or changed")
+    matching_targets = [item for item in targets if item.get("ci_runner") == runner_label]
+    target: Mapping[str, Any]
+    if len(matching_targets) != 1:
+        if not matching_targets:
+            problems.append(f"runner label is outside the frozen matrix: {runner_label}")
+        else:
+            problems.append(f"runner label is duplicated in the frozen matrix: {runner_label}")
         target = {}
+    else:
+        target = matching_targets[0]
 
     if matrix.get("public_support_status") != "unverified":
         problems.append("matrix must remain explicitly unverified during hosted CI")

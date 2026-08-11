@@ -134,6 +134,24 @@ def test_snapshot_rejects_unknown_runner_and_failed_native_import() -> None:
     assert "native dependency import failed: rasterio" in report["problems"]
 
 
+def test_snapshot_rejects_duplicate_matrix_target_and_runner() -> None:
+    matrix = _matrix()
+    matrix["phase13a_targets"].append(deepcopy(matrix["phase13a_targets"][0]))
+
+    report = evaluate_macos_ci_snapshot(
+        matrix,
+        runner_label="macos-15",
+        snapshot=_snapshot(),
+        packages=_packages(),
+    )
+
+    assert report["required_checks_passed"] is False
+    assert (
+        "frozen matrix target ids or runner labels are duplicated or changed" in report["problems"]
+    )
+    assert "runner label is duplicated in the frozen matrix: macos-15" in report["problems"]
+
+
 def test_snapshot_rejects_unbound_or_dirty_source_identity() -> None:
     snapshot = _snapshot()
     snapshot["source_tree_dirty"] = True
