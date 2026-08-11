@@ -13,6 +13,12 @@ from topoforge.validation.slicers.base import CommandRunner, SlicerProfile, run_
 from topoforge.validation.slicers.orca import OrcaSlicerAdapter
 
 
+def parse_bambu_studio_version(output: str) -> str | None:
+    """Return the Bambu Studio version parsed from a literal CLI banner."""
+    match = re.search(r"BambuStudio-([0-9][0-9.]*)", output, re.IGNORECASE)
+    return None if match is None else match.group(1).rstrip(".")
+
+
 def macos_bambu_executable_candidates(
     *,
     home: Path | None = None,
@@ -68,8 +74,7 @@ class BambuStudioAdapter(OrcaSlicerAdapter):
             self._resolution_detail = None
 
     def _version_from_output(self, output: str) -> str | None:
-        match = re.search(r"BambuStudio-([0-9][0-9.]*)", output, re.IGNORECASE)
-        return None if match is None else match.group(1).rstrip(".")
+        return parse_bambu_studio_version(output)
 
     def _slice_command(
         self,

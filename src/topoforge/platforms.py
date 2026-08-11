@@ -80,6 +80,6 @@ def default_web_input_roots(
     cwd: Path | None = None,
 ) -> tuple[Path, ...]:
     """Return a useful local input-browser boundary for the active platform."""
-    if _system_name(system) == "Windows":
+    if _system_name(system) in {"Darwin", "Windows"}:
         return ((Path.home() if home is None else home).expanduser(),)
     return (Path.cwd() if cwd is None else cwd,)

@@ -2120,6 +2120,11 @@ def doctor() -> None:
                     None if bambu_profiles_root is None else str(bambu_profiles_root)
                 ),
                 "installation_discovered": bambu_info.executable is not None,
+                "automation_support_status": "unverified",
+                "claim_boundary": (
+                    "discovery and version probe only; no official profile, slice, "
+                    "project export, reopen, or reslice evidence"
+                ),
             },
         }
     )

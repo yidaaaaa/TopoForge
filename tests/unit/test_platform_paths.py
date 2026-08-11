@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 from topoforge.platform_paths import macos_application_data_root
 from topoforge.platforms import (
+    default_web_input_roots,
     default_web_state_dir,
     default_web_workspace_root,
     stat_result_is_link_like,
@@ -40,3 +41,10 @@ def test_macos_web_defaults_use_user_application_support() -> None:
     assert macos_application_data_root(home=home) == root
     assert default_web_state_dir(system="Darwin", home=home) == root / "state"
     assert default_web_workspace_root(system="Darwin", home=home) == root / "workspaces"
+
+
+def test_macos_input_browser_defaults_to_home_not_app_working_directory() -> None:
+    home = Path("/Users/地形 maker")
+    app_working_directory = Path("/Applications/TopoForge.app/Contents/MacOS")
+
+    assert default_web_input_roots(system="Darwin", home=home, cwd=app_working_directory) == (home,)
