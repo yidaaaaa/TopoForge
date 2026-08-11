@@ -3,20 +3,23 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import math
 import os
 import platform
 import re
+import secrets
 import shutil
 import stat
 import sys
 import tempfile
 import unicodedata
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, BinaryIO
 from xml.etree import ElementTree as ET
 from zipfile import ZIP_DEFLATED, ZIP_STORED, BadZipFile, ZipFile, ZipInfo
 
@@ -37,10 +40,19 @@ _PROJECT_MAX_MEMBER_BYTES = 1024 * 1024 * 1024
 _PROJECT_MAX_TOTAL_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
 _PROJECT_MAX_COMPRESSION_RATIO = 1000.0
 _PROJECT_MAX_RELATIONSHIP_BYTES = 8 * 1024 * 1024
+# A 64 MiB model keeps production terrain capacity while the streaming parser below
+# clears XML nodes eagerly instead of retaining a second full ElementTree.
 _PROJECT_MAX_MODEL_XML_BYTES = 64 * 1024 * 1024
+# Real Bambu G-code can be much larger than its metadata. The reader hashes all
+# 256 MiB but retains at most 32 MiB of comment lines consumed by the shared parser.
 _PROJECT_MAX_GCODE_TEXT_BYTES = 256 * 1024 * 1024
+_PROJECT_MAX_GCODE_SEMANTIC_BYTES = 32 * 1024 * 1024
+_PROJECT_MAX_GCODE_LINE_BYTES = 1024 * 1024
 _PROJECT_MAX_MEMBER_NAME_BYTES = 1024
 _PROJECT_ALLOWED_FLAG_BITS = 0x080E
+_DESCRIPTOR_RELATIVE_SUPPORTED = (
+    hasattr(os, "O_DIRECTORY") and hasattr(os, "O_NOFOLLOW") and os.open in os.supports_dir_fd
+)
 _PROJECT_REQUIRED_MEMBERS = frozenset(
     {
         "[Content_Types].xml",
@@ -150,17 +162,55 @@ class _SourceTileEvidence:
     slice_record: Any
     slice_report: Any
     source_3mf: Path
+    source_3mf_sha256: str
+    source_3mf_size: int
+    verified_source_3mf: Path
     source_3mf_inspection: Any
     source_slice_gcode: Path
+    source_slice_gcode_sha256: str
+    source_slice_gcode_size: int
 
 
 @dataclass(frozen=True, slots=True)
 class _SourceEvidence:
     print_manifest: Any
+    print_manifest_sha256: str
     slice_manifest: Any
+    slice_manifest_sha256: str
     expected_version: str
-    profiles: tuple[tuple[Any, Path], ...]
+    executable_sha256: str
+    profiles: tuple[tuple[Any, Path, _BinarySnapshot], ...]
     tiles: tuple[_SourceTileEvidence, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _PinnedRegularFile:
+    path: Path
+    handle: BinaryIO
+    information: os.stat_result
+
+
+@dataclass(frozen=True, slots=True)
+class _BinarySnapshot:
+    path: Path
+    payload: bytes
+    size: int
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class _TextSnapshot:
+    path: Path
+    text: str
+    size: int
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ArchiveInspection:
+    evidence: dict[str, Any]
+    project_sha256: str
+    primary_gcode: _TextSnapshot
 
 
 class BambuProjectEvidenceResult(BaseModel):
@@ -173,23 +223,312 @@ class BambuProjectEvidenceResult(BaseModel):
     verification: dict[str, Any]
 
 
-def _require_regular_file(path: Path, *, label: str) -> os.stat_result:
+def _absolute_path(path: Path) -> Path:
+    return Path(os.path.abspath(os.fspath(path)))
+
+
+def _directory_flags() -> int:
+    return (
+        os.O_RDONLY
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+
+
+def _descriptor_relative_supported() -> bool:
+    return _DESCRIPTOR_RELATIVE_SUPPORTED
+
+
+def _is_link_or_reparse(information: os.stat_result) -> bool:
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return stat.S_ISLNK(information.st_mode) or bool(
+        getattr(information, "st_file_attributes", 0) & reparse_flag
+    )
+
+
+def _checked_path_chain(path: Path, *, label: str) -> tuple[os.stat_result, ...]:
+    absolute = _absolute_path(path)
+    current = Path(absolute.anchor)
+    information: list[os.stat_result] = []
+    for part in absolute.parts[1:]:
+        current /= part
+        try:
+            item = os.stat(current, follow_symlinks=False)
+        except OSError as exc:
+            raise RuntimeError(f"{label} path component is unavailable: {current}: {exc}") from exc
+        if _is_link_or_reparse(item):
+            raise RuntimeError(f"{label} path contains a symbolic link or reparse point: {current}")
+        information.append(item)
+    return tuple(information)
+
+
+@contextmanager
+def _open_pinned_directory(path: Path, *, label: str) -> Iterator[int]:
+    absolute = _absolute_path(path)
+    if not _descriptor_relative_supported():
+        raise RuntimeError(
+            f"{label} descriptor-relative directory access is unavailable on this platform"
+        )
+    descriptor = -1
     try:
-        information = path.lstat()
+        if absolute.is_absolute():
+            descriptor = os.open(absolute.anchor, _directory_flags())
+            for part in absolute.parts[1:]:
+                next_descriptor = os.open(part, _directory_flags(), dir_fd=descriptor)
+                os.close(descriptor)
+                descriptor = next_descriptor
+        else:
+            descriptor = os.open(absolute, _directory_flags())
+        information = os.fstat(descriptor)
     except OSError as exc:
-        raise RuntimeError(f"{label} is unavailable: {path}: {exc}") from exc
-    if not stat.S_ISREG(information.st_mode):
-        raise RuntimeError(f"{label} must be a regular non-link file: {path}")
-    return information
+        if descriptor >= 0:
+            os.close(descriptor)
+        raise RuntimeError(
+            f"{label} directory is unavailable without following links: {path}: {exc}"
+        ) from exc
+    if not stat.S_ISDIR(information.st_mode):
+        os.close(descriptor)
+        raise RuntimeError(f"{label} parent must be a directory: {path}")
+    try:
+        yield descriptor
+    finally:
+        os.close(descriptor)
+
+
+@contextmanager
+def _open_pinned_regular_file(path: Path, *, label: str) -> Iterator[_PinnedRegularFile]:
+    absolute = _absolute_path(path)
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor = -1
+    try:
+        if _descriptor_relative_supported():
+            with _open_pinned_directory(absolute.parent, label=label) as parent_descriptor:
+                descriptor = os.open(absolute.name, flags, dir_fd=parent_descriptor)
+                information = os.fstat(descriptor)
+                if not stat.S_ISREG(information.st_mode):
+                    raise RuntimeError(f"{label} must be a regular non-link file: {path}")
+                with os.fdopen(descriptor, "rb") as handle:
+                    descriptor = -1
+                    yield _PinnedRegularFile(
+                        path=absolute,
+                        handle=handle,
+                        information=information,
+                    )
+            return
+
+        before = _checked_path_chain(absolute, label=label)
+        descriptor = os.open(absolute, flags)
+        information = os.fstat(descriptor)
+        after = _checked_path_chain(absolute, label=label)
+        if (
+            not stat.S_ISREG(information.st_mode)
+            or not after
+            or _stat_identity(after[-1]) != _stat_identity(information)
+            or tuple(_object_identity(item) for item in before)
+            != tuple(_object_identity(item) for item in after)
+        ):
+            raise RuntimeError(
+                f"{label} path changed while opening or is not a regular file: {path}"
+            )
+        with os.fdopen(descriptor, "rb") as handle:
+            descriptor = -1
+            yield _PinnedRegularFile(
+                path=absolute,
+                handle=handle,
+                information=information,
+            )
+    except OSError as exc:
+        raise RuntimeError(
+            f"{label} must be a regular non-link file and is unavailable: {path}: {exc}"
+        ) from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _stat_identity(information: os.stat_result) -> tuple[int, int, int, int, int, int]:
+    return (
+        information.st_dev,
+        information.st_ino,
+        stat.S_IFMT(information.st_mode),
+        information.st_size,
+        information.st_mtime_ns,
+        information.st_ctime_ns,
+    )
+
+
+def _object_identity(information: os.stat_result) -> tuple[int, int, int]:
+    return (
+        information.st_dev,
+        information.st_ino,
+        stat.S_IFMT(information.st_mode),
+    )
+
+
+def _require_pinned_unchanged(pinned: _PinnedRegularFile, *, label: str) -> None:
+    if _stat_identity(os.fstat(pinned.handle.fileno())) != _stat_identity(pinned.information):
+        raise RuntimeError(f"{label} changed while it was being read: {pinned.path}")
+
+
+def _hash_pinned(pinned: _PinnedRegularFile, *, label: str) -> str:
+    pinned.handle.seek(0)
+    digest = hashlib.sha256()
+    size = 0
+    while True:
+        block = pinned.handle.read(1024 * 1024)
+        if not block:
+            break
+        size += len(block)
+        digest.update(block)
+    if size != pinned.information.st_size:
+        raise RuntimeError(f"{label} size changed while it was being hashed: {pinned.path}")
+    _require_pinned_unchanged(pinned, label=label)
+    return digest.hexdigest()
+
+
+def _read_binary_snapshot(
+    path: Path,
+    *,
+    label: str,
+    minimum_bytes: int,
+    maximum_bytes: int,
+) -> _BinarySnapshot:
+    with _open_pinned_regular_file(path, label=label) as pinned:
+        size = pinned.information.st_size
+        if size < minimum_bytes or size > maximum_bytes:
+            raise RuntimeError(
+                f"{label} size {size} is outside the supported "
+                f"{minimum_bytes}..{maximum_bytes} byte range: {path}"
+            )
+        payload = pinned.handle.read(maximum_bytes + 1)
+        if len(payload) != size:
+            raise RuntimeError(f"{label} size changed while it was being read: {path}")
+        _require_pinned_unchanged(pinned, label=label)
+    return _BinarySnapshot(
+        path=_absolute_path(path),
+        payload=payload,
+        size=size,
+        sha256=hashlib.sha256(payload).hexdigest(),
+    )
+
+
+def _copy_regular_file_snapshot(
+    source: Path,
+    destination: Path,
+    *,
+    label: str,
+    maximum_bytes: int,
+) -> tuple[str, int]:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    absolute_destination = _absolute_path(destination)
+    with _open_pinned_regular_file(source, label=label) as pinned:
+        size = pinned.information.st_size
+        if size <= 0 or size > maximum_bytes:
+            raise RuntimeError(
+                f"{label} size {size} is outside the supported "
+                f"1..{maximum_bytes} byte range: {source}"
+            )
+        flags = (
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | getattr(os, "O_BINARY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+        )
+        digest = hashlib.sha256()
+        consumed = 0
+
+        def transfer(descriptor: int) -> os.stat_result:
+            nonlocal consumed
+            with os.fdopen(descriptor, "wb") as target:
+                while True:
+                    block = pinned.handle.read(1024 * 1024)
+                    if not block:
+                        break
+                    consumed += len(block)
+                    if consumed > maximum_bytes:
+                        raise RuntimeError(
+                            f"{label} expanded beyond the {maximum_bytes} byte limit"
+                        )
+                    digest.update(block)
+                    target.write(block)
+                target.flush()
+                os.fsync(target.fileno())
+                target_information = os.fstat(target.fileno())
+            if consumed != size:
+                raise RuntimeError(f"{label} size changed while snapshotting: {source}")
+            _require_pinned_unchanged(pinned, label=label)
+            return target_information
+
+        if _descriptor_relative_supported():
+            with _open_pinned_directory(
+                absolute_destination.parent,
+                label=f"{label} snapshot destination",
+            ) as parent:
+                parent_information = os.fstat(parent)
+                descriptor = os.open(
+                    absolute_destination.name,
+                    flags,
+                    0o600,
+                    dir_fd=parent,
+                )
+                try:
+                    transfer(descriptor)
+                    if not _directory_path_still_names(
+                        absolute_destination.parent,
+                        parent_information,
+                    ):
+                        raise RuntimeError(
+                            f"{label} snapshot parent changed: {absolute_destination.parent}"
+                        )
+                except BaseException:
+                    with suppress(FileNotFoundError):
+                        os.unlink(absolute_destination.name, dir_fd=parent)
+                    raise
+        else:
+            parent_before = _checked_path_chain(
+                absolute_destination.parent,
+                label=f"{label} snapshot destination",
+            )
+            if not parent_before or not stat.S_ISDIR(parent_before[-1].st_mode):
+                raise RuntimeError(
+                    f"{label} snapshot parent is not a directory: {absolute_destination.parent}"
+                )
+            descriptor = os.open(absolute_destination, flags, 0o600)
+            try:
+                target_information = transfer(descriptor)
+                parent_after = _checked_path_chain(
+                    absolute_destination.parent,
+                    label=f"{label} snapshot destination",
+                )
+                destination_after = _checked_path_chain(
+                    absolute_destination,
+                    label=f"{label} snapshot destination",
+                )
+                if (
+                    tuple(_object_identity(item) for item in parent_before)
+                    != tuple(_object_identity(item) for item in parent_after)
+                    or not destination_after
+                    or _stat_identity(destination_after[-1]) != _stat_identity(target_information)
+                ):
+                    raise RuntimeError(f"{label} snapshot path changed during publication")
+            except BaseException:
+                absolute_destination.unlink(missing_ok=True)
+                raise
+    return digest.hexdigest(), consumed
 
 
 def sha256(path: Path) -> str:
-    _require_regular_file(path, label="SHA-256 input")
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
+    with _open_pinned_regular_file(path, label="SHA-256 input") as pinned:
+        return _hash_pinned(pinned, label="SHA-256 input")
 
 
 def sha256_text(value: str) -> str:
@@ -203,24 +542,123 @@ def canonical_bytes(value: dict[str, Any]) -> bytes:
     ).encode("utf-8")
 
 
-def write_canonical(path: Path, value: dict[str, Any]) -> Path:
+def _directory_path_still_names(
+    path: Path,
+    information: os.stat_result,
+) -> bool:
+    try:
+        current = os.stat(path, follow_symlinks=False)
+    except OSError:
+        return False
+    return stat.S_ISDIR(current.st_mode) and (
+        current.st_dev,
+        current.st_ino,
+    ) == (
+        information.st_dev,
+        information.st_ino,
+    )
+
+
+def _write_atomic_bytes(path: Path, payload: bytes) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
+    absolute = _absolute_path(path)
+    if _descriptor_relative_supported() and os.rename in os.supports_dir_fd:
+        with _open_pinned_directory(absolute.parent, label="canonical destination") as parent:
+            parent_information = os.fstat(parent)
+            temporary_name = f".{absolute.name}.{secrets.token_hex(16)}.tmp"
+            flags = (
+                os.O_WRONLY
+                | os.O_CREAT
+                | os.O_EXCL
+                | getattr(os, "O_BINARY", 0)
+                | getattr(os, "O_CLOEXEC", 0)
+                | getattr(os, "O_NOFOLLOW", 0)
+            )
+            descriptor = os.open(temporary_name, flags, 0o600, dir_fd=parent)
+            try:
+                with os.fdopen(descriptor, "wb") as handle:
+                    descriptor = -1
+                    handle.write(payload)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                if not _directory_path_still_names(absolute.parent, parent_information):
+                    raise RuntimeError(
+                        "canonical destination parent changed before publication: "
+                        f"{absolute.parent}"
+                    )
+                os.replace(
+                    temporary_name,
+                    absolute.name,
+                    src_dir_fd=parent,
+                    dst_dir_fd=parent,
+                )
+                os.fsync(parent)
+                if not _directory_path_still_names(absolute.parent, parent_information):
+                    raise RuntimeError(
+                        "canonical destination parent changed during publication: "
+                        f"{absolute.parent}"
+                    )
+            except BaseException:
+                if descriptor >= 0:
+                    os.close(descriptor)
+                with suppress(FileNotFoundError):
+                    os.unlink(temporary_name, dir_fd=parent)
+                raise
+        return path
+
+    parent_before = _checked_path_chain(
+        absolute.parent,
+        label="canonical destination",
+    )
+    if not parent_before or not stat.S_ISDIR(parent_before[-1].st_mode):
+        raise RuntimeError(f"canonical destination parent is not a directory: {absolute.parent}")
     descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.",
+        prefix=f".{absolute.name}.",
         suffix=".tmp",
-        dir=path.parent,
+        dir=absolute.parent,
     )
     temporary = Path(temporary_name)
     try:
         with os.fdopen(descriptor, "wb") as handle:
-            handle.write(canonical_bytes(value))
+            handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+            temporary_information = os.fstat(handle.fileno())
+        parent_during = _checked_path_chain(
+            absolute.parent,
+            label="canonical destination",
+        )
+        if tuple(_object_identity(item) for item in parent_before) != tuple(
+            _object_identity(item) for item in parent_during
+        ):
+            raise RuntimeError(
+                f"canonical destination parent changed before publication: {absolute.parent}"
+            )
+        os.replace(temporary, absolute)
+        parent_after = _checked_path_chain(
+            absolute.parent,
+            label="canonical destination",
+        )
+        destination_after = _checked_path_chain(
+            absolute,
+            label="canonical destination",
+        )
+        if (
+            tuple(_object_identity(item) for item in parent_before)
+            != tuple(_object_identity(item) for item in parent_after)
+            or not destination_after
+            or _object_identity(destination_after[-1]) != _object_identity(temporary_information)
+            or destination_after[-1].st_size != temporary_information.st_size
+        ):
+            raise RuntimeError(f"canonical destination path changed during publication: {absolute}")
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise
     return path
+
+
+def write_canonical(path: Path, value: dict[str, Any]) -> Path:
+    return _write_atomic_bytes(path, canonical_bytes(value))
 
 
 def _relative_parts(relative: str, *, label: str) -> tuple[str, ...]:
@@ -255,31 +693,26 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return value
 
 
-def _read_json_value(path: Path) -> Any:
-    before = _require_regular_file(path, label="JSON file")
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+def _read_json_snapshot(path: Path) -> tuple[Any, _BinarySnapshot]:
+    snapshot = _read_binary_snapshot(
+        path,
+        label="JSON file",
+        minimum_bytes=1,
+        maximum_bytes=_MAX_JSON_BYTES,
+    )
     try:
-        descriptor = os.open(path, flags)
-        with os.fdopen(descriptor, "rb") as handle:
-            opened = os.fstat(handle.fileno())
-            if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
-                raise RuntimeError(f"JSON file changed while opening: {path}")
-            payload = handle.read(_MAX_JSON_BYTES + 1)
-    except OSError as exc:
-        raise RuntimeError(f"JSON file is unavailable: {path}: {exc}") from exc
-    size = len(payload)
-    if size <= 0 or size > _MAX_JSON_BYTES:
-        raise RuntimeError(
-            f"JSON file size {size} is outside the supported 1..{_MAX_JSON_BYTES} byte range: "
-            f"{path}"
-        )
-    try:
-        return json.loads(
-            payload.decode("utf-8"),
+        value = json.loads(
+            snapshot.payload.decode("utf-8"),
             object_pairs_hook=_reject_duplicate_keys,
         )
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"JSON is unreadable: {path}: {exc}") from exc
+    return value, snapshot
+
+
+def _read_json_value(path: Path) -> Any:
+    value, _snapshot = _read_json_snapshot(path)
+    return value
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -289,15 +722,32 @@ def load_json(path: Path) -> dict[str, Any]:
     return value
 
 
-def _load_canonical_model(path: Path, model: type[BaseModel]) -> BaseModel:
-    value = _read_json_value(path)
+def _load_canonical_model_snapshot(
+    path: Path,
+    model: type[BaseModel],
+) -> tuple[BaseModel, _BinarySnapshot]:
+    value, snapshot = _read_json_snapshot(path)
     try:
         parsed = model.model_validate(value)
     except ValidationError as exc:
         raise RuntimeError(f"JSON does not match {model.__name__}: {path}: {exc}") from exc
-    if path.read_bytes() != canonical_bytes(parsed.model_dump(mode="json")):
+    if snapshot.payload != canonical_bytes(parsed.model_dump(mode="json")):
         raise RuntimeError(f"JSON is not canonical: {path}")
+    return parsed, snapshot
+
+
+def _load_canonical_model(path: Path, model: type[BaseModel]) -> BaseModel:
+    parsed, _snapshot = _load_canonical_model_snapshot(path, model)
     return parsed
+
+
+def _load_canonical_json(path: Path) -> tuple[dict[str, Any], _BinarySnapshot]:
+    value, snapshot = _read_json_snapshot(path)
+    if not isinstance(value, dict):
+        raise RuntimeError(f"JSON root is not an object: {path}")
+    if snapshot.payload != canonical_bytes(value):
+        raise RuntimeError(f"JSON is not canonical: {path}")
+    return value, snapshot
 
 
 def execution_record(execution: CommandExecution, command: list[str]) -> dict[str, Any]:
@@ -320,14 +770,59 @@ def result_passed(value: dict[str, Any]) -> bool:
     )
 
 
-def _read_bounded_text(path: Path, *, label: str) -> str:
-    information = _require_regular_file(path, label=label)
-    if information.st_size <= 0 or information.st_size > _PROJECT_MAX_GCODE_TEXT_BYTES:
+def _read_gcode_from_pinned(
+    pinned: _PinnedRegularFile,
+    *,
+    label: str,
+) -> _TextSnapshot:
+    size = pinned.information.st_size
+    if size <= 0 or size > _PROJECT_MAX_GCODE_TEXT_BYTES:
         raise RuntimeError(
-            f"{label} size {information.st_size} is outside the supported "
-            f"1..{_PROJECT_MAX_GCODE_TEXT_BYTES} byte range: {path}"
+            f"{label} size {size} is outside the supported "
+            f"1..{_PROJECT_MAX_GCODE_TEXT_BYTES} byte range: {pinned.path}"
         )
-    return path.read_text(encoding="utf-8", errors="replace")
+    pinned.handle.seek(0)
+    digest = hashlib.sha256()
+    semantic = io.StringIO()
+    semantic_size = 0
+    consumed = 0
+    while True:
+        raw_line = pinned.handle.readline(_PROJECT_MAX_GCODE_LINE_BYTES + 1)
+        if not raw_line:
+            break
+        consumed += len(raw_line)
+        digest.update(raw_line)
+        if len(raw_line) > _PROJECT_MAX_GCODE_LINE_BYTES:
+            raise RuntimeError(
+                f"{label} contains a line exceeding the "
+                f"{_PROJECT_MAX_GCODE_LINE_BYTES} byte limit: {pinned.path}"
+            )
+        if raw_line.lstrip().startswith(b";"):
+            semantic_size += len(raw_line)
+            if semantic_size > _PROJECT_MAX_GCODE_SEMANTIC_BYTES:
+                raise RuntimeError(
+                    f"{label} semantic comments exceed the "
+                    f"{_PROJECT_MAX_GCODE_SEMANTIC_BYTES} byte limit: {pinned.path}"
+                )
+            semantic.write(raw_line.decode("utf-8", errors="replace"))
+    if consumed != size:
+        raise RuntimeError(f"{label} size changed while it was being read: {pinned.path}")
+    _require_pinned_unchanged(pinned, label=label)
+    return _TextSnapshot(
+        path=pinned.path,
+        text=semantic.getvalue(),
+        size=size,
+        sha256=digest.hexdigest(),
+    )
+
+
+def _read_gcode_snapshot(path: Path, *, label: str) -> _TextSnapshot:
+    with _open_pinned_regular_file(path, label=label) as pinned:
+        return _read_gcode_from_pinned(pinned, label=label)
+
+
+def _read_bounded_text(path: Path, *, label: str) -> str:
+    return _read_gcode_snapshot(path, label=label).text
 
 
 def _gcode_bambu_version_text(gcode_text: str, *, path: Path) -> str:
@@ -372,16 +867,30 @@ def release_gate(
     stdout: str,
     stderr: str,
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
-    gcode_text = _read_bounded_text(gcode, label="Bambu G-code")
-    actual_version = _gcode_bambu_version_text(gcode_text, path=gcode)
+    snapshot = _read_gcode_snapshot(gcode, label="Bambu G-code")
+    return _release_gate_snapshot(
+        snapshot,
+        expected_version=expected_version,
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+
+def _release_gate_snapshot(
+    snapshot: _TextSnapshot,
+    *,
+    expected_version: str,
+    stdout: str,
+    stderr: str,
+) -> tuple[dict[str, Any], dict[str, Any], str]:
+    actual_version = _gcode_bambu_version_text(snapshot.text, path=snapshot.path)
     if actual_version != expected_version:
         raise RuntimeError(
             f"Bambu Studio G-code version {actual_version!r} does not match the frozen "
-            f"source-slice version {expected_version!r}: {gcode}"
+            f"source-slice version {expected_version!r}: {snapshot.path}"
         )
-    gcode_text = gcode.read_text(encoding="utf-8", errors="replace")
     metrics = parse_gcode_metrics(
-        gcode_text,
+        snapshot.text,
         diagnostics="\n".join((stdout, stderr)),
     )
     payload = {
@@ -520,18 +1029,9 @@ def _reject_external_relationships(payload: bytes, *, name: str) -> None:
             raise RuntimeError(f"Bambu project archive contains an external relationship: {name}")
 
 
-def _project_model_measurement(payload: bytes) -> dict[str, Any]:
+def _project_model_measurement(payload: bytes | bytearray) -> dict[str, Any]:
     core_namespace = "http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
     core_prefix = f"{{{core_namespace}}}"
-
-    def children(element: ET.Element, name: str) -> list[ET.Element]:
-        return [child for child in element if child.tag == f"{core_prefix}{name}"]
-
-    def one_child(element: ET.Element, name: str) -> ET.Element:
-        matches = children(element, name)
-        if len(matches) != 1:
-            raise RuntimeError(f"Bambu project model must contain one core {name} element")
-        return matches[0]
 
     identity = (1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0)
 
@@ -556,84 +1056,183 @@ def _project_model_measurement(payload: bytes) -> dict[str, Any]:
             x * matrix[2] + y * matrix[5] + z * matrix[8] + matrix[11],
         )
 
-    try:
-        root = ET.fromstring(payload)
-    except ET.ParseError as exc:
-        raise RuntimeError(f"Bambu project model XML is invalid: {exc}") from exc
-    if root.tag != f"{core_prefix}model":
-        raise RuntimeError("Bambu project model has no core model root")
-    if root.attrib.get("unit", "millimeter").casefold() not in {
-        "millimeter",
-        "millimetre",
-        "mm",
-    }:
-        raise RuntimeError("Bambu project model must use millimetres")
-
-    resources = one_child(root, "resources")
-    build = one_child(root, "build")
     objects: dict[int, dict[str, Any]] = {}
-    for object_element in children(resources, "object"):
-        try:
-            object_id = int(object_element.attrib["id"])
-        except (KeyError, ValueError) as exc:
-            raise RuntimeError("Bambu project model has an invalid object id") from exc
-        if object_id <= 0 or object_id in objects:
-            raise RuntimeError("Bambu project model object ids must be unique and positive")
-        meshes = children(object_element, "mesh")
-        component_groups = children(object_element, "components")
-        if (len(meshes), len(component_groups)) not in {(1, 0), (0, 1)}:
-            raise RuntimeError("Bambu project object must contain one mesh or components group")
-        if meshes:
-            vertices_element = one_child(meshes[0], "vertices")
-            triangles_element = one_child(meshes[0], "triangles")
-            vertices: list[tuple[float, float, float]] = []
-            for vertex in children(vertices_element, "vertex"):
+    build_items: list[tuple[int, tuple[float, ...]]] = []
+    resources_count = 0
+    build_count = 0
+    element_stack: list[ET.Element] = []
+    tag_stack: list[str] = []
+    current_object: dict[str, Any] | None = None
+    try:
+        events = ET.iterparse(io.BytesIO(payload), events=("start", "end"))
+        for event, element in events:
+            if event == "start":
+                parent_tag = tag_stack[-1] if tag_stack else None
+                grandparent_tag = tag_stack[-2] if len(tag_stack) > 1 else None
+                element_stack.append(element)
+                tag_stack.append(element.tag)
+                if len(tag_stack) == 1:
+                    if element.tag != f"{core_prefix}model":
+                        raise RuntimeError("Bambu project model has no core model root")
+                    if element.attrib.get("unit", "millimeter").casefold() not in {
+                        "millimeter",
+                        "millimetre",
+                        "mm",
+                    }:
+                        raise RuntimeError("Bambu project model must use millimetres")
+                elif len(tag_stack) == 2 and element.tag == f"{core_prefix}resources":
+                    resources_count += 1
+                elif len(tag_stack) == 2 and element.tag == f"{core_prefix}build":
+                    build_count += 1
+                elif (
+                    element.tag == f"{core_prefix}object"
+                    and parent_tag == f"{core_prefix}resources"
+                    and grandparent_tag == f"{core_prefix}model"
+                ):
+                    try:
+                        object_id = int(element.attrib["id"])
+                    except (KeyError, ValueError) as exc:
+                        raise RuntimeError("Bambu project model has an invalid object id") from exc
+                    if object_id <= 0 or object_id in objects:
+                        raise RuntimeError(
+                            "Bambu project model object ids must be unique and positive"
+                        )
+                    current_object = {
+                        "id": object_id,
+                        "mesh_count": 0,
+                        "components_group_count": 0,
+                        "vertices_group_count": 0,
+                        "triangles_group_count": 0,
+                        "vertices": [],
+                        "triangle_count": 0,
+                        "maximum_triangle_index": -1,
+                        "components": [],
+                    }
+                elif current_object is not None:
+                    if element.tag == f"{core_prefix}mesh" and parent_tag == f"{core_prefix}object":
+                        current_object["mesh_count"] += 1
+                    elif (
+                        element.tag == f"{core_prefix}components"
+                        and parent_tag == f"{core_prefix}object"
+                    ):
+                        current_object["components_group_count"] += 1
+                    elif (
+                        element.tag == f"{core_prefix}vertices"
+                        and parent_tag == f"{core_prefix}mesh"
+                    ):
+                        current_object["vertices_group_count"] += 1
+                    elif (
+                        element.tag == f"{core_prefix}triangles"
+                        and parent_tag == f"{core_prefix}mesh"
+                    ):
+                        current_object["triangles_group_count"] += 1
+                continue
+
+            parent_tag = tag_stack[-2] if len(tag_stack) > 1 else None
+            grandparent_tag = tag_stack[-3] if len(tag_stack) > 2 else None
+            if current_object is not None and (
+                element.tag == f"{core_prefix}vertex"
+                and parent_tag == f"{core_prefix}vertices"
+                and grandparent_tag == f"{core_prefix}mesh"
+            ):
                 try:
-                    coordinates = tuple(float(vertex.attrib[axis]) for axis in ("x", "y", "z"))
+                    coordinates = tuple(float(element.attrib[axis]) for axis in ("x", "y", "z"))
                 except (KeyError, ValueError) as exc:
                     raise RuntimeError("Bambu project model has an invalid vertex") from exc
                 if len(coordinates) != 3 or not all(math.isfinite(value) for value in coordinates):
                     raise RuntimeError("Bambu project model has a non-finite vertex")
-                vertices.append(coordinates)
-            triangles = children(triangles_element, "triangle")
-            if not vertices or not triangles:
-                raise RuntimeError("Bambu project model has an empty triangle mesh")
-            for triangle in triangles:
+                current_object["vertices"].append(coordinates)
+            elif current_object is not None and (
+                element.tag == f"{core_prefix}triangle"
+                and parent_tag == f"{core_prefix}triangles"
+                and grandparent_tag == f"{core_prefix}mesh"
+            ):
                 try:
-                    indices = tuple(int(triangle.attrib[axis]) for axis in ("v1", "v2", "v3"))
+                    indices = tuple(int(element.attrib[axis]) for axis in ("v1", "v2", "v3"))
                 except (KeyError, ValueError) as exc:
                     raise RuntimeError("Bambu project model has an invalid triangle") from exc
-                if len(set(indices)) != 3 or min(indices) < 0 or max(indices) >= len(vertices):
+                if len(set(indices)) != 3 or min(indices) < 0:
                     raise RuntimeError("Bambu project model triangle indices are invalid")
-            objects[object_id] = {
-                "vertices": tuple(vertices),
-                "triangle_count": len(triangles),
-                "components": (),
-            }
-        else:
-            components: list[tuple[int, tuple[float, ...]]] = []
-            for component in children(component_groups[0], "component"):
+                current_object["triangle_count"] += 1
+                current_object["maximum_triangle_index"] = max(
+                    current_object["maximum_triangle_index"],
+                    *indices,
+                )
+            elif current_object is not None and (
+                element.tag == f"{core_prefix}component"
+                and parent_tag == f"{core_prefix}components"
+                and grandparent_tag == f"{core_prefix}object"
+            ):
                 try:
-                    referenced_id = int(component.attrib["objectid"])
+                    referenced_id = int(element.attrib["objectid"])
                 except (KeyError, ValueError) as exc:
                     raise RuntimeError("Bambu project component has an invalid object id") from exc
-                components.append((referenced_id, transform(component.attrib.get("transform"))))
-            if not components:
-                raise RuntimeError("Bambu project components group is empty")
-            objects[object_id] = {
-                "vertices": (),
-                "triangle_count": 0,
-                "components": tuple(components),
-            }
+                current_object["components"].append(
+                    (referenced_id, transform(element.attrib.get("transform")))
+                )
+            elif (
+                element.tag == f"{core_prefix}item"
+                and parent_tag == f"{core_prefix}build"
+                and grandparent_tag == f"{core_prefix}model"
+            ):
+                try:
+                    build_object_id = int(element.attrib["objectid"])
+                except (KeyError, ValueError) as exc:
+                    raise RuntimeError("Bambu project build item has an invalid object id") from exc
+                build_items.append((build_object_id, transform(element.attrib.get("transform"))))
+            elif current_object is not None and (
+                element.tag == f"{core_prefix}object" and parent_tag == f"{core_prefix}resources"
+            ):
+                mesh_count = int(current_object["mesh_count"])
+                component_group_count = int(current_object["components_group_count"])
+                if (mesh_count, component_group_count) not in {(1, 0), (0, 1)}:
+                    raise RuntimeError(
+                        "Bambu project object must contain one mesh or components group"
+                    )
+                vertices = current_object["vertices"]
+                triangle_count = int(current_object["triangle_count"])
+                components = current_object["components"]
+                if mesh_count:
+                    if (
+                        current_object["vertices_group_count"] != 1
+                        or current_object["triangles_group_count"] != 1
+                        or not vertices
+                        or triangle_count <= 0
+                    ):
+                        raise RuntimeError("Bambu project model has an empty triangle mesh")
+                    if current_object["maximum_triangle_index"] >= len(vertices):
+                        raise RuntimeError("Bambu project model triangle indices are invalid")
+                    objects[int(current_object["id"])] = {
+                        "vertices": tuple(vertices),
+                        "triangle_count": triangle_count,
+                        "components": (),
+                    }
+                else:
+                    if not components:
+                        raise RuntimeError("Bambu project components group is empty")
+                    objects[int(current_object["id"])] = {
+                        "vertices": (),
+                        "triangle_count": 0,
+                        "components": tuple(components),
+                    }
+                current_object = None
 
-    build_items = children(build, "item")
+            tag_stack.pop()
+            element_stack.pop()
+            element.clear()
+            if element_stack:
+                with suppress(ValueError):
+                    element_stack[-1].remove(element)
+    except ET.ParseError as exc:
+        raise RuntimeError(f"Bambu project model XML is invalid: {exc}") from exc
+
+    if resources_count != 1:
+        raise RuntimeError("Bambu project model must contain one core resources element")
+    if build_count != 1:
+        raise RuntimeError("Bambu project model must contain one core build element")
     if len(build_items) != 1:
         raise RuntimeError("Bambu project model must contain exactly one build item")
-    try:
-        build_object_id = int(build_items[0].attrib["objectid"])
-    except (KeyError, ValueError) as exc:
-        raise RuntimeError("Bambu project build item has an invalid object id") from exc
-    build_transform = transform(build_items[0].attrib.get("transform"))
+    build_object_id, build_transform = build_items[0]
     minimum = [math.inf, math.inf, math.inf]
     maximum = [-math.inf, -math.inf, -math.inf]
     triangle_count = 0
@@ -673,31 +1272,37 @@ def _project_model_measurement(payload: bytes) -> dict[str, Any]:
     }
 
 
-def archive_evidence(project: Path, primary_gcode: Path) -> dict[str, Any]:
-    project_information = _require_regular_file(project, label="Bambu project archive")
-    primary_information = _require_regular_file(primary_gcode, label="primary Bambu G-code")
-    if project_information.st_size <= 0 or project_information.st_size > _PROJECT_MAX_ARCHIVE_BYTES:
-        raise RuntimeError(
-            f"Bambu project archive size {project_information.st_size} is outside the "
-            f"supported 1..{_PROJECT_MAX_ARCHIVE_BYTES} byte range: {project}"
-        )
-    if primary_information.st_size <= 0 or primary_information.st_size > _PROJECT_MAX_MEMBER_BYTES:
-        raise RuntimeError(
-            f"primary Bambu G-code size {primary_information.st_size} is outside the "
-            f"supported 1..{_PROJECT_MAX_MEMBER_BYTES} byte range: {primary_gcode}"
-        )
-
+def _inspect_archive(project: Path, primary_gcode: Path) -> _ArchiveInspection:
     actual_md5 = hashlib.md5(usedforsecurity=False)
     recorded_md5_bytes: bytes | None = None
-    model_xml_bytes: bytes | None = None
+    model_xml_bytes: bytearray | None = None
     embedded_matches_primary = True
     try:
-        with ZipFile(project, "r") as package:
-            members = _validated_project_members(package, project=project)
-            embedded_info = members["Metadata/plate_1.gcode"]
-            if embedded_info.file_size != primary_information.st_size:
-                embedded_matches_primary = False
-            with primary_gcode.open("rb") as primary:
+        with (
+            _open_pinned_regular_file(project, label="Bambu project archive") as project_file,
+            _open_pinned_regular_file(
+                primary_gcode,
+                label="primary Bambu G-code",
+            ) as primary_file,
+        ):
+            project_size = project_file.information.st_size
+            if project_size <= 0 or project_size > _PROJECT_MAX_ARCHIVE_BYTES:
+                raise RuntimeError(
+                    f"Bambu project archive size {project_size} is outside the "
+                    f"supported 1..{_PROJECT_MAX_ARCHIVE_BYTES} byte range: {project}"
+                )
+            project_hash = _hash_pinned(project_file, label="Bambu project archive")
+            primary_snapshot = _read_gcode_from_pinned(
+                primary_file,
+                label="primary Bambu G-code",
+            )
+            project_file.handle.seek(0)
+            primary_file.handle.seek(0)
+            with ZipFile(project_file.handle, "r") as package:
+                members = _validated_project_members(package, project=project)
+                embedded_info = members["Metadata/plate_1.gcode"]
+                if embedded_info.file_size != primary_snapshot.size:
+                    embedded_matches_primary = False
                 for info in package.infolist():
                     if info.is_dir():
                         continue
@@ -740,7 +1345,7 @@ def archive_evidence(project: Path, primary_gcode: Path) -> dict[str, Any]:
                                 captured.extend(block)
                             elif info.filename == "Metadata/plate_1.gcode":
                                 actual_md5.update(block)
-                                if primary.read(len(block)) != block:
+                                if primary_file.handle.read(len(block)) != block:
                                     embedded_matches_primary = False
                     if count != info.file_size:
                         raise RuntimeError(
@@ -752,9 +1357,11 @@ def archive_evidence(project: Path, primary_gcode: Path) -> dict[str, Any]:
                     elif capture_md5:
                         recorded_md5_bytes = bytes(captured)
                     elif capture_model:
-                        model_xml_bytes = bytes(captured)
-                if primary.read(1):
+                        model_xml_bytes = captured
+                if primary_file.handle.read(1):
                     embedded_matches_primary = False
+            _require_pinned_unchanged(project_file, label="Bambu project archive")
+            _require_pinned_unchanged(primary_file, label="primary Bambu G-code")
     except (BadZipFile, OSError) as exc:
         raise RuntimeError(f"Bambu project archive is invalid: {project}: {exc}") from exc
 
@@ -770,7 +1377,7 @@ def archive_evidence(project: Path, primary_gcode: Path) -> dict[str, Any]:
         raise RuntimeError("Bambu project embedded G-code MD5 is malformed")
     actual_md5_value = actual_md5.hexdigest().upper()
     model_measurement = _project_model_measurement(model_xml_bytes)
-    return {
+    evidence = {
         "archive_test_passed": True,
         "embedded_gcode_md5": recorded_md5,
         "embedded_gcode_md5_actual": actual_md5_value,
@@ -779,6 +1386,15 @@ def archive_evidence(project: Path, primary_gcode: Path) -> dict[str, Any]:
         "project_model_dimensions_mm": model_measurement["dimensions_mm"],
         "project_model_triangle_count": model_measurement["triangle_count"],
     }
+    return _ArchiveInspection(
+        evidence=evidence,
+        project_sha256=project_hash,
+        primary_gcode=primary_snapshot,
+    )
+
+
+def archive_evidence(project: Path, primary_gcode: Path) -> dict[str, Any]:
+    return _inspect_archive(project, primary_gcode).evidence
 
 
 def profile_paths(slice_root: Path, manifest: dict[str, Any]) -> tuple[list[Path], list[Path]]:
@@ -999,7 +1615,10 @@ def _expected_tile_id(row: int, column: int) -> str:
     return f"tile-r{row:04d}-c{column:04d}"
 
 
-def _verified_source_profiles(slice_root: Path, manifest: Any) -> tuple[tuple[Any, Path], ...]:
+def _verified_source_profiles(
+    slice_root: Path,
+    manifest: Any,
+) -> tuple[tuple[Any, Path, _BinarySnapshot], ...]:
     records = tuple(manifest.profile_files)
     identities = tuple((record.role, record.index) for record in records)
     expected = (("settings", 0), ("settings", 1), ("filament", 0))
@@ -1009,7 +1628,7 @@ def _verified_source_profiles(slice_root: Path, manifest: Any) -> tuple[tuple[An
         )
     paths: set[Path] = set()
     aliases: set[str] = set()
-    verified: list[tuple[Any, Path]] = []
+    verified: list[tuple[Any, Path, _BinarySnapshot]] = []
     for record in records:
         if PurePosixPath(record.path).parent != PurePosixPath("profiles") or ";" in record.path:
             raise RuntimeError("official slice profile path is not CLI-safe")
@@ -1017,11 +1636,17 @@ def _verified_source_profiles(slice_root: Path, manifest: Any) -> tuple[tuple[An
         alias = unicodedata.normalize("NFC", record.path).casefold()
         if path in paths or alias in aliases:
             raise RuntimeError("official slice profile paths are duplicated or aliased")
-        if sha256(path) != record.sha256:
+        snapshot = _read_binary_snapshot(
+            path,
+            label="official slice profile",
+            minimum_bytes=1,
+            maximum_bytes=_MAX_JSON_BYTES,
+        )
+        if snapshot.sha256 != record.sha256:
             raise RuntimeError(f"official slice profile checksum mismatch: {path}")
         paths.add(path)
         aliases.add(alias)
-        verified.append((record, path))
+        verified.append((record, path, snapshot))
     profile_root = slice_root / "profiles"
     if (
         not profile_root.is_dir()
@@ -1038,7 +1663,8 @@ def _source_print_tile(
     print_root: Path,
     print_manifest: Any,
     print_record: Any,
-) -> tuple[Any, Path, Any]:
+    snapshot_root: Path,
+) -> tuple[Any, Path, str, int, Path, Any]:
     from topoforge.tiling.connectors import PrintTileArtifactManifest
 
     expected_id = _expected_tile_id(print_record.row, print_record.column)
@@ -1053,9 +1679,12 @@ def _source_print_tile(
             f"source print tile id/row/column/path binding changed: {print_record.tile_id}"
         )
     artifact_path = resolve_relative(print_root, print_record.tile_manifest)
-    if sha256(artifact_path) != print_record.tile_manifest_sha256:
+    artifact_value, artifact_snapshot = _load_canonical_model_snapshot(
+        artifact_path,
+        PrintTileArtifactManifest,
+    )
+    if artifact_snapshot.sha256 != print_record.tile_manifest_sha256:
         raise RuntimeError(f"source print tile manifest checksum mismatch: {expected_id}")
-    artifact_value = _load_canonical_model(artifact_path, PrintTileArtifactManifest)
     if not isinstance(artifact_value, PrintTileArtifactManifest):
         raise AssertionError("unexpected source print tile model")
     artifact = artifact_value
@@ -1083,14 +1712,29 @@ def _source_print_tile(
     ):
         raise RuntimeError(f"source print tile inventory changed: {expected_id}")
     verified_files: dict[str, Path] = {}
+    source_3mf_hash: str | None = None
+    source_3mf_size: int | None = None
+    verified_source_3mf: Path | None = None
     for role, relative in print_record.files.items():
         path = resolve_relative(print_root, relative)
-        actual_hash = sha256(path)
+        if role == "print_local_3mf":
+            verified_source_3mf = snapshot_root / f"{expected_id}.print-local.3mf"
+            actual_hash, source_3mf_size = _copy_regular_file_snapshot(
+                path,
+                verified_source_3mf,
+                label=f"source print-local 3MF for {expected_id}",
+                maximum_bytes=_PROJECT_MAX_ARCHIVE_BYTES,
+            )
+            source_3mf_hash = actual_hash
+        else:
+            actual_hash = sha256(path)
         if actual_hash != print_record.sha256[role] or actual_hash != artifact.sha256[role]:
             raise RuntimeError(f"source print artifact checksum mismatch: {expected_id}: {role}")
         verified_files[role] = path
     source_3mf = verified_files["print_local_3mf"]
-    inspection = inspect_3mf(source_3mf)
+    if source_3mf_hash is None or source_3mf_size is None or verified_source_3mf is None:
+        raise RuntimeError(f"source print tile has no print-local 3MF: {expected_id}")
+    inspection = inspect_3mf(verified_source_3mf)
     bounds = print_record.print_local_bounds_mm
     bounds_dimensions = (
         bounds[3] - bounds[0],
@@ -1124,7 +1768,14 @@ def _source_print_tile(
         raise RuntimeError(
             f"source print-local 3MF measurements do not match source evidence: {expected_id}"
         )
-    return artifact, source_3mf, inspection
+    return (
+        artifact,
+        source_3mf,
+        source_3mf_hash,
+        source_3mf_size,
+        verified_source_3mf,
+        inspection,
+    )
 
 
 def _source_slice_tile(
@@ -1134,9 +1785,10 @@ def _source_slice_tile(
     slice_record: Any,
     print_record: Any,
     source_3mf: Path,
+    source_3mf_sha256: str,
     source_inspection: Any,
     expected_version: str,
-) -> tuple[Any, Path]:
+) -> tuple[Any, Path, _TextSnapshot]:
     from topoforge.tiling.slicing import PrintTileSliceReport
 
     tile_id = print_record.tile_id
@@ -1148,7 +1800,7 @@ def _source_slice_tile(
         or slice_record.report_path != f"{expected_directory}/slice_report.json"
         or slice_record.gcode_path != f"{expected_directory}/model.gcode"
         or slice_record.source_print_tile_manifest_sha256 != print_record.tile_manifest_sha256
-        or slice_record.source_print_local_3mf_sha256 != sha256(source_3mf)
+        or slice_record.source_print_local_3mf_sha256 != source_3mf_sha256
     ):
         raise RuntimeError(f"source print/slice tile binding mismatch: {tile_id}")
     tile_directory = slice_root.joinpath(
@@ -1163,24 +1815,30 @@ def _source_slice_tile(
         raise RuntimeError(f"source slice tile inventory changed: {tile_id}")
     report_path = resolve_relative(slice_root, slice_record.report_path)
     source_gcode = resolve_relative(slice_root, slice_record.gcode_path)
-    if sha256(report_path) != slice_record.report_sha256:
+    report_value, report_snapshot = _load_canonical_model_snapshot(
+        report_path,
+        PrintTileSliceReport,
+    )
+    if report_snapshot.sha256 != slice_record.report_sha256:
         raise RuntimeError(f"source slice report checksum mismatch: {tile_id}")
-    if sha256(source_gcode) != slice_record.gcode_sha256:
+    gcode_snapshot = _read_gcode_snapshot(
+        source_gcode,
+        label="source slice G-code",
+    )
+    if gcode_snapshot.sha256 != slice_record.gcode_sha256:
         raise RuntimeError(f"source slice G-code checksum mismatch: {tile_id}")
-    report_value = _load_canonical_model(report_path, PrintTileSliceReport)
     if not isinstance(report_value, PrintTileSliceReport):
         raise AssertionError("unexpected source slice report model")
     report = report_value
-    source_hash = sha256(source_3mf)
     if (
         report.schema_version != "topoforge-print-tile-slice-v1"
         or report.tile_id != tile_id
         or report.source_print_tile_manifest_sha256 != print_record.tile_manifest_sha256
         or report.source_print_local_3mf_path != print_record.files["print_local_3mf"]
-        or report.source_print_local_3mf_sha256 != source_hash
+        or report.source_print_local_3mf_sha256 != source_3mf_sha256
         or report.gcode_path != slice_record.gcode_path
         or report.gcode_sha256 != slice_record.gcode_sha256
-        or report.gcode_size_bytes != source_gcode.stat().st_size
+        or report.gcode_size_bytes != gcode_snapshot.size
         or report.input_strict_3mf_warning_count != source_inspection.strict_warning_count
         or report.slicer_result.input_model != Path(report.source_print_local_3mf_path)
         or report.slicer_result.output_gcode != Path(report.gcode_path)
@@ -1191,10 +1849,9 @@ def _source_slice_tile(
     ):
         raise RuntimeError(f"source slice report identity mismatch: {tile_id}")
 
-    gcode_text = _read_bounded_text(source_gcode, label="source slice G-code")
-    actual_version = _gcode_bambu_version_text(gcode_text, path=source_gcode)
+    actual_version = _gcode_bambu_version_text(gcode_snapshot.text, path=source_gcode)
     reopened_metrics = parse_gcode_metrics(
-        gcode_text,
+        gcode_snapshot.text,
         diagnostics="\n".join((report.slicer_result.stdout, report.slicer_result.stderr)),
     )
     expected_gate = evaluate_bambu_p2s_release_gate(
@@ -1206,7 +1863,7 @@ def _source_slice_tile(
     exit_code_zero = report.slicer_result.exit_code == 0
     gcode_generated = bool(
         report.slicer_result.gcode_generated
-        and report.slicer_result.gcode_size_bytes == source_gcode.stat().st_size
+        and report.slicer_result.gcode_size_bytes == gcode_snapshot.size
     )
     layer_count_positive = bool(
         reopened_metrics.layer_count is not None and reopened_metrics.layer_count > 0
@@ -1249,7 +1906,7 @@ def _source_slice_tile(
         or not required
     ):
         raise RuntimeError(f"source slice metrics/release gate changed: {tile_id}")
-    return report, source_gcode
+    return report, source_gcode, gcode_snapshot
 
 
 def _optional_total(values: list[float | int | None]) -> float | int | None:
@@ -1257,19 +1914,26 @@ def _optional_total(values: list[float | int | None]) -> float | int | None:
     return None if not present else sum(present)
 
 
-def _verify_source_evidence(
+def _verify_source_evidence_at(
     *,
     print_root: Path,
     slice_root: Path,
     executable: Path,
+    snapshot_root: Path,
 ) -> _SourceEvidence:
     from topoforge.tiling.connectors import PrintTileAssemblyManifest
     from topoforge.tiling.slicing import PrintTileSliceManifest
 
     print_path = print_root / "print-tile-assembly-manifest.json"
     slice_path = slice_root / "tile-slice-manifest.json"
-    print_value = _load_canonical_model(print_path, PrintTileAssemblyManifest)
-    slice_value = _load_canonical_model(slice_path, PrintTileSliceManifest)
+    print_value, print_snapshot = _load_canonical_model_snapshot(
+        print_path,
+        PrintTileAssemblyManifest,
+    )
+    slice_value, slice_snapshot = _load_canonical_model_snapshot(
+        slice_path,
+        PrintTileSliceManifest,
+    )
     if not isinstance(print_value, PrintTileAssemblyManifest):
         raise AssertionError("unexpected source print assembly model")
     if not isinstance(slice_value, PrintTileSliceManifest):
@@ -1282,7 +1946,7 @@ def _verify_source_evidence(
         print_manifest.schema_version != "topoforge-print-tile-assembly-v1"
         or slice_manifest.schema_version != "topoforge-print-tile-slice-assembly-v1"
         or slice_manifest.layout_id != print_manifest.layout_id
-        or slice_manifest.source_print_tile_assembly_sha256 != sha256(print_path)
+        or slice_manifest.source_print_tile_assembly_sha256 != print_snapshot.sha256
         or slice_manifest.source_connector_plan_sha256 != print_manifest.connector_plan_sha256
         or slice_manifest.tile_grid_shape != print_manifest.tile_grid_shape
         or slice_manifest.tile_count != print_manifest.tile_count
@@ -1308,21 +1972,30 @@ def _verify_source_evidence(
     reports: list[Any] = []
     total_gcode_size = 0
     for print_record, slice_record in zip(print_records, slice_records, strict=True):
-        artifact, source_3mf, inspection = _source_print_tile(
+        (
+            artifact,
+            source_3mf,
+            source_3mf_hash,
+            source_3mf_size,
+            verified_source_3mf,
+            inspection,
+        ) = _source_print_tile(
             print_root=print_root,
             print_manifest=print_manifest,
             print_record=print_record,
+            snapshot_root=snapshot_root,
         )
-        report, source_gcode = _source_slice_tile(
+        report, source_gcode, gcode_snapshot = _source_slice_tile(
             slice_root=slice_root,
             slice_manifest=slice_manifest,
             slice_record=slice_record,
             print_record=print_record,
             source_3mf=source_3mf,
+            source_3mf_sha256=source_3mf_hash,
             source_inspection=inspection,
             expected_version=expected_version,
         )
-        total_gcode_size += source_gcode.stat().st_size
+        total_gcode_size += gcode_snapshot.size
         reports.append(report)
         tiles.append(
             _SourceTileEvidence(
@@ -1334,8 +2007,13 @@ def _verify_source_evidence(
                 slice_record=slice_record,
                 slice_report=report,
                 source_3mf=source_3mf,
+                source_3mf_sha256=source_3mf_hash,
+                source_3mf_size=source_3mf_size,
+                verified_source_3mf=verified_source_3mf,
                 source_3mf_inspection=inspection,
                 source_slice_gcode=source_gcode,
+                source_slice_gcode_sha256=gcode_snapshot.sha256,
+                source_slice_gcode_size=gcode_snapshot.size,
             )
         )
 
@@ -1384,44 +2062,83 @@ def _verify_source_evidence(
         raise RuntimeError("source slice aggregate evidence does not recompute")
     return _SourceEvidence(
         print_manifest=print_manifest,
+        print_manifest_sha256=print_snapshot.sha256,
         slice_manifest=slice_manifest,
+        slice_manifest_sha256=slice_snapshot.sha256,
         expected_version=expected_version,
+        executable_sha256=executable_hash,
         profiles=profiles,
         tiles=tuple(tiles),
     )
 
 
+def _verify_source_evidence(
+    *,
+    print_root: Path,
+    slice_root: Path,
+    executable: Path,
+    snapshot_root: Path | None = None,
+) -> _SourceEvidence:
+    if snapshot_root is not None:
+        snapshot_root.mkdir(parents=True, exist_ok=True)
+        return _verify_source_evidence_at(
+            print_root=print_root,
+            slice_root=slice_root,
+            executable=executable,
+            snapshot_root=snapshot_root,
+        )
+    with tempfile.TemporaryDirectory(prefix="topoforge-bambu-source-") as temporary:
+        return _verify_source_evidence_at(
+            print_root=print_root,
+            slice_root=slice_root,
+            executable=executable,
+            snapshot_root=Path(temporary),
+        )
+
+
 def copy_profiles(
     staging: Path,
-    profiles: tuple[tuple[Any, Path], ...],
+    profiles: tuple[tuple[Any, Path, _BinarySnapshot], ...],
 ) -> tuple[list[Path], list[Path], list[dict[str, Any]]]:
     destination = staging / "profiles"
     destination.mkdir()
     copied_settings: list[Path] = []
     copied_filaments: list[Path] = []
     records: list[dict[str, Any]] = []
-    for record, source in profiles:
+    for record, source, snapshot in profiles:
         target = copied_settings if record.role == "settings" else copied_filaments
         name = f"{record.role}-{record.index:02d}-{source.name}"
         output = destination / name
-        shutil.copyfile(source, output)
+        _write_atomic_bytes(output, snapshot.payload)
         target.append(output)
         records.append(
             {
                 "role": record.role,
                 "index": record.index,
                 "path": f"profiles/{name}",
-                "sha256": sha256(output),
+                "sha256": snapshot.sha256,
             }
         )
     return copied_settings, copied_filaments, records
 
 
+def _diagnostic_snapshot(path: Path, *, label: str) -> _TextSnapshot:
+    snapshot = _read_binary_snapshot(
+        path,
+        label=label,
+        minimum_bytes=0,
+        maximum_bytes=_MAX_JSON_BYTES,
+    )
+    return _TextSnapshot(
+        path=snapshot.path,
+        text=snapshot.payload.decode("utf-8", errors="replace"),
+        size=snapshot.size,
+        sha256=snapshot.sha256,
+    )
+
+
 def _diagnostic_text(path: Path, *, label: str) -> str:
-    information = _require_regular_file(path, label=label)
-    if information.st_size > _MAX_JSON_BYTES:
-        raise RuntimeError(f"{label} exceeds the {_MAX_JSON_BYTES} byte diagnostic limit: {path}")
-    return path.read_text(encoding="utf-8", errors="replace")
+    return _diagnostic_snapshot(path, label=label).text
 
 
 def _historical_stage_root(output_directory: str, *, tile_id: str, mode: str) -> Path:
@@ -1491,10 +2208,13 @@ def _verify_execution_record(
         stage = _historical_stage_root(command[19], tile_id=source.tile_id, mode="build")
         expected_settings = tuple(str(stage / "profiles" / name) for name in settings_names)
         expected_filaments = tuple(str(stage / "profiles" / name) for name in filament_names)
+        expected_source = (
+            stage / ".runtime" / "verified-source" / f"{source.tile_id}.print-local.3mf"
+        )
         if (
             tuple(command[4].split(";")) != expected_settings
             or tuple(command[6].split(";")) != expected_filaments
-            or command[20] != str(source.source_3mf)
+            or command[20] != str(expected_source)
         ):
             raise RuntimeError("Bambu build command changed its input profiles or model")
         return stage
@@ -1520,14 +2240,18 @@ def _verify_execution_record(
 def _verify_project_profiles(
     root: Path,
     reported: Any,
-    source_profiles: tuple[tuple[Any, Path], ...],
+    source_profiles: tuple[tuple[Any, Path, _BinarySnapshot], ...],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     if not isinstance(reported, list) or len(reported) != len(source_profiles):
         raise RuntimeError("Bambu project profile set does not match source profiles")
     settings: list[str] = []
     filaments: list[str] = []
     expected_paths: set[Path] = set()
-    for item, (source_record, _source_path) in zip(reported, source_profiles, strict=True):
+    for item, (source_record, _source_path, _source_snapshot) in zip(
+        reported,
+        source_profiles,
+        strict=True,
+    ):
         if (
             not isinstance(item, dict)
             or set(item) != {"role", "index", "path", "sha256"}
@@ -1566,9 +2290,7 @@ def verify_output(
         executable=executable,
     )
     manifest_path = root / "bambu-tile-project-manifest.json"
-    manifest = load_json(manifest_path)
-    if manifest_path.read_bytes() != canonical_bytes(manifest):
-        raise RuntimeError("Bambu tile project manifest is not canonical")
+    manifest, _manifest_snapshot = _load_canonical_json(manifest_path)
     executable_path = manifest.get("bambu_studio_path")
     probe = manifest.get("bambu_studio_probe")
     claim_boundary = (
@@ -1579,12 +2301,10 @@ def verify_output(
         set(manifest) != _ROOT_MANIFEST_FIELDS
         or manifest.get("schema_version") != SCHEMA_VERSION
         or manifest.get("layout_id") != source.print_manifest.layout_id
-        or manifest.get("source_print_manifest_sha256")
-        != sha256(print_root / "print-tile-assembly-manifest.json")
-        or manifest.get("source_slice_manifest_sha256")
-        != sha256(slice_root / "tile-slice-manifest.json")
+        or manifest.get("source_print_manifest_sha256") != source.print_manifest_sha256
+        or manifest.get("source_slice_manifest_sha256") != source.slice_manifest_sha256
         or manifest.get("bambu_studio_path") != str(executable)
-        or manifest.get("bambu_studio_sha256") != sha256(executable)
+        or manifest.get("bambu_studio_sha256") != source.executable_sha256
         or manifest.get("bambu_studio_version") != source.expected_version
         or manifest.get("printer_profile_id") != "bambu-p2s-0.4"
         or manifest.get("tile_grid_shape") != list(source.print_manifest.tile_grid_shape)
@@ -1613,12 +2333,20 @@ def verify_output(
         raise RuntimeError("Bambu Studio probe logs are not bound to the evidence root")
     probe_stdout = resolve_relative(root, probe_stdout_relative)
     probe_stderr = resolve_relative(root, probe_stderr_relative)
+    probe_stdout_snapshot = _diagnostic_snapshot(
+        probe_stdout,
+        label="Bambu probe stdout",
+    )
+    probe_stderr_snapshot = _diagnostic_snapshot(
+        probe_stderr,
+        label="Bambu probe stderr",
+    )
     probe_duration = probe.get("duration_seconds")
     probe_output_version = parse_bambu_studio_version(
         "\n".join(
             (
-                _diagnostic_text(probe_stdout, label="Bambu probe stdout"),
-                _diagnostic_text(probe_stderr, label="Bambu probe stderr"),
+                probe_stdout_snapshot.text,
+                probe_stderr_snapshot.text,
             )
         )
     )
@@ -1630,8 +2358,8 @@ def verify_output(
         or not isinstance(probe_duration, (int, float))
         or not math.isfinite(float(probe_duration))
         or float(probe_duration) < 0
-        or sha256(probe_stdout) != probe.get("stdout_sha256")
-        or sha256(probe_stderr) != probe.get("stderr_sha256")
+        or probe_stdout_snapshot.sha256 != probe.get("stdout_sha256")
+        or probe_stderr_snapshot.sha256 != probe.get("stderr_sha256")
         or probe_output_version != source.expected_version
     ):
         raise RuntimeError("Bambu Studio probe evidence changed")
@@ -1698,19 +2426,15 @@ def verify_output(
         ):
             raise RuntimeError(f"Bambu project tile source/role binding changed: {tile_id}")
         validation_path = resolve_relative(root, record["validation_path"])
-        validation = load_json(validation_path)
-        if (
-            set(validation) != _VALIDATION_FIELDS
-            or validation_path.read_bytes() != canonical_bytes(validation)
-            or sha256(validation_path) != record.get("validation_sha256")
+        validation, validation_snapshot = _load_canonical_json(validation_path)
+        if set(validation) != _VALIDATION_FIELDS or validation_snapshot.sha256 != record.get(
+            "validation_sha256"
         ):
             raise RuntimeError(f"Bambu tile validation identity changed: {tile_id}")
         resolved_files: dict[str, Path] = {}
         for role in sorted(_PROJECT_FILE_ROLES):
             relative = files[role]
             path = resolve_relative(root, relative)
-            if sha256(path) != hashes.get(role):
-                raise RuntimeError(f"Bambu tile project checksum mismatch: {tile_id}: {role}")
             resolved_files[role] = path
         tile_directory = root / relative_dir
         expected_inventory = {
@@ -1728,15 +2452,62 @@ def verify_output(
         project = resolved_files["bambu_project_3mf"]
         primary = resolved_files["primary_gcode"]
         reopened = resolved_files["reopen_gcode"]
-        build_result = load_json(resolved_files["build_result"])
-        reopen_result = load_json(resolved_files["reopen_result"])
+        archive_inspection = _inspect_archive(project, primary)
+        archive = archive_inspection.evidence
+        reopened_snapshot = _read_gcode_snapshot(
+            reopened,
+            label="reopened Bambu G-code",
+        )
+        build_result_value, build_result_snapshot = _read_json_snapshot(
+            resolved_files["build_result"]
+        )
+        reopen_result_value, reopen_result_snapshot = _read_json_snapshot(
+            resolved_files["reopen_result"]
+        )
+        if not isinstance(build_result_value, dict) or not isinstance(reopen_result_value, dict):
+            raise RuntimeError(f"Bambu result.json root is not an object: {tile_id}")
+        build_result = build_result_value
+        reopen_result = reopen_result_value
+        build_stdout_snapshot = _diagnostic_snapshot(
+            resolved_files["build_stdout"],
+            label="Bambu build stdout",
+        )
+        build_stderr_snapshot = _diagnostic_snapshot(
+            resolved_files["build_stderr"],
+            label="Bambu build stderr",
+        )
+        reopen_stdout_snapshot = _diagnostic_snapshot(
+            resolved_files["reopen_stdout"],
+            label="Bambu reopen stdout",
+        )
+        reopen_stderr_snapshot = _diagnostic_snapshot(
+            resolved_files["reopen_stderr"],
+            label="Bambu reopen stderr",
+        )
+        actual_hashes = {
+            "bambu_project_3mf": archive_inspection.project_sha256,
+            "primary_gcode": archive_inspection.primary_gcode.sha256,
+            "reopen_gcode": reopened_snapshot.sha256,
+            "build_result": build_result_snapshot.sha256,
+            "reopen_result": reopen_result_snapshot.sha256,
+            "build_stdout": build_stdout_snapshot.sha256,
+            "build_stderr": build_stderr_snapshot.sha256,
+            "reopen_stdout": reopen_stdout_snapshot.sha256,
+            "reopen_stderr": reopen_stderr_snapshot.sha256,
+        }
+        mismatched_roles = sorted(
+            role for role, actual_hash in actual_hashes.items() if hashes.get(role) != actual_hash
+        )
+        if mismatched_roles:
+            raise RuntimeError(
+                f"Bambu tile project checksum mismatch: {tile_id}: {', '.join(mismatched_roles)}"
+            )
         if not result_passed(build_result) or not result_passed(reopen_result):
             raise RuntimeError(f"Bambu result.json failed on reopen: {tile_id}")
         build_object = object_measurement(build_result)
         reopen_object = object_measurement(reopen_result)
         source_dimensions = tuple(source_tile.source_3mf_inspection.dimensions_mm)
         source_triangles = int(source_tile.source_3mf_inspection.triangle_count)
-        archive = archive_evidence(project, primary)
         dimensions_ok = bool(
             dimensions_match(build_object["dimensions_mm"], source_dimensions)
             and dimensions_match(reopen_object["dimensions_mm"], source_dimensions)
@@ -1747,25 +2518,17 @@ def verify_output(
             and reopen_object["triangle_count"] == source_triangles
             and archive["project_model_triangle_count"] == source_triangles
         )
-        build_stdout = _diagnostic_text(resolved_files["build_stdout"], label="Bambu build stdout")
-        build_stderr = _diagnostic_text(resolved_files["build_stderr"], label="Bambu build stderr")
-        reopen_stdout = _diagnostic_text(
-            resolved_files["reopen_stdout"], label="Bambu reopen stdout"
-        )
-        reopen_stderr = _diagnostic_text(
-            resolved_files["reopen_stderr"], label="Bambu reopen stderr"
-        )
-        build_metrics, build_gate, build_version = release_gate(
-            primary,
+        build_metrics, build_gate, build_version = _release_gate_snapshot(
+            archive_inspection.primary_gcode,
             expected_version=source.expected_version,
-            stdout=build_stdout,
-            stderr=build_stderr,
+            stdout=build_stdout_snapshot.text,
+            stderr=build_stderr_snapshot.text,
         )
-        reopen_metrics, reopen_gate, reopen_version = release_gate(
-            reopened,
+        reopen_metrics, reopen_gate, reopen_version = _release_gate_snapshot(
+            reopened_snapshot,
             expected_version=source.expected_version,
-            stdout=reopen_stdout,
-            stderr=reopen_stderr,
+            stdout=reopen_stdout_snapshot.text,
+            stderr=reopen_stderr_snapshot.text,
         )
         build_stage = _verify_execution_record(
             validation.get("build_execution"),
@@ -1800,7 +2563,7 @@ def verify_output(
             or validation.get("tile_id") != tile_id
             or validation.get("source_print_local_3mf_path")
             != source_tile.print_record.files["print_local_3mf"]
-            or validation.get("source_print_local_3mf_sha256") != sha256(source_tile.source_3mf)
+            or validation.get("source_print_local_3mf_sha256") != source_tile.source_3mf_sha256
             or validation.get("source_slice_report_sha256")
             != source_tile.slice_record.report_sha256
             or validation.get("source_dimensions_mm") != list(source_dimensions)
@@ -1854,17 +2617,18 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
         raise RuntimeError(f"Bambu tile project destination already exists: {output}")
     if not executable.is_file():
         raise RuntimeError(f"Bambu Studio executable does not exist: {executable}")
-    source = _verify_source_evidence(
-        print_root=print_root,
-        slice_root=slice_root,
-        executable=executable,
-    )
-    print_manifest = source.print_manifest
-    expected_version = source.expected_version
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{output.name}.topoforge-stage-", dir=output.parent))
     runtime_root = staging / ".runtime"
     try:
+        source = _verify_source_evidence(
+            print_root=print_root,
+            slice_root=slice_root,
+            executable=executable,
+            snapshot_root=runtime_root / "verified-source",
+        )
+        print_manifest = source.print_manifest
+        expected_version = source.expected_version
         probe_record = probe_bambu_studio(
             executable,
             runtime=runtime_root / "probe",
@@ -1883,7 +2647,7 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
             source_record = source_tile.print_record
             source_slice = source_tile.slice_record
             input_relative = source_record.files["print_local_3mf"]
-            input_path = source_tile.source_3mf
+            input_path = source_tile.verified_source_3mf
             input_inspection = source_tile.source_3mf_inspection
             tile_dir = staging / "tiles" / tile_id
             tile_dir.mkdir(parents=True)
@@ -2006,7 +2770,7 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
                 "schema_version": TILE_SCHEMA_VERSION,
                 "tile_id": tile_id,
                 "source_print_local_3mf_path": input_relative,
-                "source_print_local_3mf_sha256": sha256(input_path),
+                "source_print_local_3mf_sha256": source_tile.source_3mf_sha256,
                 "source_slice_report_sha256": source_slice.report_sha256,
                 "source_dimensions_mm": list(input_inspection.dimensions_mm),
                 "source_triangle_count": input_inspection.triangle_count,
@@ -2067,12 +2831,10 @@ def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
         manifest = {
             "schema_version": SCHEMA_VERSION,
             "layout_id": print_manifest.layout_id,
-            "source_print_manifest_sha256": sha256(
-                print_root / "print-tile-assembly-manifest.json"
-            ),
-            "source_slice_manifest_sha256": sha256(slice_root / "tile-slice-manifest.json"),
+            "source_print_manifest_sha256": source.print_manifest_sha256,
+            "source_slice_manifest_sha256": source.slice_manifest_sha256,
             "bambu_studio_path": str(executable),
-            "bambu_studio_sha256": sha256(executable),
+            "bambu_studio_sha256": source.executable_sha256,
             "bambu_studio_version": expected_version,
             "bambu_studio_probe": probe_record,
             "printer_profile_id": "bambu-p2s-0.4",

@@ -98,7 +98,7 @@ def test_project_gcode_version_must_match_frozen_source_slice(tmp_path: Path) ->
 
 
 def test_frozen_source_version_requires_available_bambu_probe() -> None:
-    manifest = {
+    manifest: dict[str, Any] = {
         "slicer": {
             "name": "BambuStudio",
             "version": "02.07.01.62",
@@ -357,6 +357,332 @@ def test_canonical_writer_does_not_follow_the_legacy_fixed_temp_symlink(
     assert victim.read_text(encoding="utf-8") == "preserve me"
     assert legacy_temporary.is_symlink()
     assert destination.read_bytes() == b'{"safe":true}\n'
+
+
+def test_sha256_reads_the_pinned_file_after_final_path_swap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.bin"
+    detached = tmp_path / "source.original.bin"
+    replacement = tmp_path / "replacement.bin"
+    original = b"trusted evidence"
+    source.write_bytes(original)
+    replacement.write_bytes(b"attacker replacement")
+    real_open = bambu_projects_module.os.open
+    swapped = False
+
+    def racing_open(
+        path: Any,
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal swapped
+        descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+        if not swapped and dir_fd is not None and path == source.name:
+            swapped = True
+            source.rename(detached)
+            replacement.rename(source)
+        return descriptor
+
+    monkeypatch.setattr(bambu_projects_module.os, "open", racing_open)
+
+    assert bambu_projects_module.sha256(source) == hashlib.sha256(original).hexdigest()
+    assert source.read_bytes() == b"attacker replacement"
+
+
+def test_json_snapshot_fails_closed_after_parent_path_swap_without_reading_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parent = tmp_path / "evidence"
+    detached_parent = tmp_path / "evidence.original"
+    parent.mkdir()
+    source = parent / "manifest.json"
+    source.write_bytes(b'{"trusted":true}\n')
+    real_open = bambu_projects_module.os.open
+    swapped = False
+
+    def racing_open(
+        path: Any,
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal swapped
+        descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+        if not swapped and dir_fd is not None and path == source.name:
+            swapped = True
+            parent.rename(detached_parent)
+            parent.mkdir()
+            source.write_bytes(b'{"attacker":true}\n')
+        return descriptor
+
+    monkeypatch.setattr(bambu_projects_module.os, "open", racing_open)
+    value, snapshot = bambu_projects_module._load_canonical_json(source)
+
+    assert value == {"trusted": True}
+    assert snapshot.sha256 == hashlib.sha256(b'{"trusted":true}\n').hexdigest()
+    assert source.read_bytes() == b'{"attacker":true}\n'
+
+
+def test_gcode_reader_keeps_the_pinned_handle_after_symlink_swap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "model.gcode"
+    detached = tmp_path / "model.original.gcode"
+    replacement = tmp_path / "replacement.gcode"
+    source.write_text("; BambuStudio 02.07.01.62\nG1 X1 Y1\n", encoding="utf-8")
+    replacement.write_text("; untrusted replacement\n", encoding="utf-8")
+    real_open = bambu_projects_module.os.open
+    swapped = False
+
+    def racing_open(
+        path: Any,
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal swapped
+        descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+        if not swapped and dir_fd is not None and path == source.name:
+            swapped = True
+            source.rename(detached)
+            source.symlink_to(replacement)
+        return descriptor
+
+    monkeypatch.setattr(bambu_projects_module.os, "open", racing_open)
+
+    assert bambu_projects_module.gcode_bambu_version(source) == "02.07.01.62"
+    assert source.is_symlink()
+
+
+def test_archive_evidence_uses_pinned_zip_and_primary_handles_after_path_swaps(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary = tmp_path / "primary.gcode"
+    project = tmp_path / "project.3mf"
+    primary_payload = b"; BambuStudio 02.07.01.62\nG1 X1 Y1\n"
+    primary.write_bytes(primary_payload)
+    _write_project_archive(project, primary_payload)
+    project_detached = tmp_path / "project.original.3mf"
+    primary_detached = tmp_path / "primary.original.gcode"
+    project_replacement = tmp_path / "project.replacement"
+    primary_replacement = tmp_path / "primary.replacement"
+    project_replacement.write_bytes(b"not a ZIP")
+    primary_replacement.write_bytes(b"attacker G-code")
+    real_open = bambu_projects_module.os.open
+    swapped: set[str] = set()
+
+    def racing_open(
+        path: Any,
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+        if dir_fd is not None and path == project.name and "project" not in swapped:
+            swapped.add("project")
+            project.rename(project_detached)
+            project_replacement.rename(project)
+        elif dir_fd is not None and path == primary.name and "primary" not in swapped:
+            swapped.add("primary")
+            primary.rename(primary_detached)
+            primary_replacement.rename(primary)
+        return descriptor
+
+    monkeypatch.setattr(bambu_projects_module.os, "open", racing_open)
+    evidence = archive_evidence(project, primary)
+
+    assert evidence["archive_test_passed"] is True
+    assert evidence["embedded_gcode_matches_primary"] is True
+    assert swapped == {"project", "primary"}
+
+
+def test_gcode_snapshot_hashes_full_capacity_but_retains_only_semantic_comments(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "large.gcode"
+    header = b"; BambuStudio 02.07.01.62\n; total layer number: 2\n"
+    commands = b"G1 X1 Y1 E1\n" * 200_000
+    payload = header + commands
+    path.write_bytes(payload)
+
+    snapshot = bambu_projects_module._read_gcode_snapshot(path, label="test G-code")
+
+    assert snapshot.size == len(payload)
+    assert snapshot.sha256 == hashlib.sha256(payload).hexdigest()
+    assert snapshot.text == header.decode("utf-8")
+    assert len(snapshot.text.encode("utf-8")) < 1024
+
+
+def test_gcode_snapshot_fails_before_decoding_an_oversized_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "oversized.gcode"
+    path.write_bytes(b"; BambuStudio 02.07.01.62\n")
+    monkeypatch.setattr(bambu_projects_module, "_PROJECT_MAX_GCODE_TEXT_BYTES", 8)
+
+    with pytest.raises(RuntimeError, match="outside the supported"):
+        bambu_projects_module._read_gcode_snapshot(path, label="test G-code")
+
+
+def test_windows_fallback_opens_regular_files_without_opening_the_parent_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "windows-evidence.bin"
+    source.write_bytes(b"portable")
+    real_open = bambu_projects_module.os.open
+    opened_paths: list[Any] = []
+
+    def recording_open(
+        path: Any,
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        opened_paths.append(path)
+        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(
+        bambu_projects_module,
+        "_descriptor_relative_supported",
+        lambda: False,
+    )
+    monkeypatch.setattr(bambu_projects_module.os, "open", recording_open)
+
+    assert bambu_projects_module.sha256(source) == hashlib.sha256(b"portable").hexdigest()
+    assert opened_paths == [source.resolve()]
+
+
+def test_windows_fallback_writes_and_snapshots_without_directory_descriptors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.3mf"
+    source.write_bytes(b"portable snapshot")
+    snapshot = tmp_path / "snapshots" / "source.3mf"
+    manifest = tmp_path / "manifest.json"
+    monkeypatch.setattr(
+        bambu_projects_module,
+        "_descriptor_relative_supported",
+        lambda: False,
+    )
+
+    digest, size = bambu_projects_module._copy_regular_file_snapshot(
+        source,
+        snapshot,
+        label="Windows source",
+        maximum_bytes=1024,
+    )
+    write_canonical(manifest, {"portable": True})
+
+    assert snapshot.read_bytes() == b"portable snapshot"
+    assert size == len(b"portable snapshot")
+    assert digest == hashlib.sha256(b"portable snapshot").hexdigest()
+    assert manifest.read_bytes() == b'{"portable":true}\n'
+
+
+def test_canonical_writer_replaces_destination_symlink_without_touching_target(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "manifest.json"
+    victim = tmp_path / "victim.json"
+    victim.write_text("preserve me", encoding="utf-8")
+    try:
+        destination.symlink_to(victim)
+    except OSError as exc:
+        pytest.skip(f"symbolic links are unavailable: {exc}")
+
+    write_canonical(destination, {"safe": True})
+
+    assert not destination.is_symlink()
+    assert destination.read_bytes() == b'{"safe":true}\n'
+    assert victim.read_text(encoding="utf-8") == "preserve me"
+
+
+def test_canonical_writer_anchors_replace_when_parent_is_swapped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parent = tmp_path / "evidence"
+    detached_parent = tmp_path / "evidence.original"
+    parent.mkdir()
+    destination = parent / "manifest.json"
+    real_replace = bambu_projects_module.os.replace
+    swapped = False
+
+    def racing_replace(
+        source: Any,
+        target: Any,
+        *,
+        src_dir_fd: int | None = None,
+        dst_dir_fd: int | None = None,
+    ) -> None:
+        nonlocal swapped
+        if not swapped:
+            swapped = True
+            parent.rename(detached_parent)
+            parent.mkdir()
+            destination.write_text("attacker file", encoding="utf-8")
+        real_replace(
+            source,
+            target,
+            src_dir_fd=src_dir_fd,
+            dst_dir_fd=dst_dir_fd,
+        )
+
+    monkeypatch.setattr(bambu_projects_module.os, "replace", racing_replace)
+
+    with pytest.raises(RuntimeError, match="parent changed during publication"):
+        write_canonical(destination, {"safe": True})
+
+    assert destination.read_text(encoding="utf-8") == "attacker file"
+    assert (detached_parent / destination.name).read_bytes() == b'{"safe":true}\n'
+
+
+def test_source_snapshot_destination_mkdir_swap_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.3mf"
+    source.write_bytes(b"trusted")
+    destination_parent = tmp_path / "snapshots"
+    destination = destination_parent / "snapshot.3mf"
+    victim_parent = tmp_path / "victim"
+    victim_parent.mkdir()
+    real_mkdir = Path.mkdir
+    swapped = False
+
+    def racing_mkdir(path: Path, *args: Any, **kwargs: Any) -> None:
+        nonlocal swapped
+        real_mkdir(path, *args, **kwargs)
+        if path == destination_parent and not swapped:
+            swapped = True
+            path.rmdir()
+            path.symlink_to(victim_parent, target_is_directory=True)
+
+    monkeypatch.setattr(Path, "mkdir", racing_mkdir)
+
+    with pytest.raises(RuntimeError, match="without following links"):
+        bambu_projects_module._copy_regular_file_snapshot(
+            source,
+            destination,
+            label="test source",
+            maximum_bytes=1024,
+        )
+
+    assert list(victim_parent.iterdir()) == []
 
 
 _SEMANTIC_GCODE = """; HEADER_BLOCK_START
@@ -827,6 +1153,22 @@ def test_project_model_measurement_uses_only_the_transformed_build_graph() -> No
     }
 
 
+def test_project_model_measurement_streams_without_full_tree_fromstring(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def forbidden_fromstring(_payload: Any) -> Any:
+        raise AssertionError("model measurement must stream XML")
+
+    monkeypatch.setattr(bambu_projects_module.ET, "fromstring", forbidden_fromstring)
+
+    measurement = bambu_projects_module._project_model_measurement(
+        _semantic_model_xml((30.0, 20.0, 4.0), 2)
+    )
+
+    assert measurement["dimensions_mm"] == [30.0, 20.0, 4.0]
+    assert measurement["triangle_count"] == 2
+
+
 def test_project_model_measurement_rejects_out_of_range_triangle_indices() -> None:
     invalid = _MODEL_XML.replace(b'v3="2"', b'v3="99"')
 
@@ -979,6 +1321,60 @@ def test_build_rejects_symlinked_source_manifest_before_execution(
             timeout_seconds=5.0,
         )
     assert calls == []
+
+
+def test_source_manifest_swap_is_not_reopened_before_external_execution(
+    semantic_evidence: _SemanticEvidence,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slice_set = tmp_path / "slice-set"
+    shutil.copytree(semantic_evidence.slice_set, slice_set)
+    manifest_path = slice_set / "tile-slice-manifest.json"
+    detached_manifest = slice_set / "tile-slice-manifest.original.json"
+    parent_information = manifest_path.parent.stat()
+    real_open = bambu_projects_module.os.open
+    swapped = False
+    runner = _SemanticBambuRunner()
+
+    def racing_open(
+        path: Any,
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal swapped
+        descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+        if (
+            not swapped
+            and dir_fd is not None
+            and path == manifest_path.name
+            and (
+                bambu_projects_module.os.fstat(dir_fd).st_dev,
+                bambu_projects_module.os.fstat(dir_fd).st_ino,
+            )
+            == (parent_information.st_dev, parent_information.st_ino)
+        ):
+            swapped = True
+            manifest_path.rename(detached_manifest)
+            manifest_path.write_text("attacker replacement", encoding="utf-8")
+        return descriptor
+
+    monkeypatch.setattr(bambu_projects_module.os, "open", racing_open)
+    monkeypatch.setattr(bambu_projects_module, "run_command", runner)
+
+    with pytest.raises(RuntimeError, match="JSON is unreadable"):
+        generate_bambu_project_evidence(
+            semantic_evidence.print_set,
+            slice_set,
+            semantic_evidence.executable,
+            tmp_path / "should-not-publish",
+            timeout_seconds=30.0,
+        )
+
+    assert swapped is True
+    assert any("--export-3mf" in command for command in runner.calls)
 
 
 def test_verifier_rejects_symlinked_output_manifest(
