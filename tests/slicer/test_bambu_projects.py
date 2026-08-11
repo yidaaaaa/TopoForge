@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import errno
 import hashlib
 import json
 import os
@@ -350,6 +351,8 @@ def test_central_directory_limits_fail_before_archive_reads(
         ("classic_size", "central directory size"),
         ("actual_count", "entry count does not match"),
         ("zip64_count", "member count"),
+        ("concatenated_directory_gap", "does not end immediately"),
+        ("zip64_legacy_offset", "ZIP64 central-directory offset disagrees"),
     ],
 )
 def test_zip_metadata_limits_fail_before_zipfile_construction(
@@ -426,6 +429,58 @@ def test_zip_metadata_limits_fail_before_zipfile_construction(
             0,
         )
         payload = zip64 + locator + eocd
+    elif case == "concatenated_directory_gap":
+        central_directory = b"PK\x01\x02" + b"\x00" * 42
+        payload = (
+            central_directory
+            + b"untrusted concatenation gap"
+            + central_directory
+            + struct.pack(
+                "<4sHHHHIIH",
+                b"PK\x05\x06",
+                0,
+                0,
+                1,
+                1,
+                len(central_directory),
+                0,
+                0,
+            )
+        )
+    elif case == "zip64_legacy_offset":
+        central_directory = b"PK\x01\x02" + b"\x00" * 42
+        zip64 = struct.pack(
+            "<4sQHHIIQQQQ",
+            b"PK\x06\x06",
+            44,
+            45,
+            45,
+            0,
+            0,
+            1,
+            1,
+            len(central_directory),
+            0,
+        )
+        locator = struct.pack(
+            "<4sIQI",
+            b"PK\x06\x07",
+            0,
+            len(central_directory),
+            1,
+        )
+        eocd = struct.pack(
+            "<4sHHHHIIH",
+            b"PK\x05\x06",
+            0,
+            0,
+            1,
+            1,
+            len(central_directory),
+            1,
+            0,
+        )
+        payload = central_directory + zip64 + locator + eocd
     else:
         raise AssertionError(case)
     project.write_bytes(payload)
@@ -1583,6 +1638,59 @@ def test_build_rejects_symlinked_source_manifest_before_execution(
     assert calls == []
 
 
+def test_build_rejects_symlinked_executable_entry_path(
+    semantic_evidence: _SemanticEvidence,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executable = tmp_path / "linked-BambuStudio"
+    try:
+        executable.symlink_to(semantic_evidence.executable)
+    except OSError as exc:
+        pytest.skip(f"symbolic links are unavailable: {exc}")
+    runner = _SemanticBambuRunner()
+    monkeypatch.setattr(bambu_projects_module, "run_command", runner)
+
+    with pytest.raises(RuntimeError, match=r"regular non-link|symbolic link|reparse point"):
+        generate_bambu_project_evidence(
+            semantic_evidence.print_set,
+            semantic_evidence.slice_set,
+            executable,
+            tmp_path / "should-not-exist",
+            timeout_seconds=5.0,
+        )
+
+    assert runner.calls == []
+
+
+def test_build_rejects_symlinked_print_root_entry_path(
+    semantic_evidence: _SemanticEvidence,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    print_root = tmp_path / "linked-print-set"
+    try:
+        print_root.symlink_to(semantic_evidence.print_set, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symbolic links are unavailable: {exc}")
+    runner = _SemanticBambuRunner()
+    monkeypatch.setattr(bambu_projects_module, "run_command", runner)
+    output = tmp_path / "should-not-exist"
+
+    with pytest.raises(RuntimeError, match=r"without following links|symbolic link|reparse point"):
+        generate_bambu_project_evidence(
+            print_root,
+            semantic_evidence.slice_set,
+            semantic_evidence.executable,
+            output,
+            timeout_seconds=5.0,
+        )
+
+    assert runner.calls == []
+    assert not output.exists()
+    assert list(tmp_path.glob(f".{output.name}.topoforge-stage-*")) == []
+
+
 def test_source_manifest_swap_is_not_reopened_before_external_execution(
     semantic_evidence: _SemanticEvidence,
     tmp_path: Path,
@@ -1655,6 +1763,20 @@ def test_verifier_rejects_symlinked_output_manifest(
         _verify_semantic_evidence(semantic_evidence, project_set)
 
 
+def test_verifier_rejects_symlinked_output_root_entry_path(
+    semantic_evidence: _SemanticEvidence,
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "linked-project-set"
+    try:
+        project_root.symlink_to(semantic_evidence.project_set, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symbolic links are unavailable: {exc}")
+
+    with pytest.raises(RuntimeError, match=r"without following links|symbolic link|reparse point"):
+        _verify_semantic_evidence(semantic_evidence, project_root)
+
+
 def test_generation_race_cannot_replace_an_empty_destination_and_cleans_stage(
     semantic_evidence: _SemanticEvidence,
     tmp_path: Path,
@@ -1692,6 +1814,188 @@ def test_generation_race_cannot_replace_an_empty_destination_and_cleans_stage(
     assert raced_identity == (information.st_dev, information.st_ino)
     assert list(output.iterdir()) == []
     assert list(tmp_path.glob(f".{output.name}.topoforge-stage-*")) == []
+
+
+def test_generation_reconciles_a_late_publication_postcheck_error_as_committed(
+    semantic_evidence: _SemanticEvidence,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "reconciled-project-set"
+    runner = _SemanticBambuRunner()
+    real_native_publish = bambu_projects_module._native_publish_no_replace
+    real_stat = bambu_projects_module.os.stat
+    native_completed = False
+    postcheck_failed = False
+
+    def tracking_native_publish(
+        staging: Path,
+        destination: Path,
+        *,
+        parent_descriptor: int | None,
+    ) -> None:
+        nonlocal native_completed
+        real_native_publish(
+            staging,
+            destination,
+            parent_descriptor=parent_descriptor,
+        )
+        native_completed = True
+
+    def faulting_stat(path: Any, *args: Any, **kwargs: Any) -> os.stat_result:
+        nonlocal postcheck_failed
+        dir_fd = kwargs.get("dir_fd")
+        names_output = (
+            os.fspath(path) == output.name
+            if dir_fd is not None
+            else Path(os.fspath(path)) == output
+        )
+        if native_completed and not postcheck_failed and names_output:
+            postcheck_failed = True
+            raise OSError(errno.EIO, "injected late output stat failure")
+        return real_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(bambu_projects_module, "run_command", runner)
+    monkeypatch.setattr(
+        bambu_projects_module,
+        "_native_publish_no_replace",
+        tracking_native_publish,
+    )
+    monkeypatch.setattr(bambu_projects_module.os, "stat", faulting_stat)
+
+    result = generate_bambu_project_evidence(
+        semantic_evidence.print_set,
+        semantic_evidence.slice_set,
+        semantic_evidence.executable,
+        output,
+        timeout_seconds=30.0,
+    )
+
+    assert postcheck_failed is True
+    assert result.output_dir == output.resolve()
+    assert result.verification["required_checks_passed"] is True
+    assert list(tmp_path.glob(f".{output.name}.topoforge-stage-*")) == []
+
+
+@pytest.mark.skipif(
+    not bambu_projects_module._descriptor_relative_supported(),
+    reason="directory fsync publication branch is unavailable",
+)
+def test_generation_reports_retained_output_after_publication_fsync_error(
+    semantic_evidence: _SemanticEvidence,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "durability-uncertain-project-set"
+    runner = _SemanticBambuRunner()
+    real_native_publish = bambu_projects_module._native_publish_no_replace
+    real_fsync = bambu_projects_module.os.fsync
+    native_completed = False
+    fsync_failed = False
+
+    def tracking_native_publish(
+        staging: Path,
+        destination: Path,
+        *,
+        parent_descriptor: int | None,
+    ) -> None:
+        nonlocal native_completed
+        real_native_publish(
+            staging,
+            destination,
+            parent_descriptor=parent_descriptor,
+        )
+        native_completed = True
+
+    def faulting_fsync(descriptor: int) -> None:
+        nonlocal fsync_failed
+        if native_completed and not fsync_failed:
+            fsync_failed = True
+            raise OSError(errno.EIO, "injected publication directory fsync failure")
+        real_fsync(descriptor)
+
+    monkeypatch.setattr(bambu_projects_module, "run_command", runner)
+    monkeypatch.setattr(
+        bambu_projects_module,
+        "_native_publish_no_replace",
+        tracking_native_publish,
+    )
+    monkeypatch.setattr(bambu_projects_module.os, "fsync", faulting_fsync)
+
+    with pytest.raises(RuntimeError) as captured:
+        generate_bambu_project_evidence(
+            semantic_evidence.print_set,
+            semantic_evidence.slice_set,
+            semantic_evidence.executable,
+            output,
+            timeout_seconds=30.0,
+        )
+
+    message = str(captured.value)
+    assert fsync_failed is True
+    assert "publication committed" in message
+    assert "durability could not be confirmed" in message
+    assert "output is retained" in message
+    assert f"output={output}" in message
+    assert "staging=" in message
+    assert "[missing]" in message
+    assert output.is_dir()
+    assert _verify_semantic_evidence(semantic_evidence, output)["required_checks_passed"] is True
+    assert list(tmp_path.glob(f".{output.name}.topoforge-stage-*")) == []
+
+
+def test_atomic_publication_reports_both_paths_when_late_state_is_unreadable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    staging = tmp_path / "unreadable-stage"
+    output = tmp_path / "unreadable-output"
+    staging.mkdir()
+    real_native_publish = bambu_projects_module._native_publish_no_replace
+    real_stat = bambu_projects_module.os.stat
+    native_completed = False
+
+    def tracking_native_publish(
+        source: Path,
+        destination: Path,
+        *,
+        parent_descriptor: int | None,
+    ) -> None:
+        nonlocal native_completed
+        real_native_publish(
+            source,
+            destination,
+            parent_descriptor=parent_descriptor,
+        )
+        native_completed = True
+
+    def faulting_stat(path: Any, *args: Any, **kwargs: Any) -> os.stat_result:
+        dir_fd = kwargs.get("dir_fd")
+        name = os.fspath(path)
+        names_target = (
+            name in {staging.name, output.name}
+            if dir_fd is not None
+            else Path(name) in {staging, output}
+        )
+        if native_completed and names_target:
+            raise OSError(errno.EIO, "injected unreadable publication state")
+        return real_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(
+        bambu_projects_module,
+        "_native_publish_no_replace",
+        tracking_native_publish,
+    )
+    monkeypatch.setattr(bambu_projects_module.os, "stat", faulting_stat)
+
+    with pytest.raises(RuntimeError) as captured:
+        bambu_projects_module._publish_directory_no_replace(staging, output)
+
+    message = str(captured.value)
+    assert "publication state is uncertain" in message
+    assert f"output={output}" in message
+    assert f"staging={staging}" in message
+    assert stat.S_ISDIR(real_stat(output, follow_symlinks=False).st_mode)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Windows holds the locked executable against rename")

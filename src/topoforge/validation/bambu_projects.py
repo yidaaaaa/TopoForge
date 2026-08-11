@@ -945,6 +945,124 @@ def _native_publish_no_replace(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _PublicationReconciliation:
+    committed: bool
+    output_state: str
+    staging_state: str
+    parent_state: str
+
+
+def _publication_directory_state(
+    path: Path,
+    *,
+    parent_descriptor: int | None,
+) -> tuple[tuple[int, int, int] | None, str]:
+    try:
+        information = (
+            os.stat(path.name, dir_fd=parent_descriptor, follow_symlinks=False)
+            if parent_descriptor is not None
+            else os.stat(path, follow_symlinks=False)
+        )
+    except FileNotFoundError:
+        return None, "missing"
+    except OSError as exc:
+        return None, f"unavailable ({type(exc).__name__}: {exc})"
+    identity = _object_identity(information)
+    if not stat.S_ISDIR(information.st_mode) or _is_link_or_reparse(information):
+        return identity, f"not a plain directory (identity={identity!r})"
+    return identity, f"plain directory (identity={identity!r})"
+
+
+def _reconcile_directory_publication(
+    *,
+    staging: Path,
+    output: Path,
+    stage_information: os.stat_result,
+    parent: Path,
+    parent_information: os.stat_result | None,
+    parent_descriptor: int | None,
+    parent_before: tuple[os.stat_result, ...] | None,
+) -> _PublicationReconciliation:
+    output_identity, output_state = _publication_directory_state(
+        output,
+        parent_descriptor=parent_descriptor,
+    )
+    staging_identity, staging_state = _publication_directory_state(
+        staging,
+        parent_descriptor=parent_descriptor,
+    )
+    if parent_descriptor is not None and parent_information is not None:
+        parent_matches = _directory_path_still_names(parent, parent_information)
+        parent_state = "unchanged" if parent_matches else "changed or unavailable"
+    elif parent_before is not None:
+        try:
+            parent_after = _checked_path_chain(parent, label="Bambu publication parent")
+        except RuntimeError as exc:
+            parent_matches = False
+            parent_state = f"unavailable ({exc})"
+        else:
+            parent_matches = tuple(_object_identity(item) for item in parent_before) == tuple(
+                _object_identity(item) for item in parent_after
+            )
+            parent_state = "unchanged" if parent_matches else "changed"
+    else:
+        parent_matches = False
+        parent_state = "not checked"
+    committed = bool(
+        parent_matches
+        and output_identity == _object_identity(stage_information)
+        and staging_identity is None
+        and staging_state == "missing"
+    )
+    return _PublicationReconciliation(
+        committed=committed,
+        output_state=output_state,
+        staging_state=staging_state,
+        parent_state=parent_state,
+    )
+
+
+def _handle_post_rename_publication_error(
+    *,
+    error: Exception,
+    staging: Path,
+    output: Path,
+    stage_information: os.stat_result,
+    parent: Path,
+    parent_information: os.stat_result | None,
+    parent_descriptor: int | None,
+    parent_before: tuple[os.stat_result, ...] | None,
+    durability_error: bool,
+) -> None:
+    reconciliation = _reconcile_directory_publication(
+        staging=staging,
+        output=output,
+        stage_information=stage_information,
+        parent=parent,
+        parent_information=parent_information,
+        parent_descriptor=parent_descriptor,
+        parent_before=parent_before,
+    )
+    locations = (
+        f"output={output} [{reconciliation.output_state}]; "
+        f"staging={staging} [{reconciliation.staging_state}]; "
+        f"parent={parent} [{reconciliation.parent_state}]"
+    )
+    if reconciliation.committed and not durability_error:
+        return
+    if reconciliation.committed:
+        raise RuntimeError(
+            "Bambu publication committed, but directory durability could not be confirmed; "
+            f"the verified output is retained for explicit inspection: {locations}; "
+            f"fsync error: {error}"
+        ) from error
+    raise RuntimeError(
+        "Bambu publication state is uncertain after the native no-clobber rename; "
+        f"inspect both recorded paths before retrying: {locations}; post-rename error: {error}"
+    ) from error
+
+
 def _publish_directory_no_replace(staging: Path, output: Path) -> None:
     absolute_staging = _absolute_path(staging)
     absolute_output = _absolute_path(output)
@@ -968,16 +1086,42 @@ def _publish_directory_no_replace(staging: Path, output: Path) -> None:
                 absolute_output,
                 parent_descriptor=descriptor,
             )
-            published_information = os.stat(
-                absolute_output.name,
-                dir_fd=descriptor,
-                follow_symlinks=False,
-            )
-            if _object_identity(published_information) != _object_identity(
-                stage_information
-            ) or not _directory_path_still_names(parent, parent_information):
-                raise RuntimeError("Bambu publication parent or directory identity changed")
-            os.fsync(descriptor)
+            try:
+                published_information = os.stat(
+                    absolute_output.name,
+                    dir_fd=descriptor,
+                    follow_symlinks=False,
+                )
+                if _object_identity(published_information) != _object_identity(
+                    stage_information
+                ) or not _directory_path_still_names(parent, parent_information):
+                    raise RuntimeError("Bambu publication parent or directory identity changed")
+            except Exception as exc:
+                _handle_post_rename_publication_error(
+                    error=exc,
+                    staging=absolute_staging,
+                    output=absolute_output,
+                    stage_information=stage_information,
+                    parent=parent,
+                    parent_information=parent_information,
+                    parent_descriptor=descriptor,
+                    parent_before=None,
+                    durability_error=False,
+                )
+            try:
+                os.fsync(descriptor)
+            except OSError as exc:
+                _handle_post_rename_publication_error(
+                    error=exc,
+                    staging=absolute_staging,
+                    output=absolute_output,
+                    stage_information=stage_information,
+                    parent=parent,
+                    parent_information=parent_information,
+                    parent_descriptor=descriptor,
+                    parent_before=None,
+                    durability_error=True,
+                )
         return
 
     parent_before = _checked_path_chain(parent, label="Bambu publication parent")
@@ -989,12 +1133,25 @@ def _publish_directory_no_replace(staging: Path, output: Path) -> None:
         absolute_output,
         parent_descriptor=None,
     )
-    parent_after = _checked_path_chain(parent, label="Bambu publication parent")
-    published_information = os.stat(absolute_output, follow_symlinks=False)
-    if tuple(_object_identity(item) for item in parent_before) != tuple(
-        _object_identity(item) for item in parent_after
-    ) or _object_identity(published_information) != _object_identity(stage_information):
-        raise RuntimeError("Bambu publication parent or directory identity changed")
+    try:
+        parent_after = _checked_path_chain(parent, label="Bambu publication parent")
+        published_information = os.stat(absolute_output, follow_symlinks=False)
+        if tuple(_object_identity(item) for item in parent_before) != tuple(
+            _object_identity(item) for item in parent_after
+        ) or _object_identity(published_information) != _object_identity(stage_information):
+            raise RuntimeError("Bambu publication parent or directory identity changed")
+    except Exception as exc:
+        _handle_post_rename_publication_error(
+            error=exc,
+            staging=absolute_staging,
+            output=absolute_output,
+            stage_information=stage_information,
+            parent=parent,
+            parent_information=None,
+            parent_descriptor=None,
+            parent_before=parent_before,
+            durability_error=False,
+        )
 
 
 def _relative_parts(relative: str, *, label: str) -> tuple[str, ...]:
@@ -1340,6 +1497,10 @@ def _preflight_project_central_directory(project_file: _PinnedRegularFile) -> No
         directory_offset,
         _comment_size,
     ) = eocd
+    legacy_entries_on_disk = entries_on_disk
+    legacy_entry_count = entry_count
+    legacy_directory_size = directory_size
+    legacy_directory_offset = directory_offset
     if disk_number != 0 or directory_disk != 0 or entries_on_disk != entry_count:
         raise RuntimeError("Bambu project archive must not use a multi-disk ZIP layout")
 
@@ -1389,15 +1550,38 @@ def _preflight_project_central_directory(project_file: _PinnedRegularFile) -> No
                 or zip64_entries_on_disk != zip64_entry_count
             ):
                 raise RuntimeError("Bambu project archive must not use multi-disk ZIP64")
+            for legacy, sentinel, extended, field_name in (
+                (legacy_entry_count, 0xFFFF, zip64_entry_count, "entry count"),
+                (
+                    legacy_entries_on_disk,
+                    0xFFFF,
+                    zip64_entries_on_disk,
+                    "disk entry count",
+                ),
+                (
+                    legacy_directory_size,
+                    0xFFFFFFFF,
+                    zip64_directory_size,
+                    "central-directory size",
+                ),
+                (
+                    legacy_directory_offset,
+                    0xFFFFFFFF,
+                    zip64_directory_offset,
+                    "central-directory offset",
+                ),
+            ):
+                if legacy != sentinel and legacy != extended:
+                    raise RuntimeError(f"Bambu project ZIP64 {field_name} disagrees with its EOCD")
             entry_count = zip64_entry_count
             directory_size = zip64_directory_size
             directory_offset = zip64_directory_offset
 
     uses_sentinel = (
-        entry_count == 0xFFFF
-        or entries_on_disk == 0xFFFF
-        or directory_size == 0xFFFFFFFF
-        or directory_offset == 0xFFFFFFFF
+        legacy_entry_count == 0xFFFF
+        or legacy_entries_on_disk == 0xFFFF
+        or legacy_directory_size == 0xFFFFFFFF
+        or legacy_directory_offset == 0xFFFFFFFF
     )
     if uses_sentinel and zip64_offset is None:
         raise RuntimeError("Bambu project archive has ZIP64 sentinels without ZIP64 metadata")
@@ -1413,11 +1597,12 @@ def _preflight_project_central_directory(project_file: _PinnedRegularFile) -> No
     if entry_count and directory_size < entry_count * 46:
         raise RuntimeError("Bambu project central directory is too small for its entry count")
     directory_boundary = eocd_offset if zip64_offset is None else zip64_offset
-    if (
-        directory_offset > directory_boundary
-        or directory_size > directory_boundary - directory_offset
+    if directory_offset > directory_boundary or directory_size != (
+        directory_boundary - directory_offset
     ):
-        raise RuntimeError("Bambu project central directory points outside the archive")
+        raise RuntimeError(
+            "Bambu project central directory does not end immediately before its ZIP trailer"
+        )
     position = directory_offset
     directory_end = directory_offset + directory_size
     actual_entries = 0
@@ -3238,8 +3423,8 @@ def _build_evidence_locked(
     args: _EvidenceArgs,
     executable_identity: _ExecutableIdentity,
 ) -> dict[str, Any]:
-    print_root = args.print_set.expanduser().resolve()
-    slice_root = args.slice_set.expanduser().resolve()
+    print_root = _absolute_path(args.print_set.expanduser())
+    slice_root = _absolute_path(args.slice_set.expanduser())
     executable = executable_identity.path
     output = _absolute_path(args.output.expanduser())
     if _path_exists_no_follow(output):
@@ -3556,7 +3741,7 @@ def _build_evidence_locked(
 
 
 def _build_evidence(args: _EvidenceArgs) -> dict[str, Any]:
-    executable = args.bambu_studio.expanduser().resolve()
+    executable = _absolute_path(args.bambu_studio.expanduser())
     with _lock_executable(executable) as executable_identity:
         return _build_evidence_locked(args, executable_identity)
 
@@ -3569,12 +3754,10 @@ def verify_bambu_project_evidence(
     bambu_studio: Path,
 ) -> dict[str, Any]:
     """Strictly reopen project archives, G-code, source bindings, and release gates."""
-    root = output_dir.expanduser().resolve()
-    print_root = print_set_dir.expanduser().resolve()
-    slice_root = slice_set_dir.expanduser().resolve()
-    executable = bambu_studio.expanduser().resolve()
-    if not executable.is_file():
-        raise RuntimeError(f"Bambu Studio executable does not exist: {executable}")
+    root = _absolute_path(output_dir.expanduser())
+    print_root = _absolute_path(print_set_dir.expanduser())
+    slice_root = _absolute_path(slice_set_dir.expanduser())
+    executable = _absolute_path(bambu_studio.expanduser())
     return verify_output(
         root,
         print_root=print_root,
