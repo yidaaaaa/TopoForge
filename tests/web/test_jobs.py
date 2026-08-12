@@ -3036,6 +3036,7 @@ def test_worker_log_creation_rejects_link_without_truncating_external(
     link_kind: str,
 ) -> None:
     manager = LocalJobManager(web_config)
+    monkeypatch.setattr(manager, "_monitor_loop", lambda: None)
     manager.start()
     try:
         monkeypatch.setattr(manager, "_start_queued_jobs", lambda: None)

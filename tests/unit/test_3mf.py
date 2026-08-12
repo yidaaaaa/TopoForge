@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 from zipfile import ZipFile
 
 import numpy as np
@@ -6,6 +7,38 @@ import pytest
 
 from topoforge.exporters.three_mf import export_3mf, inspect_3mf
 from topoforge.mesh import build_rectangular_terrain_mesh
+
+
+def test_3mf_export_fsyncs_a_writable_descriptor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_open = Path.open
+    temporary_modes: list[str] = []
+
+    def tracking_open(
+        path: Path,
+        mode: str = "r",
+        buffering: int = -1,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> Any:
+        if path.name.endswith(".tmp.3mf"):
+            temporary_modes.append(mode)
+        return original_open(path, mode, buffering, encoding, errors, newline)
+
+    monkeypatch.setattr(Path, "open", tracking_open)
+    mesh = build_rectangular_terrain_mesh(
+        np.array([[3.0, 5.0], [4.0, 7.0]]),
+        width_mm=80.0,
+        depth_mm=60.0,
+        base_thickness_mm=3.0,
+    )
+
+    export_3mf(mesh, tmp_path / "model.3mf")
+
+    assert temporary_modes == ["r+b"]
 
 
 def test_3mf_round_trip_preserves_units_dimensions_and_topology(tmp_path: Path) -> None:

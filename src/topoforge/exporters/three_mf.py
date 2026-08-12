@@ -41,7 +41,7 @@ def _write_lib3mf_model(model: Any, destination: Path) -> None:
         if writer.GetWarningCount() != 0:
             warnings = [writer.GetWarning(index) for index in range(writer.GetWarningCount())]
             raise ValueError(f"lib3mf writer emitted strict warnings: {warnings}")
-        with temporary.open("rb") as stream:
+        with temporary.open("r+b") as stream:
             os.fsync(stream.fileno())
         os.replace(temporary, destination)
     if os.name != "nt":

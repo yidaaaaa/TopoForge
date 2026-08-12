@@ -452,12 +452,12 @@ jobs:
             local source="${source_root}/${relative}"
             local destination="${evidence_root}/${relative}"
             test -f "$source" && test ! -L "$source"
-            test "$(stat -c '%h' "$source")" = "1"
+            python -c 'import os,sys; raise SystemExit(os.lstat(sys.argv[1]).st_nlink != 1)' "$source"
             mkdir -p "$(dirname -- "$destination")"
             test ! -e "$destination" && test ! -L "$destination"
             cp -- "$source" "$destination"
             test -f "$destination" && test ! -L "$destination"
-            test "$(stat -c '%h' "$destination")" = "1"
+            python -c 'import os,sys; raise SystemExit(os.lstat(sys.argv[1]).st_nlink != 1)' "$destination"
             cmp --silent "$source" "$destination"
           }
           candidate_root="${RUNNER_TEMP}/topoforge-candidate-extracted-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -676,12 +676,12 @@ jobs:
           archive_destination="dist/windows-release/${archive_filename}"
           test "$(basename -- "$archive_source")" = "$archive_filename"
           test -f "$archive_source" && test ! -L "$archive_source"
-          test "$(stat -c '%h' "$archive_source")" = "1"
+          python -c 'import os,sys; raise SystemExit(os.lstat(sys.argv[1]).st_nlink != 1)' "$archive_source"
           test "$(sha256sum "$archive_source" | cut -d' ' -f1)" = "$archive_sha256"
           mkdir dist/windows-release
           cp -- "$archive_source" "$archive_destination"
           test -f "$archive_destination" && test ! -L "$archive_destination"
-          test "$(stat -c '%h' "$archive_destination")" = "1"
+          python -c 'import os,sys; raise SystemExit(os.lstat(sys.argv[1]).st_nlink != 1)' "$archive_destination"
           test "$(sha256sum "$archive_destination" | cut -d' ' -f1)" = "$archive_sha256"
       - id: release-assets
         name: Stage release assets and checksums
@@ -714,7 +714,7 @@ jobs:
           current_sdist="dist/primary/${current_sdist_filename}"
           for source in "$current_wheel" "$current_sdist" "$release_verification_source"; do
             test -f "$source" && test ! -L "$source"
-            test "$(stat -c '%h' "$source")" = "1"
+            python -c 'import os,sys; raise SystemExit(os.lstat(sys.argv[1]).st_nlink != 1)' "$source"
           done
           if [[ "$WINDOWS_REQUIRED" != "true" && "$WINDOWS_REQUIRED" != "false" ]]; then
             echo "invalid Windows evidence requirement output" >&2
@@ -751,7 +751,7 @@ jobs:
               "topoforge-${version}-windows-x64-portable.zip"
             for source in "$portable_archive_source" "$windows_evidence_source"; do
               test -f "$source" && test ! -L "$source"
-              test "$(stat -c '%h' "$source")" = "1"
+              python -c 'import os,sys; raise SystemExit(os.lstat(sys.argv[1]).st_nlink != 1)' "$source"
             done
             test "$(sha256sum "$portable_archive_source" | cut -d' ' -f1)" = \
               "$portable_archive_sha256"
@@ -845,13 +845,13 @@ jobs:
 
           checksums_path="${release_root}/SHA256SUMS"
           test -f "$checksums_path" && test ! -L "$checksums_path"
-          test "$(stat -c '%h' "$checksums_path")" = "1"
+          python -c 'import os,sys; raise SystemExit(os.lstat(sys.argv[1]).st_nlink != 1)' "$checksums_path"
           test "$(sha256sum "$checksums_path" | cut -d' ' -f1)" = \
             "$CHECKSUMS_SHA256"
           for filename in "${asset_filenames[@]}"; do
             asset_path="${release_root}/${filename}"
             test -f "$asset_path" && test ! -L "$asset_path"
-            test "$(stat -c '%h' "$asset_path")" = "1"
+            python -c 'import os,sys; raise SystemExit(os.lstat(sys.argv[1]).st_nlink != 1)' "$asset_path"
           done
           test "$(sha256sum "${release_root}/${current_wheel_filename}" | cut -d' ' -f1)" = \
             "$current_wheel_sha256"

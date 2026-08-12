@@ -2275,6 +2275,8 @@ def test_evidence_schema_and_release_workflow_are_hard_blockers() -> None:
     assert 'find "$release_root" -mindepth 1 -maxdepth 1' in publish_assets
     assert 'cmp --silent SHA256SUMS "$expected_checksums"' in publish_assets
     assert '"${asset_filenames[@]}" SHA256SUMS' in publish_assets
+    assert "stat -c" not in workflow_text
+    assert workflow_text.count("os.lstat(sys.argv[1]).st_nlink") == 8
     assert "dist/release/*" not in publish_assets
     assert 'gh release create "$RELEASE_TAG"' in publish_assets
     assert "release_contract_supported" in workflow_text[: workflow_text.index("ref: ${{")]
