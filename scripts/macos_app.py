@@ -316,7 +316,8 @@ def bundle_entries(app_root: Path, *, bounds: dict[str, Any]) -> list[dict[str, 
         with os.scandir(directory) as iterator:
             children = sorted(iterator, key=lambda item: item.name)
         for child in children:
-            relative = PurePosixPath(APP_ROOT) / child.path[len(str(app_root)) + 1 :]
+            local_relative = Path(child.path).relative_to(app_root)
+            relative = PurePosixPath(APP_ROOT, *local_relative.parts)
             relative = safe_relative_path(relative.as_posix())
             result = child.stat(follow_symlinks=False)
             if child.is_dir(follow_symlinks=False):

@@ -976,6 +976,19 @@ def _stable_stat_fields(result: os.stat_result) -> tuple[int, int, int, int, int
     )
 
 
+def _stable_file_content_fields(
+    result: os.stat_result,
+) -> tuple[int, int, int, int, int, int]:
+    return (
+        result.st_dev,
+        result.st_ino,
+        stat.S_IFMT(result.st_mode),
+        result.st_size,
+        result.st_mtime_ns,
+        result.st_nlink,
+    )
+
+
 def _tree_inventory(root: Path, *, context: str) -> tuple[int, int, str]:
     """Hash one no-follow regular-file tree and reject hard links or special files."""
     records: list[dict[str, object]] = []
@@ -1038,7 +1051,7 @@ def _tree_inventory(root: Path, *, context: str) -> tuple[int, int, str]:
         try:
             with path.open("rb") as stream:
                 opened = os.fstat(stream.fileno())
-                if _stable_stat_fields(opened) != _stable_stat_fields(before):
+                if _stable_file_content_fields(opened) != _stable_file_content_fields(before):
                     raise ConfigurationError(f"{context} changed while it was opened: {path}")
                 while block := stream.read(1024 * 1024):
                     digest.update(block)
@@ -1051,7 +1064,7 @@ def _tree_inventory(root: Path, *, context: str) -> tuple[int, int, str]:
             raise ConfigurationError(f"{context} changed while it was inspected: {path}") from None
         if (
             stat_result_is_link_like(after)
-            or _stable_stat_fields(finished) != _stable_stat_fields(before)
+            or _stable_stat_fields(finished) != _stable_stat_fields(opened)
             or _stable_stat_fields(after) != _stable_stat_fields(before)
         ):
             raise ConfigurationError(f"{context} changed while it was inspected: {path}")

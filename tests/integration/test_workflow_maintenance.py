@@ -236,6 +236,42 @@ def test_cleanup_plan_binds_same_size_file_content(
     assert marker.read_bytes() == b"BBBB"
 
 
+def test_cleanup_inventory_accepts_path_handle_ctime_representation_drift(
+    tmp_path: Path,
+    completed_workflow_workspace: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _copy_completed_workspace(completed_workflow_workspace, tmp_path)
+    stale = workspace / "stages" / "10-build" / "stale-ctime-view"
+    stale.mkdir()
+    marker = stale / "marker.bin"
+    marker.write_bytes(b"content-bound")
+    original_lstat = Path.lstat
+
+    class FileCtimeView:
+        def __init__(self, original: os.stat_result) -> None:
+            self._original = original
+
+        @property
+        def st_ctime_ns(self) -> int:
+            return self._original.st_ctime_ns - 1
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._original, name)
+
+    def lstat_with_handle_api_ctime_drift(self: Path) -> os.stat_result:
+        result = original_lstat(self)
+        if self == marker:
+            return FileCtimeView(result)  # type: ignore[return-value]
+        return result
+
+    monkeypatch.setattr(Path, "lstat", lstat_with_handle_api_ctime_drift)
+
+    plan = plan_workflow_cleanup(workspace)
+
+    assert any(candidate.path.endswith("stale-ctime-view") for candidate in plan.candidates)
+
+
 def test_cleanup_quarantine_ignores_directory_allocation_size_drift(
     tmp_path: Path,
     completed_workflow_workspace: Path,
