@@ -36,6 +36,7 @@ from topoforge.web.processes import (
     process_identity,
     process_is_alive,
     terminate_process_tree,
+    worker_interpreter_launch,
     worker_process_options,
 )
 from topoforge.workflow import WorkflowLaunchConfig
@@ -231,7 +232,7 @@ def _server_command(
     config: WebAppConfig,
     port: int,
     hosted_server: bool,
-) -> tuple[list[str], dict[str, Any], dict[str, Any]]:
+) -> tuple[list[str], dict[str, str], dict[str, Any], dict[str, Any]]:
     arguments = [
         "--host",
         "127.0.0.1",
@@ -247,7 +248,10 @@ def _server_command(
         "1",
         "--no-open",
     ]
+    environment = {**os.environ, "PYTHONUTF8": "1", "PYTHONNOUSERSITE": "1"}
     if platform.system() == "Windows":
+        interpreter, interpreter_environment = worker_interpreter_launch()
+        environment.update(interpreter_environment)
         process_options: dict[str, Any] = {
             "creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
         }
@@ -290,7 +294,7 @@ def _server_command(
                 "launcher_no_open": True,
             }
         command = [
-            sys.executable,
+            interpreter,
             "-I",
             "-X",
             "utf8",
@@ -313,7 +317,7 @@ def _server_command(
             "sha256": None,
             "launcher_no_open": True,
         }
-    return command, process_options, launcher_record
+    return command, environment, process_options, launcher_record
 
 
 def _stop_server(
@@ -595,7 +599,7 @@ def _real_http_web_acceptance(
 ) -> dict[str, Any]:
     port = _free_loopback_port()
     base_url = f"http://127.0.0.1:{port}"
-    command, process_options, launcher_record = _server_command(
+    command, environment, process_options, launcher_record = _server_command(
         web_launcher=web_launcher,
         config=config,
         port=port,
@@ -610,7 +614,7 @@ def _real_http_web_acceptance(
             subprocess.Popen(
                 command,
                 cwd=(web_launcher.resolve().parent if web_launcher is not None else Path.cwd()),
-                env={**os.environ, "PYTHONUTF8": "1", "PYTHONNOUSERSITE": "1"},
+                env=environment,
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,
@@ -840,11 +844,12 @@ def _run_windows_containment_mode(
     launched_group: int | None = None
     record: dict[str, Any] | None = None
     try:
+        interpreter, interpreter_environment = worker_interpreter_launch()
         launched_process = cast(
             "subprocess.Popen[bytes]",
             subprocess.Popen(
                 [
-                    sys.executable,
+                    interpreter,
                     "-I",
                     "-X",
                     "utf8",
@@ -854,7 +859,12 @@ def _run_windows_containment_mode(
                     str(record_path),
                 ],
                 cwd=probe_root,
-                env={**os.environ, "PYTHONUTF8": "1", "PYTHONNOUSERSITE": "1"},
+                env={
+                    **os.environ,
+                    "PYTHONUTF8": "1",
+                    "PYTHONNOUSERSITE": "1",
+                    **interpreter_environment,
+                },
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -1162,11 +1172,12 @@ def _complete_recover_backup_restore(config: WebAppConfig) -> dict[str, Any]:
 
 class _SlowJobManager(LocalJobManager):
     def _start_job(self, record: JobRecord) -> None:
+        interpreter, interpreter_environment = worker_interpreter_launch()
         process = cast(
             "subprocess.Popen[bytes]",
             subprocess.Popen(
                 [
-                    sys.executable,
+                    interpreter,
                     "-I",
                     "-X",
                     "utf8",
@@ -1174,6 +1185,7 @@ class _SlowJobManager(LocalJobManager):
                     "import time; time.sleep(300)",
                 ],
                 cwd=self.config.workspace_root,
+                env={**os.environ, **interpreter_environment},
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,

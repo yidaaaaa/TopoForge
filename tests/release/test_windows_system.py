@@ -5,7 +5,6 @@ import io
 import json
 import platform
 import socket
-import sys
 import urllib.parse
 from pathlib import Path
 
@@ -111,8 +110,15 @@ def test_windows_server_command_wraps_candidate_launcher_in_kill_on_close_job(
         input_roots=(inputs,),
     )
     monkeypatch.setattr(system_verifier.platform, "system", lambda: "Windows")
+    redirector = r"C:\hostedtoolcache\venv\Scripts\python.exe"
+    base_interpreter = r"C:\hostedtoolcache\Python\3.12\python.exe"
+    monkeypatch.setattr(
+        system_verifier,
+        "worker_interpreter_launch",
+        lambda: (base_interpreter, {"__PYVENV_LAUNCHER__": redirector}),
+    )
 
-    command, options, record = system_verifier._server_command(
+    command, environment, options, record = system_verifier._server_command(
         web_launcher=launcher,
         config=config,
         port=8123,
@@ -120,7 +126,7 @@ def test_windows_server_command_wraps_candidate_launcher_in_kill_on_close_job(
     )
 
     assert command[:6] == [
-        sys.executable,
+        base_interpreter,
         "-I",
         "-X",
         "utf8",
@@ -138,6 +144,7 @@ def test_windows_server_command_wraps_candidate_launcher_in_kill_on_close_job(
     assert options == {
         "creationflags": getattr(system_verifier.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200)
     }
+    assert environment["__PYVENV_LAUNCHER__"] == redirector
     assert record["kind"] == "candidate-batch-launcher"
     assert record["containment"] == "kill-on-close-job-wrapper"
     assert record["contained_process_tree"] is True
