@@ -1120,10 +1120,7 @@ class _SemanticBambuRunner:
                 _SEMANTIC_GCODE.encode("utf-8"),
                 model_xml=_semantic_model_xml(dimensions, triangle_count),
             )
-        output_dir.joinpath("plate_1.gcode").write_text(
-            _SEMANTIC_GCODE,
-            encoding="utf-8",
-        )
+        output_dir.joinpath("plate_1.gcode").write_bytes(_SEMANTIC_GCODE.encode("utf-8"))
         output_dir.joinpath("result.json").write_text(
             json.dumps(_semantic_result(dimensions, triangle_count)),
             encoding="utf-8",

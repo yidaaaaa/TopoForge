@@ -89,9 +89,10 @@ def _json_object(path: Path) -> dict[str, Any]:
 
 
 def _write_canonical(path: Path, value: dict[str, Any]) -> None:
-    path.write_text(
-        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
-        encoding="utf-8",
+    path.write_bytes(
+        (
+            json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode("utf-8")
     )
 
 
