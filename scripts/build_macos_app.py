@@ -346,6 +346,37 @@ def _extract_framework(
         shutil.rmtree(signature)
 
 
+def _remove_source_only_runtime_entries(framework: Path, config: dict[str, Any]) -> None:
+    """Remove the pinned upstream Intel-only and build-time payload entries."""
+    for name in config["python_runtime"]["source_only_paths"]:
+        relative = safe_relative_path(name)
+        candidate = framework.joinpath(*relative.parts)
+        try:
+            metadata = candidate.lstat()
+        except FileNotFoundError as exc:
+            raise ValueError(
+                f"official CPython source-only payload entry is missing: {name}"
+            ) from exc
+        if not (stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode)):
+            raise ValueError(f"official CPython source-only payload entry is unsafe: {name}")
+        candidate.unlink()
+
+        # The pinned python.org payload stores AppleDouble records beside some
+        # build-time objects. pkgutil may materialize them as files or consume
+        # them as metadata, so remove them only when they remain regular files.
+        apple_double = candidate.with_name(f"._{candidate.name}")
+        try:
+            sidecar_metadata = apple_double.lstat()
+        except FileNotFoundError:
+            continue
+        if not stat.S_ISREG(sidecar_metadata.st_mode):
+            raise ValueError(
+                f"official CPython source-only metadata entry is unsafe: "
+                f"{apple_double.relative_to(framework).as_posix()}"
+            )
+        apple_double.unlink()
+
+
 def _is_macho(path: Path) -> bool:
     with path.open("rb") as handle:
         magic = handle.read(4)
@@ -689,6 +720,7 @@ def build_macos_app(
             config,
             scratch_root=temporary,
         )
+        _remove_source_only_runtime_entries(framework, config)
         site_packages = (
             framework
             / "Versions"

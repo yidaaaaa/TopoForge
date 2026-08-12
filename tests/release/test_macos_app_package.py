@@ -212,6 +212,31 @@ def test_runtime_extraction_uses_the_official_framework_component_payload(
     assert not (destination / "PackageInfo").exists()
 
 
+def test_builder_removes_only_the_pinned_source_only_runtime_entries(tmp_path: Path) -> None:
+    config = _config()
+    framework = tmp_path / "Python.framework"
+    source_only_paths = config["python_runtime"]["source_only_paths"]
+    retained = framework / "Versions/3.12/bin/python3.12"
+    _write_file(retained, _fat_universal2_macho(), 0o755)
+
+    for name in source_only_paths:
+        path = framework.joinpath(*PurePosixPath(name).parts)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if name.endswith("/python3-intel64"):
+            path.symlink_to("python3.12-intel64")
+        else:
+            path.write_bytes(b"source-only fixture")
+            path.with_name(f"._{path.name}").write_bytes(b"AppleDouble fixture")
+
+    builder._remove_source_only_runtime_entries(framework, config)
+
+    assert retained.is_file()
+    for name in source_only_paths:
+        path = framework.joinpath(*PurePosixPath(name).parts)
+        assert not os.path.lexists(path)
+        assert not os.path.lexists(path.with_name(f"._{path.name}"))
+
+
 def _fixture_archive(
     root: Path,
     *,
@@ -470,6 +495,15 @@ def test_runtime_identity_is_exactly_pinned_to_official_cpython_31210() -> None:
         "architecture": "arm64",
         "minimum_macos": "11.0",
     }
+    assert runtime["source_only_paths"] == [
+        "Versions/3.12/bin/python3-intel64",
+        "Versions/3.12/bin/python3.12-intel64",
+        "Versions/3.12/lib/itcl4.3.2/libitclstub4.3.2.a",
+        "Versions/3.12/lib/libtclstub8.6.a",
+        "Versions/3.12/lib/libtkstub8.6.a",
+        "Versions/3.12/lib/python3.12/config-3.12-darwin/python.o",
+        "Versions/3.12/lib/tdbc1.1.10/libtdbcstub1.1.10.a",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -494,6 +528,16 @@ def test_runtime_config_rejects_any_pinned_identity_drift(
     path.write_text(json.dumps(raw), encoding="utf-8")
 
     with pytest.raises(ValueError, match="pinned CPython runtime identity changed"):
+        load_config(path)
+
+
+def test_runtime_config_rejects_source_only_payload_drift(tmp_path: Path) -> None:
+    raw = json.loads(_config_path().read_text(encoding="utf-8"))
+    raw["python_runtime"]["source_only_paths"].pop()
+    path = tmp_path / "runtime.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="source-only payload identity changed"):
         load_config(path)
 
 

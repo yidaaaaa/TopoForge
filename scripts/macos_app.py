@@ -70,6 +70,15 @@ _PINNED_EMBEDDED_PRIMARY_MACHO = {
     "architecture": "arm64",
     "minimum_macos": "11.0",
 }
+_PINNED_SOURCE_ONLY_PATHS = [
+    "Versions/3.12/bin/python3-intel64",
+    "Versions/3.12/bin/python3.12-intel64",
+    "Versions/3.12/lib/itcl4.3.2/libitclstub4.3.2.a",
+    "Versions/3.12/lib/libtclstub8.6.a",
+    "Versions/3.12/lib/libtkstub8.6.a",
+    "Versions/3.12/lib/python3.12/config-3.12-darwin/python.o",
+    "Versions/3.12/lib/tdbc1.1.10/libtdbcstub1.1.10.a",
+]
 
 
 def sha256_file(path: Path) -> str:
@@ -178,6 +187,9 @@ def load_config(path: Path) -> dict[str, Any]:
         raise ValueError("official CPython universal2 Mach-O identity changed")
     if runtime.get("embedded_primary_macho") != _PINNED_EMBEDDED_PRIMARY_MACHO:
         raise ValueError("embedded CPython arm64 Mach-O identity changed")
+    if runtime.get("source_only_paths") != _PINNED_SOURCE_ONLY_PATHS:
+        raise ValueError("official CPython source-only payload identity changed")
+
     if PurePosixPath(runtime["archive_name"]).name != runtime["archive_name"]:
         raise ValueError("python_runtime.archive_name must be a filename")
 

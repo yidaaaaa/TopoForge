@@ -43,7 +43,16 @@
     "embedded_primary_macho": {
       "architecture": "arm64",
       "minimum_macos": "11.0"
-    }
+    },
+    "source_only_paths": [
+      "Versions/3.12/bin/python3-intel64",
+      "Versions/3.12/bin/python3.12-intel64",
+      "Versions/3.12/lib/itcl4.3.2/libitclstub4.3.2.a",
+      "Versions/3.12/lib/libtclstub8.6.a",
+      "Versions/3.12/lib/libtkstub8.6.a",
+      "Versions/3.12/lib/python3.12/config-3.12-darwin/python.o",
+      "Versions/3.12/lib/tdbc1.1.10/libtdbcstub1.1.10.a"
+    ]
   },
   "bounds": {
     "runtime_archive_max_bytes": 52428800,
