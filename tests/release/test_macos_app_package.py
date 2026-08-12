@@ -152,6 +152,66 @@ def test_runtime_extraction_uses_an_existing_scratch_root_outside_the_app(
         )
 
 
+def test_runtime_extraction_uses_the_official_framework_component_payload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = tmp_path / "python.pkg"
+    runtime.write_bytes(b"fixture")
+    destination = tmp_path / "TopoForge.app/Contents/Frameworks/Python.framework"
+    scratch_root = tmp_path / "private scratch"
+    config = _config()
+    framework_version = config["python_runtime"]["framework_version"]
+
+    def expand_fixture(
+        command: list[str],
+        *,
+        cwd: Path,
+        environment: dict[str, str],
+    ) -> dict[str, Any]:
+        del command, cwd, environment
+        component = scratch_root / "expanded-pkg/Python_Framework.pkg"
+        payload = component / "Payload"
+        primary = payload / "Versions" / framework_version / "Python"
+        _write_file(primary, b"universal2 fixture", 0o755)
+        _write_file(
+            component / "PackageInfo",
+            (
+                b'<?xml version="1.0" encoding="utf-8"?>\n'
+                b'<pkg-info identifier="org.python.Python.PythonFramework-3.12" '
+                b'install-location="/Library/Frameworks/Python.framework"/>\n'
+            ),
+        )
+        _write_file(
+            payload / "Versions" / framework_version / "_CodeSignature/CodeResources",
+            b"upstream signature fixture",
+        )
+        return {}
+
+    monkeypatch.setattr(builder, "_run", expand_fixture)
+    monkeypatch.setattr(
+        builder,
+        "macho_slices",
+        lambda _path: [
+            {"architecture": "x86_64", "minimum_macos": "10.13"},
+            {"architecture": "arm64", "minimum_macos": "11.0"},
+        ],
+    )
+
+    builder._extract_framework(
+        runtime,
+        destination,
+        config,
+        scratch_root=scratch_root,
+    )
+
+    assert (destination / "Versions" / framework_version / "Python").read_bytes() == (
+        b"universal2 fixture"
+    )
+    assert not (destination / "Versions" / framework_version / "_CodeSignature").exists()
+    assert not (destination / "PackageInfo").exists()
+
+
 def _fixture_archive(
     root: Path,
     *,

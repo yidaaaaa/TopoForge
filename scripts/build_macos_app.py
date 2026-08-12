@@ -18,6 +18,7 @@ import zipfile
 from email.parser import Parser
 from pathlib import Path, PurePosixPath
 from typing import Any
+from xml.etree import ElementTree
 
 if __package__:
     from scripts.macos_app import (
@@ -300,15 +301,35 @@ def _extract_framework(
         environment=os.environ.copy(),
     )
     runtime = config["python_runtime"]
-    candidates = sorted(
-        expanded.rglob(f"Python.framework/Versions/{runtime['framework_version']}/Python")
-    )
-    if len(candidates) != 1:
+    components = sorted(expanded.rglob("Python_Framework.pkg"))
+    expected_component = expanded / "Python_Framework.pkg"
+    if components != [expected_component] or not expected_component.is_dir():
         raise ValueError(
-            "official CPython package must contain exactly one Python.framework payload; "
-            f"found {len(candidates)}"
+            "official CPython package must contain exactly one top-level "
+            "Python_Framework.pkg component"
         )
-    source_primary = candidates[0]
+    package_info = expected_component / "PackageInfo"
+    if not package_info.is_file() or package_info.is_symlink():
+        raise ValueError("official CPython framework component has no regular PackageInfo")
+    try:
+        package_root = ElementTree.parse(package_info).getroot()
+    except ElementTree.ParseError as exc:
+        raise ValueError("official CPython framework PackageInfo is invalid XML") from exc
+    framework_version = runtime["framework_version"]
+    if (
+        package_root.tag != "pkg-info"
+        or package_root.get("identifier")
+        != f"org.python.Python.PythonFramework-{framework_version}"
+        or package_root.get("install-location") != "/Library/Frameworks/Python.framework"
+    ):
+        raise ValueError("official CPython framework PackageInfo identity changed")
+
+    # pkgutil --expand-full materializes the component payload at Payload/;
+    # its PackageInfo install-location supplies the Python.framework wrapper.
+    framework = expected_component / "Payload"
+    source_primary = framework / "Versions" / framework_version / "Python"
+    if not source_primary.is_file() or source_primary.is_symlink():
+        raise ValueError("official CPython framework payload has no regular primary Mach-O")
     expected = runtime["source_primary_macho"]
     slices = macho_slices(source_primary)
     if [item["architecture"] for item in slices] != expected["architectures"]:
@@ -317,7 +338,6 @@ def _extract_framework(
         "minimum_macos"
     ]:
         raise ValueError("official CPython primary Mach-O deployment identity changed")
-    framework = source_primary.parents[2]
     shutil.copytree(framework, destination, symlinks=True)
     signature = destination / "Versions" / runtime["framework_version"] / "_CodeSignature"
     if signature.exists():
