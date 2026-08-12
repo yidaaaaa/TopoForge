@@ -158,6 +158,8 @@ jobs:
           Write-Output "::error title=Windows core acceptance::$message"
       - id: windows-system
         name: Run Windows Web lifecycle and recovery acceptance
+        env:
+          TOPOFORGE_CI_TRACEBACK: "1"
         run: >-
           uv run python scripts/verify_windows_system.py
           --require-windows

@@ -460,6 +460,7 @@ def test_windows_core_ci_contract() -> None:
     jobs = workflow["jobs"]
     windows = jobs["windows-core"]
     windows_steps = json.dumps(windows["steps"], sort_keys=True)
+    windows_system = next(step for step in windows["steps"] if step.get("id") == "windows-system")
 
     assert jobs["quality"]["runs-on"] == "ubuntu-22.04"
     assert jobs["release"]["needs"] == "quality"
@@ -471,6 +472,7 @@ def test_windows_core_ci_contract() -> None:
     assert "::error title=Windows core acceptance" in windows_steps
     assert "ci-windows-x64-core.json" in windows_steps
     assert "scripts/verify_windows_system.py" in windows_steps
+    assert windows_system["env"]["TOPOFORGE_CI_TRACEBACK"] == "1"
     assert "Report Windows system acceptance failure" in windows_steps
     assert "::error title=Windows system acceptance" in windows_steps
     assert "failure() && steps.windows-system.outcome == 'failure'" in windows_steps

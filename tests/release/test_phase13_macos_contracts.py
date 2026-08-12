@@ -123,6 +123,7 @@ def test_native_macos_ci_uses_only_frozen_arm64_runner_labels() -> None:
     job = workflow["jobs"]["native-arm64"]
     runners = {item["runner"] for item in job["strategy"]["matrix"]["include"]}
     step_runs = {step.get("name"): step.get("run") for step in job["steps"]}
+    steps_by_name = {step.get("name"): step for step in job["steps"]}
 
     assert runners == {"macos-15", "macos-26"}
     assert job["env"]["MACOSX_DEPLOYMENT_TARGET"] == "15.0"
@@ -131,6 +132,10 @@ def test_native_macos_ci_uses_only_frozen_arm64_runner_labels() -> None:
     assert step_runs["Run Pyright gate"] == "uv run pyright"
     assert step_runs["Run release regression suite"] == "uv run pytest tests/release"
     assert step_runs["Run slicer regression suite"] == "uv run pytest tests/slicer"
+    assert steps_by_name["Run slicer regression suite"]["env"]["PYTEST_ADDOPTS"] == (
+        "--junitxml=artifacts/logs/macos-${{ matrix.runner }}-slicer-pytest.xml --tb=short"
+    )
+    assert "scripts/report_pytest_failure.py" in step_runs["Report slicer regression failure"]
     assert step_runs["Run unit regression suite"] == "uv run pytest tests/unit"
     assert step_runs["Run Web API regression suite"] == "uv run pytest tests/web/test_api.py"
     assert step_runs["Run recovered Web job cancellation regression"] == (
