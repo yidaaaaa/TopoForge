@@ -475,6 +475,7 @@ def test_windows_core_ci_contract() -> None:
     assert windows_system["env"]["TOPOFORGE_CI_TRACEBACK"] == "1"
     assert "Report Windows system acceptance failure" in windows_steps
     assert "::error title=Windows system acceptance" in windows_steps
+    assert "$message.Substring($message.Length - 3600)" in windows_steps
     assert "failure() && steps.windows-system.outcome == 'failure'" in windows_steps
     assert "--require-windows" in windows_steps
     assert "ci-windows-x64-system.json" in windows_steps

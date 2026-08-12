@@ -589,6 +589,7 @@ def test_live_posix_termination_refuses_missing_creation_identity(
 def test_orphaned_live_posix_group_blocks_terminal_reconciliation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(processes.sys, "platform", "linux")
     monkeypatch.setattr(processes, "process_is_alive", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(
         processes,
@@ -610,6 +611,7 @@ def test_live_posix_containment_mismatch_blocks_recovery(
     monkeypatch: pytest.MonkeyPatch,
     recorded_group: int | None,
 ) -> None:
+    monkeypatch.setattr(processes.sys, "platform", "linux")
     monkeypatch.setattr(processes, "process_is_alive", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         processes,
@@ -636,6 +638,7 @@ def test_live_containment_reports_unavailable_identity_inspection(
     monkeypatch: pytest.MonkeyPatch,
     identity_failure: OSError | None,
 ) -> None:
+    monkeypatch.setattr(processes.sys, "platform", "linux")
     monkeypatch.setattr(processes, "process_is_alive", lambda *_args, **_kwargs: True)
 
     def inspect_identity(*_args: object, **_kwargs: object) -> str | None:

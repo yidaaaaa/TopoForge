@@ -181,6 +181,10 @@ jobs:
             exit 0
           }
           $message = "{0}: {1}" -f $report.error.type, $report.error.message
+          if ($message.Length -gt 3800) {
+            $tail = $message.Substring($message.Length - 3600)
+            $message = "{0}: [tail of bounded failure detail]`n{1}" -f $report.error.type, $tail
+          }
           $message = $message.Replace("%", "%25").Replace("`r", "%0D").Replace("`n", "%0A")
           Write-Output "::error title=Windows system acceptance::$message"
       - id: windows-pytest
