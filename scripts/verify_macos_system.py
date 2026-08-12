@@ -18,6 +18,8 @@ from typing import Any
 
 import jsonschema
 
+from topoforge.raster.sampling import triangle_count_for_shape
+
 if __package__:
     from scripts.macos_app import (
         CLI_LAUNCHER_PATH,
@@ -49,6 +51,7 @@ TERMINAL_STATES = {"completed", "failed", "cancelled"}
 EVIDENCE_SCHEMA = (
     Path(__file__).resolve().parents[1] / "packaging" / ("macos-app-evidence.schema.json")
 )
+_RECOVERY_RASTER_SHAPE = (768, 768)
 
 
 def _free_loopback_port() -> int:
@@ -212,6 +215,16 @@ def _job_request(source: Path, workspace: Path, *, cells: int, triangles: int) -
             "slicing_enabled": False,
         }
     }
+
+
+def _recovery_job_request(source: Path, workspace: Path) -> dict[str, Any]:
+    cells = _RECOVERY_RASTER_SHAPE[0] * _RECOVERY_RASTER_SHAPE[1]
+    return _job_request(
+        source,
+        workspace,
+        cells=cells,
+        triangles=triangle_count_for_shape(_RECOVERY_RASTER_SHAPE),
+    )
 
 
 def _wait_job(base_url: str, job_id: str, *, timeout: float) -> dict[str, Any]:
@@ -426,9 +439,9 @@ def verify_web_lifecycle(
                 "--terrain",
                 "gaussian-hill",
                 "--rows",
-                "768",
+                str(_RECOVERY_RASTER_SHAPE[0]),
                 "--columns",
-                "768",
+                str(_RECOVERY_RASTER_SHAPE[1]),
                 "--pixel-size-m",
                 "20",
             ],
@@ -436,11 +449,9 @@ def verify_web_lifecycle(
             environment=environment,
         )
         commands.append(command)
-        recovery_request = _job_request(
+        recovery_request = _recovery_job_request(
             recovery_dem,
             root / "workspaces" / "restart recovery job",
-            cells=700_000,
-            triangles=1_500_000,
         )
         recovery, _headers = _http(
             base_url, "/api/v1/jobs", method="POST", payload=recovery_request

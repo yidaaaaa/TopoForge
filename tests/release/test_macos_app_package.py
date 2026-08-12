@@ -46,13 +46,17 @@ from scripts.macos_app import (
 )
 from scripts.verify_macos_app import verify_macos_app
 from scripts.verify_macos_system import (
+    _RECOVERY_RASTER_SHAPE,
     SYSTEM_SCHEMA_VERSION,
+    _recovery_job_request,
     _strict_artifact_reopen_passed,
     validate_evidence_report,
     verify_macos_system,
 )
 
+from topoforge.models import BuildConfig
 from topoforge.platform_paths import macos_application_data_root
+from topoforge.raster.sampling import resolve_sampling_decision, triangle_count_for_shape
 
 
 def _repository_root() -> Path:
@@ -986,6 +990,21 @@ def test_strict_packaged_artifact_reopen_uses_role_contracts() -> None:
         _strict_artifact_reopen_passed("model_3mf", {**three_mf, "strict_warning_count": 1})
     )
     assert not _strict_artifact_reopen_passed("unknown", {})
+
+
+def test_recovery_probe_strict_budget_accepts_its_full_source_grid(tmp_path: Path) -> None:
+    request = _recovery_job_request(tmp_path / "source.tif", tmp_path / "workspace")
+    config = BuildConfig.model_validate(request["launch"]["build"])
+
+    decision = resolve_sampling_decision(
+        _RECOVERY_RASTER_SHAPE,
+        ground_width_m=1.0,
+        ground_depth_m=1.0,
+        config=config,
+    )
+
+    assert decision.target_shape == _RECOVERY_RASTER_SHAPE
+    assert decision.estimated_triangle_count == triangle_count_for_shape(_RECOVERY_RASTER_SHAPE)
 
 
 def test_evidence_schema_accepts_hosted_package_and_clean_scope_fixture(
