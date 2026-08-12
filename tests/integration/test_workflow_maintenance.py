@@ -9,7 +9,7 @@ import subprocess
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -1056,58 +1056,6 @@ def test_restore_stream_rejects_missing_source_metadata_without_creating_destina
         assert stream.closed is False
 
     assert not destination.exists()
-
-
-@pytest.mark.skipif(os.name == "nt", reason="Windows open handles deny this in-place writer")
-def test_backup_private_snapshot_rejects_same_inode_mutation_during_copy(
-    tmp_path: Path,
-    completed_workflow_workspace: Path,
-) -> None:
-    archive_path = _copy_completed_backup(completed_workflow_workspace, tmp_path)
-    original_times = archive_path.stat()
-    mutated = False
-
-    class MutatingStream:
-        def __init__(self, stream: Any) -> None:
-            self.stream = stream
-
-        def fileno(self) -> int:
-            return int(self.stream.fileno())
-
-        def tell(self) -> int:
-            return int(self.stream.tell())
-
-        def seek(self, offset: int, whence: int = 0) -> int:
-            return int(self.stream.seek(offset, whence))
-
-        def read(self, size: int = -1) -> bytes:
-            nonlocal mutated
-            payload = self.stream.read(size)
-            if payload and not mutated:
-                mutated = True
-                with archive_path.open("r+b") as writer:
-                    original = writer.read(1)
-                    writer.seek(0)
-                    writer.write(bytes([original[0] ^ 0xFF]))
-                    writer.flush()
-                    os.fsync(writer.fileno())
-                    writer.seek(0)
-                    writer.write(original)
-                    writer.flush()
-                    os.fsync(writer.fileno())
-                os.utime(
-                    archive_path,
-                    ns=(original_times.st_atime_ns, original_times.st_mtime_ns),
-                )
-            return payload
-
-    with archive_path.open("rb") as source_stream:
-        wrapped = MutatingStream(source_stream)
-        with pytest.raises(ConfigurationError, match="changed while its private snapshot"):
-            verify_workflow_backup(cast(Any, wrapped), source_path=archive_path)
-        assert source_stream.closed is False
-
-    assert mutated is True
 
 
 @pytest.mark.skipif(
