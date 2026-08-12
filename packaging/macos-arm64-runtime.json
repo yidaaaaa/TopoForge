@@ -1,0 +1,58 @@
+{
+  "schema_version": "topoforge-macos-arm64-runtime-v1",
+  "target": {
+    "os": "macOS",
+    "architecture": "arm64",
+    "deployment_target": "15.0",
+    "candidate_major_versions": [
+      15,
+      26
+    ],
+    "unsupported_0_12_x": [
+      "macOS 14",
+      "Intel x86_64",
+      "preview macOS releases"
+    ]
+  },
+  "python_runtime": {
+    "implementation": "CPython",
+    "version": "3.12.10",
+    "abi": "cp312",
+    "provider": "Python Software Foundation",
+    "release_page_url": "https://www.python.org/downloads/release/python-31210/",
+    "archive_name": "python-3.12.10-macos11.pkg",
+    "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg",
+    "sigstore_url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg.sigstore",
+    "sha256": "8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4",
+    "bytes": 45720356,
+    "archive_kind": "python.org macOS 64-bit universal2 installer",
+    "source_architecture": "universal2",
+    "embedded_architecture": "arm64",
+    "upstream_minimum_macos": "10.13",
+    "framework_version": "3.12",
+    "source_primary_macho": {
+      "architectures": [
+        "x86_64",
+        "arm64"
+      ],
+      "minimum_macos": {
+        "x86_64": "10.13",
+        "arm64": "11.0"
+      }
+    },
+    "embedded_primary_macho": {
+      "architecture": "arm64",
+      "minimum_macos": "11.0"
+    }
+  },
+  "bounds": {
+    "runtime_archive_max_bytes": 52428800,
+    "bundle_member_max_bytes": 314572800,
+    "bundle_member_count_max": 30000,
+    "bundle_uncompressed_max_bytes": 1610612736,
+    "archive_max_bytes": 805306368,
+    "manifest_max_bytes": 16777216,
+    "evidence_max_bytes": 16777216
+  },
+  "source_date_epoch": 1744070400
+}

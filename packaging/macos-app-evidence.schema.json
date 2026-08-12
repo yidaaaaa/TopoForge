@@ -1,0 +1,576 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://topoforge.local/schemas/macos-app-evidence-v1.json",
+  "title": "TopoForge Phase 13A unsigned macOS arm64 app evidence",
+  "description": "A source-, runtime-, lock-, payload-, archive-, OS-, and architecture-bound packaged-app acceptance report. Hosted-package scope is never clean-system, signing, notarization, quarantine/Gatekeeper, public-support, or Bambu Studio evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "package_role",
+    "evidence_scope",
+    "target_id",
+    "host",
+    "source",
+    "archive",
+    "app_payload_sha256",
+    "archive_verification",
+    "web_lifecycle",
+    "package_evidence",
+    "hosted_package_evidence",
+    "clean_system_evidence",
+    "signed",
+    "notarized",
+    "quarantine_first_launch_evidence",
+    "gatekeeper_evidence",
+    "bambu_phase13b_evidence",
+    "public_support_status",
+    "required_checks_passed"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "topoforge-macos-system-acceptance-v1"
+    },
+    "package_role": {
+      "const": "phase13a-macos-arm64-unsigned-candidate"
+    },
+    "evidence_scope": {
+      "enum": [
+        "hosted-package",
+        "clean-system"
+      ]
+    },
+    "target_id": {
+      "enum": [
+        "macos-15-arm64",
+        "macos-26-arm64"
+      ]
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system",
+        "machine",
+        "macos_version",
+        "macos_major",
+        "native_arm64",
+        "translated"
+      ],
+      "properties": {
+        "system": {
+          "const": "Darwin"
+        },
+        "machine": {
+          "const": "arm64"
+        },
+        "macos_version": {
+          "type": "string",
+          "pattern": "^(?:15|26)[.][0-9]+(?:[.][0-9]+)?$"
+        },
+        "macos_major": {
+          "enum": [
+            15,
+            26
+          ]
+        },
+        "native_arm64": {
+          "const": true
+        },
+        "translated": {
+          "const": false
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "tracked_dirty"
+      ],
+      "properties": {
+        "commit": {
+          "$ref": "#/$defs/commit"
+        },
+        "tracked_dirty": {
+          "const": false
+        }
+      }
+    },
+    "archive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filename",
+        "sha256",
+        "bytes",
+        "member_count",
+        "uncompressed_bytes"
+      ],
+      "properties": {
+        "filename": {
+          "type": "string",
+          "pattern": "^topoforge-[0-9]+[.][0-9]+[.][0-9]+-macos-arm64-unsigned-candidate[.]zip$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 805306368
+        },
+        "member_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30000
+        },
+        "uncompressed_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1610612736
+        }
+      }
+    },
+    "app_payload_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "archive_verification": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "archive",
+        "source",
+        "python_runtime",
+        "build_identity",
+        "locked_dependencies",
+        "contents",
+        "macho",
+        "static_checks_passed",
+        "native_execution",
+        "required_checks_passed"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "topoforge-macos-app-verification-v1"
+        },
+        "archive": {
+          "$ref": "#/properties/archive"
+        },
+        "source": {
+          "$ref": "#/properties/source"
+        },
+        "python_runtime": {
+          "type": "object",
+          "required": [
+            "version",
+            "url",
+            "sha256",
+            "embedded_architecture",
+            "macho_architectures",
+            "macho_file_count",
+            "macho_files"
+          ],
+          "properties": {
+            "version": {
+              "const": "3.12.10"
+            },
+            "url": {
+              "const": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg"
+            },
+            "sha256": {
+              "const": "8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4"
+            },
+            "embedded_architecture": {
+              "const": "arm64"
+            },
+            "macho_architectures": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "const": "arm64"
+                }
+              ],
+              "items": false
+            },
+            "macho_file_count": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "macho_files": {
+              "type": "array",
+              "minItems": 1
+            }
+          }
+        },
+        "build_identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "config_sha256",
+            "uv_lock_sha256",
+            "pyproject_sha256",
+            "build_constraints_sha256",
+            "verifier_sha256"
+          ],
+          "properties": {
+            "config_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "uv_lock_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "pyproject_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "build_constraints_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "verifier_sha256": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "builder",
+                "shared",
+                "archive",
+                "system"
+              ],
+              "properties": {
+                "builder": {
+                  "$ref": "#/$defs/sha256"
+                },
+                "shared": {
+                  "$ref": "#/$defs/sha256"
+                },
+                "archive": {
+                  "$ref": "#/$defs/sha256"
+                },
+                "system": {
+                  "$ref": "#/$defs/sha256"
+                }
+              }
+            }
+          }
+        },
+        "locked_dependencies": {
+          "type": "object",
+          "required": [
+            "count",
+            "packages",
+            "requirements_sha256",
+            "uv_lock_sha256"
+          ],
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "packages": {
+              "type": "array",
+              "minItems": 1
+            },
+            "requirements_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "uv_lock_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "contents": {
+          "type": "object",
+          "required": [
+            "file_count",
+            "payload_sha256"
+          ],
+          "properties": {
+            "file_count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30000
+            },
+            "payload_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "macho": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file_count",
+            "architecture",
+            "minimum_versions",
+            "required_checks_passed"
+          ],
+          "properties": {
+            "file_count": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "architecture": {
+              "const": "arm64"
+            },
+            "minimum_versions": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
+            "required_checks_passed": {
+              "const": true
+            }
+          }
+        },
+        "static_checks_passed": {
+          "const": true
+        },
+        "native_execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "native_arm64",
+            "required_checks_passed"
+          ],
+          "properties": {
+            "status": {
+              "const": "passed"
+            },
+            "native_arm64": {
+              "const": true
+            },
+            "required_checks_passed": {
+              "const": true
+            }
+          }
+        },
+        "required_checks_passed": {
+          "const": true
+        }
+      }
+    },
+    "web_lifecycle": {
+      "type": "object",
+      "required": [
+        "completed_job",
+        "strict_reopen",
+        "backup_restore",
+        "restart_cancellation",
+        "server_binding",
+        "required_checks_passed"
+      ],
+      "properties": {
+        "completed_job": {
+          "type": "object",
+          "required": [
+            "job_id",
+            "workflow_id",
+            "artifact_sha256"
+          ],
+          "properties": {
+            "job_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "workflow_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifact_sha256": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "model_stl",
+                "model_3mf",
+                "preview_glb"
+              ],
+              "properties": {
+                "model_stl": {
+                  "$ref": "#/$defs/sha256"
+                },
+                "model_3mf": {
+                  "$ref": "#/$defs/sha256"
+                },
+                "preview_glb": {
+                  "$ref": "#/$defs/sha256"
+                }
+              }
+            }
+          }
+        },
+        "strict_reopen": {
+          "type": "object"
+        },
+        "backup_restore": {
+          "type": "object",
+          "required": [
+            "backup_id",
+            "archive_sha256",
+            "restored_job_id",
+            "required_checks_passed"
+          ],
+          "properties": {
+            "backup_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "archive_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "restored_job_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required_checks_passed": {
+              "const": true
+            }
+          }
+        },
+        "restart_cancellation": {
+          "type": "object",
+          "required": [
+            "original_worker_pid",
+            "same_worker_recovered",
+            "terminal_state",
+            "process_reaped",
+            "required_checks_passed"
+          ],
+          "properties": {
+            "original_worker_pid": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "same_worker_recovered": {
+              "const": true
+            },
+            "terminal_state": {
+              "const": "cancelled"
+            },
+            "process_reaped": {
+              "const": true
+            },
+            "required_checks_passed": {
+              "const": true
+            }
+          }
+        },
+        "server_binding": {
+          "const": "127.0.0.1"
+        },
+        "commands": {
+          "type": "array",
+          "minItems": 1
+        },
+        "required_checks_passed": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "package_evidence": {
+      "const": true
+    },
+    "hosted_package_evidence": {
+      "type": "boolean"
+    },
+    "clean_system_evidence": {
+      "type": "boolean"
+    },
+    "signed": {
+      "const": false
+    },
+    "notarized": {
+      "const": false
+    },
+    "quarantine_first_launch_evidence": {
+      "const": false
+    },
+    "gatekeeper_evidence": {
+      "const": false
+    },
+    "bambu_phase13b_evidence": {
+      "const": false
+    },
+    "public_support_status": {
+      "const": "unverified"
+    },
+    "required_checks_passed": {
+      "const": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "evidence_scope": {
+            "const": "hosted-package"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "hosted_package_evidence": {
+            "const": true
+          },
+          "clean_system_evidence": {
+            "const": false
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "hosted_package_evidence": {
+            "const": false
+          },
+          "clean_system_evidence": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "target_id": {
+            "const": "macos-15-arm64"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "host": {
+            "properties": {
+              "macos_major": {
+                "const": 15
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "host": {
+            "properties": {
+              "macos_major": {
+                "const": 26
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    }
+  }
+}

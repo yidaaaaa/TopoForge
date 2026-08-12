@@ -45,6 +45,7 @@ def _run(
     cwd: Path,
     commands: list[dict[str, Any]],
     python_executable: Path,
+    environment_overrides: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     command = [
         str(python_executable),
@@ -57,6 +58,8 @@ def _run(
     ]
     environment = os.environ.copy()
     environment["PYTHONUTF8"] = "1"
+    if environment_overrides is not None:
+        environment.update(environment_overrides)
     completed = subprocess.run(
         command,
         cwd=cwd,
@@ -144,6 +147,7 @@ def verify_platform_core(
     work_root: Path,
     *,
     python_executable: Path | None = None,
+    environment_overrides: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Run deterministic CLI builds and strict format/Web checks below one root."""
     python = Path(sys.executable) if python_executable is None else python_executable
@@ -162,7 +166,13 @@ def verify_platform_core(
     repeat = path_probe / "repeat build"
     commands: list[dict[str, Any]] = []
 
-    doctor = _run(["doctor"], cwd=path_probe, commands=commands, python_executable=python)
+    doctor = _run(
+        ["doctor"],
+        cwd=path_probe,
+        commands=commands,
+        python_executable=python,
+        environment_overrides=environment_overrides,
+    )
     synthetic = _run(
         [
             "synthetic",
@@ -180,6 +190,7 @@ def verify_platform_core(
         cwd=path_probe,
         commands=commands,
         python_executable=python,
+        environment_overrides=environment_overrides,
     )
     if synthetic.get("sha256") != _sha256(source):
         raise RuntimeError("synthetic source checksum does not match the CLI result")
@@ -221,12 +232,14 @@ def verify_platform_core(
         cwd=path_probe,
         commands=commands,
         python_executable=python,
+        environment_overrides=environment_overrides,
     )
     repeat_result = _run(
         [*common_build, "--output", str(repeat)],
         cwd=path_probe,
         commands=commands,
         python_executable=python,
+        environment_overrides=environment_overrides,
     )
     first_validation = _validation(first)
     repeat_validation = _validation(repeat)
@@ -247,6 +260,7 @@ def verify_platform_core(
         cwd=path_probe,
         commands=commands,
         python_executable=python,
+        environment_overrides=environment_overrides,
     )
     if three_mf.get("strict_warning_count") != 0:
         raise RuntimeError("strict 3MF reopen reported warnings")
@@ -257,6 +271,7 @@ def verify_platform_core(
         cwd=path_probe,
         commands=commands,
         python_executable=python,
+        environment_overrides=environment_overrides,
     )
     failed_stl = [
         key
@@ -270,6 +285,7 @@ def verify_platform_core(
         cwd=path_probe,
         commands=commands,
         python_executable=python,
+        environment_overrides=environment_overrides,
     )
     failed_glb = [
         key
@@ -298,6 +314,7 @@ def verify_platform_core(
         cwd=path_probe,
         commands=commands,
         python_executable=python,
+        environment_overrides=environment_overrides,
     )
     if web.get("required_checks_passed") is not True:
         raise RuntimeError("packaged Web installation check did not pass")
