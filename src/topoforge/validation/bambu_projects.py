@@ -358,6 +358,23 @@ def _ensure_directory_tree(path: Path, *, label: str) -> Path:
     return absolute
 
 
+def _canonical_system_temporary_parent() -> Path:
+    """Resolve the OS temporary-directory alias before no-follow traversal."""
+    advertised = Path(tempfile.gettempdir())
+    try:
+        canonical = advertised.resolve(strict=True)
+        information = os.stat(canonical, follow_symlinks=False)
+    except OSError as exc:
+        raise RuntimeError(
+            f"system temporary directory is unavailable: {advertised}: {exc}"
+        ) from exc
+    if not stat.S_ISDIR(information.st_mode) or _is_link_or_reparse(information):
+        raise RuntimeError(
+            f"system temporary directory does not resolve to a real directory: {advertised}"
+        )
+    return canonical
+
+
 def _make_private_staging_directory(parent: Path, *, prefix: str) -> Path:
     absolute_parent = _ensure_directory_tree(parent, label="Bambu staging parent")
     if _descriptor_relative_supported() and os.mkdir in os.supports_dir_fd:
@@ -2914,7 +2931,10 @@ def _verify_source_evidence(
             executable=executable,
             snapshot_root=snapshot_root,
         )
-    with tempfile.TemporaryDirectory(prefix="topoforge-bambu-source-") as temporary:
+    with tempfile.TemporaryDirectory(
+        prefix="topoforge-bambu-source-",
+        dir=_canonical_system_temporary_parent(),
+    ) as temporary:
         return _verify_source_evidence_at(
             print_root=print_root,
             slice_root=slice_root,

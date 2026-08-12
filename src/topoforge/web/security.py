@@ -145,7 +145,7 @@ class _WindowsLeaseBackend(Protocol):
     def rename_relative(
         self,
         handle: int,
-        parent_handle: int,
+        parent_handle: int | None,
         name: str,
         *,
         replace: bool,
@@ -503,7 +503,7 @@ class _WindowsNativeLeaseBackend:
     def rename_relative(
         self,
         handle: int,
-        parent_handle: int,
+        parent_handle: int | None,
         name: str,
         *,
         replace: bool,
@@ -516,7 +516,7 @@ class _WindowsNativeLeaseBackend:
         )
         header = ctypes.cast(buffer, ctypes.POINTER(_FileRenameInfoHeader)).contents
         header.ReplaceIfExists = int(replace)
-        header.RootDirectory = ctypes.c_void_p(parent_handle)
+        header.RootDirectory = None if parent_handle is None else ctypes.c_void_p(parent_handle)
         header.FileNameLength = len(encoded_name)
         ctypes.memmove(ctypes.addressof(buffer) + header_bytes, encoded_name, len(encoded_name))
         if not self._set_file_information(
@@ -1783,7 +1783,7 @@ def _write_atomic_owned_regular_bytes_windows(
         os.fsync(descriptor)
         active.rename_relative(
             native_handle,
-            parent.handle,
+            None,
             destination.name,
             replace=replace,
         )
@@ -2796,7 +2796,7 @@ def _write_atomic_regular_bytes_windows(
         os.fsync(opened_file.descriptor)
         opened_file.backend.rename_relative(
             opened_file.native_handle,
-            opened_file.parent_handle,
+            None,
             destination.name,
             replace=replace,
         )

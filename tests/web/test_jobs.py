@@ -3182,13 +3182,14 @@ class _PosixWindowsLeaseBackend:
     def rename_relative(
         self,
         handle: int,
-        parent_handle: int,
+        parent_handle: int | None,
         name: str,
         *,
         replace: bool,
     ) -> None:
         self._before_rename()
         source_parent, source_name = self._names[handle]
+        destination_parent = source_parent if parent_handle is None else parent_handle
         source_metadata = os.fstat(handle)
         if stat.S_ISDIR(source_metadata.st_mode):
             if replace:
@@ -3196,17 +3197,17 @@ class _PosixWindowsLeaseBackend:
                     source_name,
                     name,
                     src_dir_fd=source_parent,
-                    dst_dir_fd=parent_handle,
+                    dst_dir_fd=destination_parent,
                 )
             else:
                 try:
-                    os.stat(name, dir_fd=parent_handle, follow_symlinks=False)
+                    os.stat(name, dir_fd=destination_parent, follow_symlinks=False)
                 except FileNotFoundError:
                     os.rename(
                         source_name,
                         name,
                         src_dir_fd=source_parent,
-                        dst_dir_fd=parent_handle,
+                        dst_dir_fd=destination_parent,
                     )
                 else:
                     raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), name)
@@ -3215,18 +3216,18 @@ class _PosixWindowsLeaseBackend:
                 source_name,
                 name,
                 src_dir_fd=source_parent,
-                dst_dir_fd=parent_handle,
+                dst_dir_fd=destination_parent,
             )
         else:
             os.link(
                 source_name,
                 name,
                 src_dir_fd=source_parent,
-                dst_dir_fd=parent_handle,
+                dst_dir_fd=destination_parent,
                 follow_symlinks=False,
             )
             os.unlink(source_name, dir_fd=source_parent)
-        self._names[handle] = (parent_handle, name)
+        self._names[handle] = (destination_parent, name)
 
     def delete_file(self, handle: int) -> None:
         self._before_delete()
@@ -3331,7 +3332,7 @@ def test_windows_rename_and_disposition_buffers_match_x64_abi() -> None:
 
     backend = object.__new__(security_module._WindowsNativeLeaseBackend)
     backend._set_file_information = capture
-    backend.rename_relative(11, 22, "x", replace=True)
+    backend.rename_relative(11, None, "x", replace=True)
     rename_class, rename_payload, rename_length = calls.pop(0)
     encoded_name = "x".encode("utf-16-le")
     header_size = security_module.ctypes.sizeof(security_module._FileRenameInfoHeader)
@@ -3339,7 +3340,7 @@ def test_windows_rename_and_disposition_buffers_match_x64_abi() -> None:
     assert rename_class == security_module._FILE_RENAME_INFO_CLASS
     assert rename_length == header_size + len(encoded_name)
     assert header.ReplaceIfExists == 1
-    assert header.RootDirectory == 22
+    assert header.RootDirectory is None
     assert header.FileNameLength == len(encoded_name)
     filename_offset = (
         security_module._FileRenameInfoHeader.FileNameLength.offset

@@ -513,6 +513,29 @@ def test_canonical_writer_does_not_follow_the_legacy_fixed_temp_symlink(
     assert destination.read_bytes() == b'{"safe":true}\n'
 
 
+def test_system_temporary_parent_canonicalizes_platform_alias(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    canonical = tmp_path / "private" / "temporary"
+    canonical.mkdir(parents=True)
+    alias = tmp_path / "system-temporary-alias"
+    try:
+        alias.symlink_to(canonical, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symbolic links are unavailable: {exc}")
+    monkeypatch.setattr(
+        bambu_projects_module.tempfile,
+        "gettempdir",
+        lambda: str(alias),
+    )
+
+    resolved = bambu_projects_module._canonical_system_temporary_parent()
+
+    assert resolved == canonical.resolve(strict=True)
+    assert stat.S_ISDIR(os.stat(resolved, follow_symlinks=False).st_mode)
+
+
 def test_sha256_reads_the_pinned_file_after_final_path_swap(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
