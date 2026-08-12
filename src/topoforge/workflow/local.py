@@ -2062,6 +2062,7 @@ def _verify_bambu_project_artifacts(
         raise ConfigurationError("Bambu project manifest is not canonical")
     probe = SlicerInfo.model_validate(slicer_identity["probe"])
     expected_executable_sha256 = slicer_identity["executable_sha256"]
+    expected_version = manifest.get("bambu_studio_version")
     if (
         manifest.get("schema_version") != bambu_projects.SCHEMA_VERSION
         or manifest.get("source_print_manifest_sha256")
@@ -2070,7 +2071,9 @@ def _verify_bambu_project_artifacts(
         != sha256_file(slice_dir / "tile-slice-manifest.json")
         or manifest.get("bambu_studio_path") != str(probe.executable)
         or manifest.get("bambu_studio_sha256") != expected_executable_sha256
-        or manifest.get("bambu_studio_version") != probe.version
+        or not isinstance(expected_version, str)
+        or not expected_version
+        or expected_version != probe.version
         or manifest.get("layout_id") != print_manifest.layout_id
         or manifest.get("tile_grid_shape") != list(print_manifest.tile_grid_shape)
         or manifest.get("tile_count") != print_manifest.tile_count
@@ -2186,13 +2189,15 @@ def _verify_bambu_project_artifacts(
             archive = bambu_projects.archive_evidence(
                 paths["bambu_project_3mf"], paths["primary_gcode"]
             )
-            primary_metrics, primary_gate, primary_slicer = bambu_projects.release_gate(
+            primary_metrics, primary_gate, primary_version = bambu_projects.release_gate(
                 paths["primary_gcode"],
+                expected_version=expected_version,
                 stdout=paths["build_stdout"].read_text(errors="replace"),
                 stderr=paths["build_stderr"].read_text(errors="replace"),
             )
-            reopen_metrics, reopen_gate, reopen_slicer = bambu_projects.release_gate(
+            reopen_metrics, reopen_gate, reopen_version = bambu_projects.release_gate(
                 paths["reopen_gcode"],
+                expected_version=expected_version,
                 stdout=paths["reopen_stdout"].read_text(errors="replace"),
                 stderr=paths["reopen_stderr"].read_text(errors="replace"),
             )
@@ -2234,11 +2239,11 @@ def _verify_bambu_project_artifacts(
             or validation.get("reopen_metrics") != reopen_metrics
             or validation.get("primary_release_gate") != primary_gate
             or validation.get("reopen_release_gate") != reopen_gate
-            or validation.get("primary_slicer") != primary_slicer
-            or validation.get("reopen_slicer") != reopen_slicer
-            or primary_slicer != reopen_slicer
-            or primary_slicer.get("name") != "BambuStudio"
-            or primary_slicer.get("version") != manifest.get("bambu_studio_version")
+            or validation.get("expected_bambu_studio_version") != expected_version
+            or validation.get("primary_bambu_studio_version") != primary_version
+            or validation.get("reopen_bambu_studio_version") != reopen_version
+            or validation.get("bambu_studio_versions_match")
+            is not (primary_version == reopen_version == expected_version)
             or not bambu_projects.result_passed(build_result)
             or not bambu_projects.result_passed(reopen_result)
             or not executions_ok

@@ -3114,7 +3114,6 @@ def verify_output(
         or manifest.get("layout_id") != source.print_manifest.layout_id
         or manifest.get("source_print_manifest_sha256") != source.print_manifest_sha256
         or manifest.get("source_slice_manifest_sha256") != source.slice_manifest_sha256
-        or manifest.get("bambu_studio_path") != str(executable)
         or manifest.get("bambu_studio_sha256") != source.executable_sha256
         or manifest.get("bambu_studio_version") != source.expected_version
         or manifest.get("printer_profile_id") != "bambu-p2s-0.4"

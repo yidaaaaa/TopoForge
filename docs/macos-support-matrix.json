@@ -56,7 +56,7 @@
     }
   ],
   "runtime": {
-    "python_requirement": ">=3.12,<3.13",
+    "python_requirement": ">=3.11,<3.15",
     "python_abi": "cp312",
     "official_macos_installer": {
       "version": "3.12.10",
@@ -70,7 +70,7 @@
     }
   },
   "dependencies": {
-    "lock_sha256": "4db256ba2e4ffd8127d63b90afa00bb68224658e6a0dff39466151631e24c7e0",
+    "lock_sha256": "d97e597af472f2351f22805da830f887647f98e8b71dda75136d021240e79044",
     "runtime_package_count": 53,
     "all_groups_package_count": 67,
     "minimum_arm64_wheel_platform": "macOS 14.0",

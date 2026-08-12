@@ -132,6 +132,11 @@ def test_project_release_gate_records_generator_version_from_gcode(tmp_path: Pat
     gcode = tmp_path / "plate_1.gcode"
     gcode.write_text("; BambuStudio 02.99.00.01\n", encoding="utf-8")
 
-    _metrics, _gate, slicer = release_gate(gcode, stdout="", stderr="")
+    _metrics, _gate, version = release_gate(
+        gcode,
+        expected_version="02.99.00.01",
+        stdout="",
+        stderr="",
+    )
 
-    assert slicer == {"name": "BambuStudio", "version": "02.99.00.01"}
+    assert version == "02.99.00.01"
