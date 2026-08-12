@@ -554,6 +554,21 @@ def test_real_server_health_bounds_early_exit_log_tail() -> None:
     assert len(message.encode("utf-8")) < system_verifier._SERVER_LOG_TAIL_BYTES + 256
 
 
+def test_real_server_http_failure_includes_bounded_log_tail() -> None:
+    marker = b"bounded-http-failure-marker"
+    server_log = io.BytesIO(b"x" * system_verifier._SERVER_LOG_TAIL_BYTES + marker)
+
+    failure = system_verifier._server_failure_with_log(
+        RuntimeError("HTTP 500 from loopback server"),
+        server_log,
+    )
+
+    message = str(failure)
+    assert "HTTP 500 from loopback server" in message
+    assert marker.decode("ascii") in message
+    assert len(message.encode("utf-8")) < system_verifier._SERVER_LOG_TAIL_BYTES + 256
+
+
 def test_clean_target_refuses_skipped_browser_before_creating_root(tmp_path: Path) -> None:
     work_root = tmp_path / "must not be created"
 

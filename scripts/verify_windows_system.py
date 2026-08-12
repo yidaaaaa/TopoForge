@@ -352,6 +352,13 @@ def _bounded_server_log_tail(log: BinaryIO) -> str:
     return log.read(_SERVER_LOG_TAIL_BYTES).decode("utf-8", errors="replace").strip()
 
 
+def _server_failure_with_log(exc: Exception, log: BinaryIO) -> RuntimeError:
+    """Attach one bounded server-log tail to an HTTP acceptance failure."""
+    log_tail = _bounded_server_log_tail(log)
+    detail = "server log was empty" if not log_tail else f"bounded server log tail:\n{log_tail}"
+    return RuntimeError(f"{exc}; {detail}")
+
+
 def _wait_for_server(
     base_url: str,
     process: subprocess.Popen[bytes],
@@ -693,6 +700,8 @@ def _real_http_web_acceptance(
                 config.state_dir.parent / "downloaded-http-model.3mf",
                 expected_sha256,
             )
+        except Exception as exc:
+            raise _server_failure_with_log(exc, log) from exc
         finally:
             shutdown = _stop_server(
                 process,

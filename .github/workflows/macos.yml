@@ -152,8 +152,19 @@ jobs:
           uv run pytest tests/web/test_jobs.py -k "not running_job_recovers_and_cancels_after_manager_restart"
       - name: Run Web map tile regression suite
         run: uv run pytest tests/web/test_map_tiles.py
-      - name: Run Web process regression suite
+      - id: web-process-pytest
+        name: Run Web process regression suite
+        env:
+          PYTEST_ADDOPTS: >-
+            --junitxml=artifacts/logs/macos-${{ matrix.runner }}-web-process-pytest.xml
+            --tb=short
         run: uv run pytest tests/web/test_processes.py
+      - name: Report Web process regression failure
+        if: failure() && steps.web-process-pytest.outcome == 'failure'
+        run: >-
+          uv run python scripts/report_pytest_failure.py
+          --junit artifacts/logs/macos-${{ matrix.runner }}-web-process-pytest.xml
+          --title "${{ matrix.target }} Web process pytest"
       - name: Run CLI, geometry, and property regression suite
         run: uv run pytest tests/cli tests/geometry tests/property
       - name: Run provider regression suite
@@ -170,6 +181,7 @@ jobs:
             artifacts/logs/macos-${{ matrix.runner }}-runtime.json.sha256
             artifacts/logs/macos-${{ matrix.runner }}-release-pytest.xml
             artifacts/logs/macos-${{ matrix.runner }}-slicer-pytest.xml
+            artifacts/logs/macos-${{ matrix.runner }}-web-process-pytest.xml
           if-no-files-found: warn
           retention-days: 30
   package-arm64:

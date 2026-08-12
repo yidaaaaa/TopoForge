@@ -153,6 +153,10 @@ def test_native_macos_ci_uses_only_frozen_arm64_runner_labels() -> None:
     assert (
         step_runs["Run Web process regression suite"] == "uv run pytest tests/web/test_processes.py"
     )
+    assert steps_by_name["Run Web process regression suite"]["env"]["PYTEST_ADDOPTS"] == (
+        "--junitxml=artifacts/logs/macos-${{ matrix.runner }}-web-process-pytest.xml --tb=short"
+    )
+    assert "scripts/report_pytest_failure.py" in step_runs["Report Web process regression failure"]
     assert step_runs["Run CLI, geometry, and property regression suite"] == (
         "uv run pytest tests/cli tests/geometry tests/property"
     )
