@@ -13,6 +13,7 @@ import struct
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 from zipfile import ZIP_BZIP2, ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
 
@@ -829,7 +830,49 @@ def test_windows_fallback_opens_regular_files_without_opening_the_parent_directo
     monkeypatch.setattr(bambu_projects_module.os, "open", recording_open)
 
     assert bambu_projects_module.sha256(source) == hashlib.sha256(b"portable").hexdigest()
-    assert opened_paths == [source.resolve()]
+    assert opened_paths == [source.resolve(), source.resolve()]
+
+
+def test_windows_fallback_binds_two_handles_when_path_stat_ctime_differs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "windows-ctime-evidence.bin"
+    payload = b"portable Windows identity"
+    source.write_bytes(payload)
+    real_checked_path_chain = bambu_projects_module._checked_path_chain
+
+    def checked_path_chain_with_api_ctime_drift(
+        path: Path,
+        *,
+        label: str,
+    ) -> tuple[Any, ...]:
+        chain = real_checked_path_chain(path, label=label)
+        final = chain[-1]
+        drifted = SimpleNamespace(
+            st_dev=final.st_dev,
+            st_ino=final.st_ino,
+            st_mode=final.st_mode,
+            st_size=final.st_size,
+            st_mtime_ns=final.st_mtime_ns,
+            st_ctime_ns=final.st_ctime_ns - 1,
+            st_nlink=final.st_nlink,
+            st_file_attributes=getattr(final, "st_file_attributes", 0),
+        )
+        return (*chain[:-1], drifted)
+
+    monkeypatch.setattr(
+        bambu_projects_module,
+        "_descriptor_relative_supported",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        bambu_projects_module,
+        "_checked_path_chain",
+        checked_path_chain_with_api_ctime_drift,
+    )
+
+    assert bambu_projects_module.sha256(source) == hashlib.sha256(payload).hexdigest()
 
 
 def test_windows_fallback_writes_and_snapshots_without_directory_descriptors(

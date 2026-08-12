@@ -474,18 +474,31 @@ def _open_pinned_regular_file(path: Path, *, label: str) -> Iterator[_PinnedRegu
         before = _checked_path_chain(absolute, label=label)
         descriptor = os.open(absolute, flags)
         information = os.fstat(descriptor)
+        verification_descriptor = os.open(absolute, flags)
+        try:
+            verification_information = os.fstat(verification_descriptor)
+        finally:
+            os.close(verification_descriptor)
         after = _checked_path_chain(absolute, label=label)
         single_link_regular = _is_single_link_regular(information)
-        path_identity = _stat_identity(after[-1]) if after else None
+        verification_single_link_regular = _is_single_link_regular(verification_information)
         handle_identity = _stat_identity(information)
+        verification_identity = _stat_identity(verification_information)
         chain_unchanged = tuple(_object_identity(item) for item in before) == tuple(
             _object_identity(item) for item in after
         )
-        if not (single_link_regular and path_identity == handle_identity and chain_unchanged):
+        if not (
+            single_link_regular
+            and verification_single_link_regular
+            and verification_identity == handle_identity
+            and chain_unchanged
+        ):
             raise RuntimeError(
                 f"{label} path changed while opening or is not a single-link regular file: "
                 f"{path}; single_link_regular={single_link_regular}; "
-                f"path_identity={path_identity!r}; handle_identity={handle_identity!r}; "
+                f"verification_single_link_regular={verification_single_link_regular}; "
+                f"verification_identity={verification_identity!r}; "
+                f"handle_identity={handle_identity!r}; "
                 f"chain_unchanged={chain_unchanged}"
             )
         with os.fdopen(descriptor, "rb") as handle:
