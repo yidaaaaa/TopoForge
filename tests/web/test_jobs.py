@@ -1967,6 +1967,39 @@ def test_worker_parent_death_before_gate_never_executes_workflow(
     assert not gate_path.exists()
 
 
+def test_worker_launch_gate_failure_retains_the_underlying_os_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ready = WorkerReady(
+        job_id="a" * 32,
+        launch_nonce="b" * 32,
+        request_sha256="c" * 64,
+        pid=12345,
+        process_identity="fixture-worker",
+        process_group_id=12345,
+        jobs_root_device=1,
+        jobs_root_inode=2,
+    )
+
+    def fail_gate_read(*_args: object, **_kwargs: object) -> bytes:
+        raise OSError(errno.EINVAL, "fixture native gate open failure")
+
+    monkeypatch.setattr(worker_module, "read_owned_regular_bytes", fail_gate_read)
+
+    with pytest.raises(RuntimeError, match="fixture native gate open failure"):
+        worker_module._wait_for_launch_gate(
+            gate_path=tmp_path / "launch-gate.json",
+            ready=ready,
+            worker_ready_sha256="d" * 64,
+            jobs_root=tmp_path,
+            jobs_root_identity=(1, 2),
+            parent_pid=12344,
+            parent_identity="fixture-parent",
+            timeout_seconds=0.1,
+        )
+
+
 @pytest.mark.parametrize("linked_name", ["request.json", "worker-ready.json"])
 def test_worker_never_follows_request_or_ready_links(
     web_config: WebAppConfig,

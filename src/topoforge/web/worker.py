@@ -116,7 +116,7 @@ def _wait_for_launch_gate(
         except FileNotFoundError:
             payload = None
         except (OSError, ValueError) as exc:
-            raise RuntimeError("worker launch gate is unsafe or unreadable") from exc
+            raise RuntimeError(f"worker launch gate is unsafe or unreadable: {exc}") from exc
         if payload is not None:
             if payload != expected_bytes:
                 raise RuntimeError("worker launch gate is non-canonical or has the wrong identity")
