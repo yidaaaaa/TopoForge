@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import timedelta
@@ -112,6 +113,7 @@ from topoforge.workflow import (
 )
 
 _WORKER_GATE_TIMEOUT_SECONDS = 30.0
+_CI_EXCEPTION_DETAIL_BYTES = 8 * 1024
 _WORKER_GATE_SCHEMA_VERSION = "topoforge-web-worker-launch-gate-v3"
 _MAX_WORKER_READY_BYTES = 4096
 _MAX_TRASH_ACTION_BYTES = 8 * 1024 * 1024
@@ -880,7 +882,16 @@ class LocalJobManager:
         except FileExistsError:
             raise
         except (OSError, ValueError) as exc:
-            raise ConfigurationError(f"{context} could not be written safely: {path}") from exc
+            detail = ""
+            if os.environ.get("TOPOFORGE_CI_TRACEBACK") == "1":
+                rendered = "".join(traceback.format_exception(exc)).encode(
+                    "utf-8", errors="replace"
+                )
+                tail = rendered[-_CI_EXCEPTION_DETAIL_BYTES:].decode("utf-8", errors="replace")
+                detail = f"\nBounded CI exception chain:\n{tail}"
+            raise ConfigurationError(
+                f"{context} could not be written safely: {path}{detail}"
+            ) from exc
 
     def _write_owned_model(
         self,

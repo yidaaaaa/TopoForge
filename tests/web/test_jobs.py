@@ -2450,6 +2450,44 @@ def test_manager_lease_and_adapter_roots_fail_closed(
     assert marker.read_bytes() == b"external evidence"
 
 
+def test_owned_write_includes_bounded_exception_chain_only_in_ci(
+    web_config: WebAppConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = LocalJobManager(web_config)
+    manager.start()
+    try:
+
+        def fail_write(*_args: object, **_kwargs: object) -> None:
+            raise BrokenPipeError(errno.EPIPE, "fixture Windows sharing violation")
+
+        monkeypatch.setattr(jobs_module, "atomic_write_owned_regular_bytes", fail_write)
+        target = manager.jobs_dir / "diagnostic.json"
+        with pytest.raises(ConfigurationError) as production:
+            manager._write_owned_payload(
+                target,
+                b"{}\n",
+                root=manager.jobs_dir,
+                context="fixture diagnostic",
+            )
+        assert "Bounded CI exception chain" not in str(production.value)
+
+        monkeypatch.setenv("TOPOFORGE_CI_TRACEBACK", "1")
+        with pytest.raises(ConfigurationError) as diagnostic:
+            manager._write_owned_payload(
+                target,
+                b"{}\n",
+                root=manager.jobs_dir,
+                context="fixture diagnostic",
+            )
+        message = str(diagnostic.value)
+        assert "Bounded CI exception chain" in message
+        assert "fixture Windows sharing violation" in message
+        assert len(message.encode("utf-8")) < jobs_module._CI_EXCEPTION_DETAIL_BYTES + 512
+    finally:
+        manager.close()
+
+
 @pytest.mark.skipif(
     os.name == "nt",
     reason="POSIX os.open race injection does not intercept the native Windows backend",

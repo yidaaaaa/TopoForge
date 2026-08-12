@@ -2183,6 +2183,8 @@ def test_evidence_schema_and_release_workflow_are_hard_blockers() -> None:
     assert 'source_commit="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"' in workflow_text
     assert "SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}" in workflow_text
     assert "resolve_release_tag_commit" in workflow_text
+    assert "declare -A" not in workflow_text
+    assert 'seen_tag_objects="${seen_tag_objects}|${object_sha}|"' in workflow_text
     assert "git/ref/tags/${RELEASE_TAG}" in workflow_text
     assert "git/tags/${object_sha}" in workflow_text
     tag_recheck = workflow_text.index('test "$resolved_source_commit" = "$SOURCE_COMMIT"')

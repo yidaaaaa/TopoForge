@@ -932,19 +932,19 @@ jobs:
           cd "$release_root"
 
           resolve_release_tag_commit() {
-            local ref_json object_type object_sha tag_json depth
-            declare -A seen_tag_objects=()
+            local ref_json object_type object_sha tag_json depth seen_tag_objects
+            seen_tag_objects=""
             ref_json="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}")"
             object_type="$(jq -er '.object.type' <<<"$ref_json")"
             object_sha="$(jq -er '.object.sha' <<<"$ref_json")"
             depth=0
             while [[ "$object_type" == "tag" ]]; do
               [[ "$object_sha" =~ ^[0-9a-f]{40}$ ]]
-              if [[ -n "${seen_tag_objects[$object_sha]:-}" ]]; then
+              if [[ "$seen_tag_objects" == *"|${object_sha}|"* ]]; then
                 echo "annotated release tag chain contains a cycle" >&2
                 return 1
               fi
-              seen_tag_objects[$object_sha]=1
+              seen_tag_objects="${seen_tag_objects}|${object_sha}|"
               depth=$((depth + 1))
               if (( depth > 16 )); then
                 echo "annotated release tag chain exceeds the depth bound" >&2
