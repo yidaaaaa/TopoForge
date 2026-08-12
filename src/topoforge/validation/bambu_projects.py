@@ -497,6 +497,20 @@ def _stat_identity(information: os.stat_result) -> tuple[int, int, int, int, int
     )
 
 
+def _pinned_content_identity(
+    information: os.stat_result,
+) -> tuple[int, int, int, int, int, int]:
+    """Identify stable content without treating a path rename as a mutation."""
+    return (
+        information.st_dev,
+        information.st_ino,
+        stat.S_IFMT(information.st_mode),
+        information.st_size,
+        information.st_mtime_ns,
+        information.st_nlink,
+    )
+
+
 def _object_identity(information: os.stat_result) -> tuple[int, int, int]:
     return (
         information.st_dev,
@@ -506,7 +520,9 @@ def _object_identity(information: os.stat_result) -> tuple[int, int, int]:
 
 
 def _require_pinned_unchanged(pinned: _PinnedRegularFile, *, label: str) -> None:
-    if _stat_identity(os.fstat(pinned.handle.fileno())) != _stat_identity(pinned.information):
+    if _pinned_content_identity(os.fstat(pinned.handle.fileno())) != _pinned_content_identity(
+        pinned.information
+    ):
         raise RuntimeError(f"{label} changed while it was being read: {pinned.path}")
 
 
