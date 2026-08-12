@@ -285,11 +285,18 @@ def _acquire_runtime(
     return selected
 
 
-def _extract_framework(runtime_archive: Path, destination: Path, config: dict[str, Any]) -> None:
-    expanded = destination.parent / "expanded-pkg"
+def _extract_framework(
+    runtime_archive: Path,
+    destination: Path,
+    config: dict[str, Any],
+    *,
+    scratch_root: Path,
+) -> None:
+    scratch_root.mkdir(parents=True, exist_ok=True)
+    expanded = scratch_root / "expanded-pkg"
     _run(
         ["/usr/sbin/pkgutil", "--expand-full", str(runtime_archive), str(expanded)],
-        cwd=destination.parent,
+        cwd=scratch_root,
         environment=os.environ.copy(),
     )
     runtime = config["python_runtime"]
@@ -656,7 +663,12 @@ def build_macos_app(
         temporary = Path(raw_temporary).resolve()
         app = temporary / APP_ROOT
         framework = app / "Contents" / "Frameworks" / "Python.framework"
-        _extract_framework(runtime_path, framework, config)
+        _extract_framework(
+            runtime_path,
+            framework,
+            config,
+            scratch_root=temporary,
+        )
         site_packages = (
             framework
             / "Versions"

@@ -115,6 +115,43 @@ def _fat_universal2_macho() -> bytes:
     return bytes(payload)
 
 
+def test_runtime_extraction_uses_an_existing_scratch_root_outside_the_app(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = tmp_path / "python.pkg"
+    runtime.write_bytes(b"fixture")
+    app = tmp_path / "bundle" / APP_ROOT
+    destination = app / "Contents/Frameworks/Python.framework"
+    scratch_root = tmp_path / "private scratch"
+
+    class ExpectedStop(RuntimeError):
+        pass
+
+    def inspect_command(
+        command: list[str],
+        *,
+        cwd: Path,
+        environment: dict[str, str],
+    ) -> dict[str, Any]:
+        del environment
+        assert cwd == scratch_root
+        assert cwd.is_dir()
+        assert Path(command[-1]) == scratch_root / "expanded-pkg"
+        assert app not in Path(command[-1]).parents
+        raise ExpectedStop
+
+    monkeypatch.setattr(builder, "_run", inspect_command)
+
+    with pytest.raises(ExpectedStop):
+        builder._extract_framework(
+            runtime,
+            destination,
+            _config(),
+            scratch_root=scratch_root,
+        )
+
+
 def _fixture_archive(
     root: Path,
     *,
