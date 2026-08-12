@@ -319,7 +319,10 @@ def bundle_entries(app_root: Path, *, bounds: dict[str, Any]) -> list[dict[str, 
             local_relative = Path(child.path).relative_to(app_root)
             relative = PurePosixPath(APP_ROOT, *local_relative.parts)
             relative = safe_relative_path(relative.as_posix())
-            result = child.stat(follow_symlinks=False)
+            # Windows DirEntry may cache WIN32_FIND_DATA without a real hard-link
+            # count. Re-stat the lexical path before enforcing the single-link gate.
+            path = Path(child.path)
+            result = path.lstat()
             if child.is_dir(follow_symlinks=False):
                 register_macos_path(relative, seen, "directory")
                 objects[relative.as_posix()] = "directory"
@@ -351,7 +354,6 @@ def bundle_entries(app_root: Path, *, bounds: dict[str, Any]) -> list[dict[str, 
             total_bytes += result.st_size
             if total_bytes > bounds["bundle_uncompressed_max_bytes"]:
                 raise ValueError("bundle exceeds its expansion bound")
-            path = Path(child.path)
             records.append(
                 {
                     "path": relative.as_posix()[len(APP_ROOT) + 1 :],

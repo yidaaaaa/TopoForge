@@ -13,6 +13,7 @@ import struct
 import subprocess
 import time
 import zipfile
+from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
@@ -21,6 +22,7 @@ from typing import Any
 import jsonschema
 import pytest
 import scripts.build_macos_app as builder
+import scripts.macos_app as macos_app_module
 import scripts.verify_macos_app as app_verifier
 import yaml
 from scripts.macos_app import (
@@ -702,6 +704,42 @@ def test_bundle_closure_accepts_framework_link_chains_and_rejects_hardlinks(
     os.link(first, hardlink_app / "Contents/second")
     with pytest.raises(ValueError, match="hard-linked"):
         bundle_entries(hardlink_app, bounds=_config()["bounds"])
+
+
+def test_bundle_closure_does_not_trust_direntry_link_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = _fixture_archive(tmp_path / "fixture")
+    app = archive.parent / APP_ROOT
+    real_scandir = os.scandir
+
+    class EntryWithoutReliableStat:
+        def __init__(self, entry: os.DirEntry[str]) -> None:
+            self.name = entry.name
+            self.path = entry.path
+
+        def is_dir(self, *, follow_symlinks: bool = True) -> bool:
+            path = Path(self.path)
+            return path.is_dir() if follow_symlinks else stat.S_ISDIR(path.lstat().st_mode)
+
+        def is_symlink(self) -> bool:
+            return Path(self.path).is_symlink()
+
+        def stat(self, *, follow_symlinks: bool = True) -> os.stat_result:
+            del follow_symlinks
+            raise AssertionError("bundle closure must use a fresh lexical lstat")
+
+    @contextmanager
+    def scandir_without_reliable_stat(path: Path) -> Any:
+        with real_scandir(path) as entries:
+            yield iter(EntryWithoutReliableStat(entry) for entry in entries)
+
+    monkeypatch.setattr(macos_app_module.os, "scandir", scandir_without_reliable_stat)
+
+    records = bundle_entries(app, bounds=_config()["bounds"])
+
+    assert any(record["path"] == INFO_PLIST_PATH for record in records)
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO fixture requires POSIX")
