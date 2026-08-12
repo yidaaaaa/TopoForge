@@ -455,8 +455,14 @@ def verify_web_lifecycle(
         server, base_url, log = _start_server(web, root=root, environment=environment)
         recovered, _headers = _http(base_url, f"/api/v1/jobs/{recovery_job_id}")
         if recovered["state"] != "running" or recovered.get("pid") != original_pid:
+            error = recovered.get("error")
+            error_code = error.get("code") if isinstance(error, dict) else None
+            error_type = error.get("exception_type") if isinstance(error, dict) else None
             raise RuntimeError(
-                "packaged Web manager did not recover the same running worker after restart"
+                "packaged Web manager did not recover the same running worker after restart: "
+                f"expected_pid={original_pid!r}; state={recovered.get('state')!r}; "
+                f"observed_pid={recovered.get('pid')!r}; error_code={error_code!r}; "
+                f"error_type={error_type!r}"
             )
         cancelling, _headers = _http(
             base_url, f"/api/v1/jobs/{recovery_job_id}/cancel", method="POST", payload={}
