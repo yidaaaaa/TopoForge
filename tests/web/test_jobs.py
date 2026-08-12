@@ -2488,6 +2488,33 @@ def test_owned_write_includes_bounded_exception_chain_only_in_ci(
         manager.close()
 
 
+def test_owned_directory_create_includes_bounded_exception_chain_in_ci(
+    web_config: WebAppConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = LocalJobManager(web_config)
+    manager.start()
+    try:
+
+        def fail_create(*_args: object, **_kwargs: object) -> None:
+            raise BrokenPipeError(errno.EPIPE, "fixture Windows directory failure")
+
+        monkeypatch.setattr(jobs_module, "create_owned_directory", fail_create)
+        monkeypatch.setenv("TOPOFORGE_CI_TRACEBACK", "1")
+        with pytest.raises(ConfigurationError) as diagnostic:
+            manager._create_owned_directory(
+                manager.jobs_dir / ("a" * 32),
+                root=manager.jobs_dir,
+                context="fixture directory",
+            )
+        message = str(diagnostic.value)
+        assert "Bounded CI exception chain" in message
+        assert "fixture Windows directory failure" in message
+        assert len(message.encode("utf-8")) < jobs_module._CI_EXCEPTION_DETAIL_BYTES + 512
+    finally:
+        manager.close()
+
+
 @pytest.mark.skipif(
     os.name == "nt",
     reason="POSIX os.open race injection does not intercept the native Windows backend",

@@ -132,6 +132,14 @@ _ModelT = TypeVar("_ModelT", bound=BaseModel)
 _LOGGER = logging.getLogger(__name__)
 
 
+def _bounded_ci_exception_detail(exc: Exception) -> str:
+    if os.environ.get("TOPOFORGE_CI_TRACEBACK") != "1":
+        return ""
+    rendered = "".join(traceback.format_exception(exc)).encode("utf-8", errors="replace")
+    tail = rendered[-_CI_EXCEPTION_DETAIL_BYTES:].decode("utf-8", errors="replace")
+    return f"\nBounded CI exception chain:\n{tail}"
+
+
 @dataclass(slots=True)
 class VerifiedFileDownload:
     """One checksum-verified stream whose exact handle remains open for HTTP."""
@@ -811,7 +819,10 @@ class LocalJobManager:
         except FileExistsError:
             raise
         except (OSError, ValueError) as exc:
-            raise ConfigurationError(f"{context} could not be created safely: {path}") from exc
+            detail = _bounded_ci_exception_detail(exc)
+            raise ConfigurationError(
+                f"{context} could not be created safely: {path}{detail}"
+            ) from exc
 
     def _move_owned_directory(
         self,
@@ -882,13 +893,7 @@ class LocalJobManager:
         except FileExistsError:
             raise
         except (OSError, ValueError) as exc:
-            detail = ""
-            if os.environ.get("TOPOFORGE_CI_TRACEBACK") == "1":
-                rendered = "".join(traceback.format_exception(exc)).encode(
-                    "utf-8", errors="replace"
-                )
-                tail = rendered[-_CI_EXCEPTION_DETAIL_BYTES:].decode("utf-8", errors="replace")
-                detail = f"\nBounded CI exception chain:\n{tail}"
+            detail = _bounded_ci_exception_detail(exc)
             raise ConfigurationError(
                 f"{context} could not be written safely: {path}{detail}"
             ) from exc
