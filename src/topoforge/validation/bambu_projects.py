@@ -696,17 +696,23 @@ def _copy_pinned_regular_file_snapshot(
                 absolute_destination.parent,
                 label=f"{label} snapshot destination",
             )
-            destination_after = _checked_path_chain(
-                absolute_destination,
-                label=f"{label} snapshot destination",
-            )
-            if (
-                tuple(_object_identity(item) for item in parent_before)
-                != tuple(_object_identity(item) for item in parent_after)
-                or not destination_after
-                or _stat_identity(destination_after[-1]) != _stat_identity(target_information)
+            if tuple(_object_identity(item) for item in parent_before) != tuple(
+                _object_identity(item) for item in parent_after
             ):
-                raise RuntimeError(f"{label} snapshot path changed during publication")
+                raise RuntimeError(f"{label} snapshot parent changed during publication")
+            with _open_pinned_regular_file(
+                absolute_destination,
+                label=f"{label} published snapshot",
+            ) as published:
+                published_information = published.information
+                if (
+                    _object_identity(published_information) != _object_identity(target_information)
+                    or published_information.st_size != target_information.st_size
+                    or published_information.st_nlink != target_information.st_nlink
+                    or _hash_pinned(published, label=f"{label} published snapshot")
+                    != digest.hexdigest()
+                ):
+                    raise RuntimeError(f"{label} snapshot path changed during publication")
         except BaseException:
             absolute_destination.unlink(missing_ok=True)
             raise

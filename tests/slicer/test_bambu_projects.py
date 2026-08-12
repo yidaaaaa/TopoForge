@@ -883,10 +883,38 @@ def test_windows_fallback_writes_and_snapshots_without_directory_descriptors(
     source.write_bytes(b"portable snapshot")
     snapshot = tmp_path / "snapshots" / "source.3mf"
     manifest = tmp_path / "manifest.json"
+    real_checked_path_chain = bambu_projects_module._checked_path_chain
+
+    def checked_path_chain_with_api_ctime_drift(
+        path: Path,
+        *,
+        label: str,
+    ) -> tuple[Any, ...]:
+        chain = real_checked_path_chain(path, label=label)
+        final = chain[-1]
+        if not stat.S_ISREG(final.st_mode):
+            return chain
+        drifted = SimpleNamespace(
+            st_dev=final.st_dev,
+            st_ino=final.st_ino,
+            st_mode=final.st_mode,
+            st_size=final.st_size,
+            st_mtime_ns=final.st_mtime_ns,
+            st_ctime_ns=final.st_ctime_ns - 1,
+            st_nlink=final.st_nlink,
+            st_file_attributes=getattr(final, "st_file_attributes", 0),
+        )
+        return (*chain[:-1], drifted)
+
     monkeypatch.setattr(
         bambu_projects_module,
         "_descriptor_relative_supported",
         lambda: False,
+    )
+    monkeypatch.setattr(
+        bambu_projects_module,
+        "_checked_path_chain",
+        checked_path_chain_with_api_ctime_drift,
     )
 
     digest, size = bambu_projects_module._copy_regular_file_snapshot(
