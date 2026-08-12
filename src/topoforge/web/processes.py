@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import errno
 import math
+import ntpath
 import os
 import signal
 import sys
@@ -247,6 +248,40 @@ def worker_process_options(
     if family is ProcessPlatform.WINDOWS:
         return {"creationflags": _WINDOWS_CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
+
+
+def worker_interpreter_launch(
+    platform_family: ProcessPlatform | None = None,
+    *,
+    executable: str | None = None,
+    base_executable: str | None = None,
+) -> tuple[str, dict[str, str]]:
+    """Return an interpreter that makes ``Popen.pid`` the actual worker PID.
+
+    CPython's Windows virtual-environment ``python.exe`` is a redirector: it
+    creates the base interpreter as a child and waits for it. Launching that
+    redirector would bind the manager to the wrapper PID instead of the worker
+    that publishes containment evidence. Invoke the base interpreter directly
+    and reproduce CPython's redirector handoff so the child still starts in the
+    selected virtual environment.
+    """
+    family = platform_family or current_process_platform()
+    selected = sys.executable if executable is None else executable
+    if not selected or "\x00" in selected:
+        raise ProcessInspectionUnavailableError("worker interpreter path is invalid")
+    if family is not ProcessPlatform.WINDOWS:
+        return selected, {}
+
+    raw_base = (
+        getattr(sys, "_base_executable", None) if base_executable is None else base_executable
+    )
+    if not isinstance(raw_base, str) or not raw_base or "\x00" in raw_base:
+        raise ProcessInspectionUnavailableError(
+            "Windows did not expose the base interpreter behind the virtual-environment launcher"
+        )
+    if ntpath.normcase(ntpath.abspath(raw_base)) == ntpath.normcase(ntpath.abspath(selected)):
+        return selected, {}
+    return raw_base, {"__PYVENV_LAUNCHER__": selected}
 
 
 def _linux_process_stat(pid: int) -> tuple[str, int, str] | None:

@@ -76,6 +76,7 @@ from topoforge.web.processes import (
     process_containment_is_alive,
     process_is_alive,
     terminate_process_tree,
+    worker_interpreter_launch,
     worker_process_options,
 )
 from topoforge.web.processes import (
@@ -2590,8 +2591,11 @@ class LocalJobManager:
         if self.config.bambu_studio_executable is not None:
             env["TOPOFORGE_BAMBU_STUDIO"] = str(self.config.bambu_studio_executable)
         jobs_identity = self._owned_identity(self.jobs_dir)
+        interpreter, interpreter_environment = worker_interpreter_launch()
+        env.pop("__PYVENV_LAUNCHER__", None)
+        env.update(interpreter_environment)
         command = [
-            sys.executable,
+            interpreter,
             "-m",
             "topoforge.web.worker",
             "--request",

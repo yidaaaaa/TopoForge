@@ -21,6 +21,7 @@ from topoforge.web.processes import (
     process_identity,
     process_is_alive,
     terminate_process_tree,
+    worker_interpreter_launch,
     worker_process_options,
 )
 
@@ -43,6 +44,33 @@ def _alive_sequence(values: tuple[bool, ...]) -> tuple[Iterator[bool], Any]:
 def test_worker_process_options_are_platform_explicit() -> None:
     assert worker_process_options(ProcessPlatform.POSIX) == {"start_new_session": True}
     assert worker_process_options(ProcessPlatform.WINDOWS) == {"creationflags": 0x00000200}
+
+
+def test_windows_worker_launch_bypasses_the_venv_redirector() -> None:
+    redirector = r"C:\work\venv\Scripts\python.exe"
+    base = r"C:\Python312\python.exe"
+
+    interpreter, environment = worker_interpreter_launch(
+        ProcessPlatform.WINDOWS,
+        executable=redirector,
+        base_executable=base,
+    )
+
+    assert interpreter == base
+    assert environment == {"__PYVENV_LAUNCHER__": redirector}
+
+
+def test_windows_worker_launch_uses_a_nonredirecting_interpreter_unchanged() -> None:
+    executable = r"C:\TopoForge\runtime\python.exe"
+
+    interpreter, environment = worker_interpreter_launch(
+        ProcessPlatform.WINDOWS,
+        executable=executable,
+        base_executable=executable.casefold(),
+    )
+
+    assert interpreter == executable
+    assert environment == {}
 
 
 def test_process_liveness_rejects_nonpositive_pid() -> None:
