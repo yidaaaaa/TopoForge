@@ -1290,6 +1290,59 @@ def owned_entry_identity(
             _close_posix_handles(parent.handles)
 
 
+def _create_owned_directory_windows(
+    candidate: Path,
+    *,
+    root: Path,
+    root_identity: tuple[int, int],
+    context: str,
+    exist_ok: bool,
+    backend: _WindowsLeaseBackend | None = None,
+) -> None:
+    """Create or reopen one directory through the native pinned Windows backend."""
+    active = _WindowsNativeLeaseBackend() if backend is None else backend
+    try:
+        entry = _open_windows_owned_entry(
+            root,
+            candidate,
+            expected_root_identity=root_identity,
+            expected_identity=None,
+            directory=True,
+            create=True,
+            desired_access=(
+                _FILE_LIST_DIRECTORY
+                | _FILE_TRAVERSE
+                | _FILE_READ_ATTRIBUTES
+                | _DELETE
+                | _SYNCHRONIZE
+            ),
+            share_access=_FILE_SHARE_READ | _FILE_SHARE_WRITE | _FILE_SHARE_DELETE,
+            context=context,
+            backend=active,
+        )
+    except FileExistsError:
+        if not exist_ok:
+            raise
+        entry = _open_windows_owned_entry(
+            root,
+            candidate,
+            expected_root_identity=root_identity,
+            expected_identity=None,
+            directory=True,
+            create=False,
+            desired_access=(
+                _FILE_LIST_DIRECTORY | _FILE_TRAVERSE | _FILE_READ_ATTRIBUTES | _SYNCHRONIZE
+            ),
+            share_access=_FILE_SHARE_READ | _FILE_SHARE_WRITE | _FILE_SHARE_DELETE,
+            context=context,
+            backend=active,
+        )
+    try:
+        entry.parent.backend.close_handle(entry.handle)
+    finally:
+        _close_windows_handles(entry.parent.backend, entry.parent.handles)
+
+
 def create_owned_directory(
     path: Path,
     *,
@@ -1302,42 +1355,13 @@ def create_owned_directory(
     candidate = Path(os.path.abspath(path.expanduser()))
     _lexical_relative_parts(root, candidate, context=context)
     if os.name == "nt":
-        try:
-            entry = _open_windows_owned_entry(
-                root,
-                candidate,
-                expected_root_identity=root_identity,
-                expected_identity=None,
-                directory=True,
-                create=True,
-                desired_access=(
-                    _FILE_LIST_DIRECTORY
-                    | _FILE_TRAVERSE
-                    | _FILE_READ_ATTRIBUTES
-                    | _DELETE
-                    | _SYNCHRONIZE
-                ),
-                share_access=_FILE_SHARE_READ | _FILE_SHARE_WRITE | _FILE_SHARE_DELETE,
-                context=context,
-            )
-        except FileExistsError:
-            if not exist_ok:
-                raise
-            entry = _open_windows_owned_entry(
-                root,
-                candidate,
-                expected_root_identity=root_identity,
-                expected_identity=None,
-                directory=True,
-                create=False,
-                desired_access=_FILE_LIST_DIRECTORY | _FILE_TRAVERSE | _FILE_READ_ATTRIBUTES,
-                share_access=_FILE_SHARE_READ | _FILE_SHARE_WRITE,
-                context=context,
-            )
-        try:
-            entry.parent.backend.close_handle(entry.handle)
-        finally:
-            _close_windows_handles(entry.parent.backend, entry.parent.handles)
+        _create_owned_directory_windows(
+            candidate,
+            root=root,
+            root_identity=root_identity,
+            context=context,
+            exist_ok=exist_ok,
+        )
         return
 
     parent = _open_posix_pinned_directory(

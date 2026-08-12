@@ -3266,6 +3266,55 @@ class _PosixWindowsLeaseBackend:
 
 @pytest.mark.skipif(
     os.name == "nt",
+    reason="POSIX fake backend exercises Windows synchronous directory reopen",
+)
+def test_windows_existing_owned_directory_reopen_requests_synchronize(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "jobs"
+    candidate = root / ("a" * 32)
+    candidate.mkdir(parents=True)
+    observed_access: list[int] = []
+
+    class SynchronizeCheckingBackend(_PosixWindowsLeaseBackend):
+        def open_relative_file(
+            self,
+            parent_handle: int,
+            name: str,
+            *,
+            create: bool,
+            directory: bool = False,
+            desired_access: int | None = None,
+            share_access: int | None = None,
+        ) -> int:
+            if name == candidate.name and directory and not create:
+                observed_access.append(0 if desired_access is None else desired_access)
+                if desired_access is None or not desired_access & security_module._SYNCHRONIZE:
+                    raise OSError(errno.EINVAL, "synchronous open requires SYNCHRONIZE")
+            return super().open_relative_file(
+                parent_handle,
+                name,
+                create=create,
+                directory=directory,
+                desired_access=desired_access,
+                share_access=share_access,
+            )
+
+    security_module._create_owned_directory_windows(
+        candidate,
+        root=root,
+        root_identity=(root.stat().st_dev, root.stat().st_ino),
+        context="existing job directory",
+        exist_ok=True,
+        backend=SynchronizeCheckingBackend(),
+    )
+
+    assert observed_access
+    assert all(access & security_module._SYNCHRONIZE for access in observed_access)
+
+
+@pytest.mark.skipif(
+    os.name == "nt",
     reason="POSIX fake backend exercises Windows manager-lease sharing",
 )
 def test_windows_manager_lease_path_verification_shares_with_locked_writer(
