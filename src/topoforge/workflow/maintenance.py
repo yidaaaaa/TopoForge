@@ -398,9 +398,12 @@ class VerifiedWorkflowBackup(NamedTuple):
 
     ``stream`` is owned by the context manager, is never the caller's original stream,
     and must not be retained or closed by callers after the context exits.
+    ``source_stream`` is the caller-owned pinned source and is valid only during the
+    same context.
     """
 
     source: Path
+    source_stream: BinaryIO
     stream: BinaryIO
     archive: zipfile.ZipFile
     manifest: WorkflowBackupManifest
@@ -2144,6 +2147,7 @@ def _verify_open_workflow_backup_stream(
                 snapshot.seek(0)
                 yield VerifiedWorkflowBackup(
                     source=source,
+                    source_stream=stream,
                     stream=snapshot,
                     archive=archive,
                     manifest=manifest,
@@ -2222,18 +2226,22 @@ def _require_verified_backup_source(verified: VerifiedWorkflowBackup) -> None:
         context="workflow restore archive parent",
     )
     try:
-        with open_owned_regular_binary(
+        observed_identity = owned_entry_identity(
             verified.source,
             root=verified.source.parent,
             root_identity=parent_identity,
-            expected_identity=verified.source_identity,
+            directory=False,
             context="workflow restore archive publication check",
-        ) as source_stream:
-            size_bytes, archive_sha256, source_identity = _hash_open_archive_stream(source_stream)
+        )
     except (OSError, ValueError) as exc:
         raise ConfigurationError(
             "workflow restore archive path changed before destination publication"
         ) from exc
+    if observed_identity != verified.source_identity:
+        raise ConfigurationError(
+            "workflow restore archive path changed before destination publication"
+        )
+    size_bytes, archive_sha256, source_identity = _hash_open_archive_stream(verified.source_stream)
     if (
         size_bytes != verified.size_bytes
         or archive_sha256 != verified.sha256

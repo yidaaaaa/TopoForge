@@ -1143,6 +1143,29 @@ def test_open_verified_backup_stream_survives_archive_path_replacement(
     assert archive_path.read_bytes() == b"replacement"
 
 
+def test_publication_check_reuses_the_already_pinned_archive_handle(
+    tmp_path: Path,
+    completed_workflow_workspace: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive_path = _copy_completed_backup(completed_workflow_workspace, tmp_path)
+
+    with workflow_maintenance.open_verified_workflow_backup(archive_path) as verified:
+        monkeypatch.setattr(
+            workflow_maintenance,
+            "open_owned_regular_binary",
+            lambda *_args, **_kwargs: pytest.fail(
+                "publication check reopened the already pinned archive path"
+            ),
+        )
+
+        workflow_maintenance._require_verified_backup_source(verified)
+
+        assert verified.source_stream.closed is False
+        assert verified.source_stream.tell() == 0
+        assert verified.stream.closed is False
+
+
 @pytest.mark.skipif(
     os.name == "nt",
     reason="Windows denies replacement of the pinned archive handle",
