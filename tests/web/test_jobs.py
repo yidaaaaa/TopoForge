@@ -1967,6 +1967,52 @@ def test_worker_parent_death_before_gate_never_executes_workflow(
     assert not gate_path.exists()
 
 
+def test_worker_waits_for_windows_launch_gate_publisher_to_close(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ready = WorkerReady(
+        job_id="a" * 32,
+        launch_nonce="b" * 32,
+        request_sha256="c" * 64,
+        pid=12345,
+        process_identity="fixture-worker",
+        process_group_id=12345,
+        jobs_root_device=1,
+        jobs_root_inode=2,
+    )
+    ready_sha256 = "d" * 64
+    expected = worker_module._current_gate_bytes(
+        ready=ready,
+        worker_ready_sha256=ready_sha256,
+    )
+    sharing_violation = OSError(32, "fixture publisher still holds the renamed gate")
+    sharing_violation.__dict__["winerror"] = 32
+    attempts = 0
+
+    def read_gate(*_args: object, **_kwargs: object) -> bytes:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise sharing_violation
+        return expected
+
+    monkeypatch.setattr(worker_module, "read_owned_regular_bytes", read_gate)
+    monkeypatch.setattr(worker_module, "process_identity", lambda _pid: "fixture-parent")
+
+    worker_module._wait_for_launch_gate(
+        gate_path=tmp_path / "launch-gate.json",
+        ready=ready,
+        worker_ready_sha256=ready_sha256,
+        jobs_root=tmp_path,
+        jobs_root_identity=(1, 2),
+        parent_pid=12344,
+        parent_identity="fixture-parent",
+        timeout_seconds=0.1,
+    )
+    assert attempts == 2
+
+
 def test_worker_launch_gate_failure_retains_the_underlying_os_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

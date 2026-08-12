@@ -29,6 +29,7 @@ from topoforge.web.security import (
 from topoforge.workflow import execute_workflow_launch
 
 _WORKER_GATE_SCHEMA_VERSION = "topoforge-web-worker-launch-gate-v3"
+_WINDOWS_ERROR_SHARING_VIOLATION = 32
 _MAX_GATE_BYTES = 4096
 _MAX_REQUEST_BYTES = 1024 * 1024
 
@@ -115,7 +116,12 @@ def _wait_for_launch_gate(
             )
         except FileNotFoundError:
             payload = None
-        except (OSError, ValueError) as exc:
+        except OSError as exc:
+            if getattr(exc, "winerror", None) == _WINDOWS_ERROR_SHARING_VIOLATION:
+                payload = None
+            else:
+                raise RuntimeError(f"worker launch gate is unsafe or unreadable: {exc}") from exc
+        except ValueError as exc:
             raise RuntimeError(f"worker launch gate is unsafe or unreadable: {exc}") from exc
         if payload is not None:
             if payload != expected_bytes:
