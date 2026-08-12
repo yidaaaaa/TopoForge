@@ -263,6 +263,44 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _strict_artifact_reopen_passed(role: str, result: dict[str, Any]) -> bool:
+    if role == "model_3mf":
+        positive_counts = ("object_count", "build_item_count", "vertex_count", "triangle_count")
+        return (
+            result.get("unit") == "millimeter"
+            and all(
+                type(result.get(field)) is int and result[field] > 0 for field in positive_counts
+            )
+            and type(result.get("strict_warning_count")) is int
+            and result["strict_warning_count"] == 0
+        )
+    if role in {"model_stl", "preview_glb"}:
+        required_true = (
+            "finite_vertices",
+            "finite_face_normals",
+            "watertight",
+            "winding_consistent",
+            "manifold",
+            "positive_volume",
+            "flat_bottom",
+        )
+        exact_counts = {
+            "connected_components": 1,
+            "degenerate_faces": 0,
+            "duplicate_faces": 0,
+        }
+        return (
+            all(result.get(field) is True for field in required_true)
+            and all(
+                type(result.get(field)) is int and result[field] == expected
+                for field, expected in exact_counts.items()
+            )
+            and type(result.get("triangle_count")) is int
+            and result["triangle_count"] > 0
+        )
+    return False
+
+
 def verify_web_lifecycle(
     app: Path,
     *,
@@ -350,7 +388,7 @@ def verify_web_lifecycle(
                 environment=environment,
             )
             commands.append(command)
-            if result.get("required_checks_passed") is not True:
+            if not _strict_artifact_reopen_passed(role, result):
                 raise RuntimeError(f"strict packaged artifact reopen failed: {role}")
             reopen[role] = result
 

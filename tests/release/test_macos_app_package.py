@@ -47,6 +47,7 @@ from scripts.macos_app import (
 from scripts.verify_macos_app import verify_macos_app
 from scripts.verify_macos_system import (
     SYSTEM_SCHEMA_VERSION,
+    _strict_artifact_reopen_passed,
     validate_evidence_report,
     verify_macos_system,
 )
@@ -952,6 +953,39 @@ def test_builder_source_identity_rejects_untracked_files(tmp_path: Path) -> None
     (repository / "untracked.txt").write_text("untracked\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="completely clean source tree"):
         builder._source_record(repository)
+
+
+def test_strict_packaged_artifact_reopen_uses_role_contracts() -> None:
+    mesh = {
+        "finite_vertices": True,
+        "finite_face_normals": True,
+        "watertight": True,
+        "winding_consistent": True,
+        "manifold": True,
+        "positive_volume": True,
+        "flat_bottom": True,
+        "connected_components": 1,
+        "degenerate_faces": 0,
+        "duplicate_faces": 0,
+        "triangle_count": 48,
+    }
+    assert _strict_artifact_reopen_passed("model_stl", mesh)
+    assert _strict_artifact_reopen_passed("preview_glb", mesh)
+    assert not (_strict_artifact_reopen_passed("model_stl", {**mesh, "duplicate_faces": 1}))
+
+    three_mf = {
+        "unit": "millimeter",
+        "object_count": 1,
+        "build_item_count": 1,
+        "vertex_count": 32,
+        "triangle_count": 48,
+        "strict_warning_count": 0,
+    }
+    assert _strict_artifact_reopen_passed("model_3mf", three_mf)
+    assert not (
+        _strict_artifact_reopen_passed("model_3mf", {**three_mf, "strict_warning_count": 1})
+    )
+    assert not _strict_artifact_reopen_passed("unknown", {})
 
 
 def test_evidence_schema_accepts_hosted_package_and_clean_scope_fixture(
