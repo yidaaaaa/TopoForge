@@ -8,7 +8,9 @@ TopoForge does **not** currently claim macOS support. Linux x86_64 remains the o
 platform and Windows Phase 12 is unfinished. Native hosted macOS core CI has passed on both frozen
 arm64 runner labels as historical source-tree feasibility evidence, but clean-system,
 application-package, Gatekeeper, signing/notarization,
-first-launch, and Bambu Studio gates have not passed. The machine-readable contract is
+first-launch, and Bambu Studio gates have not passed. Phase 13A now has a local, unexecuted
+unsigned-app builder and acceptance workflow implementation; that implementation is not native
+package evidence and has not been pushed or run on GitHub. The machine-readable contract is
 [`macos-support-matrix.json`](macos-support-matrix.json).
 
 This document freezes Phase 13 release candidates; it does not widen README or package support
@@ -47,9 +49,14 @@ These exclusions are release decisions, not assertions that the source cannot ru
 
 ## Runtime and dependency evidence
 
-- TopoForge remains CPython `>=3.12,<3.13`; Python.org provides a macOS universal2 installer for
-  [Python 3.12.10](https://www.python.org/downloads/release/python-31210/). The final embedded arm64
-  runtime is still unselected and must be checksum- and architecture-bound before packaging.
+- TopoForge remains CPython `>=3.11,<3.15`; the Phase 13A candidate pins Python.org's official
+  [Python 3.12.10](https://www.python.org/downloads/release/python-31210/) universal2 installer at
+  `https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg`, exactly
+  `45,720,356` bytes and SHA-256
+  `8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4`. The measured
+  upstream primary Mach-O contains x86_64 (minimum 10.13) and arm64 (minimum 11.0); native
+  builds must thin every applicable Mach-O to arm64 and retain the app deployment target of
+  15.0. This identity is fixed build input, not evidence that a packaged candidate has run.
 - `uv.lock` SHA-256 at freeze is
   `4db256ba2e4ffd8127d63b90afa00bb68224658e6a0dff39466151631e24c7e0`.
 - With `MACOSX_DEPLOYMENT_TARGET=15.0`, wheel-only `uv` dry runs resolve 53 runtime packages and 67
@@ -58,6 +65,32 @@ These exclusions are release decisions, not assertions that the source cannot ru
 - The strongest current arm64 wheel floor among the locked direct native dependencies is macOS
   14.0 (`pyproj` and `rasterio`); the declared application floor remains 15.0 because only macOS 15
   and 26 are release candidates.
+
+## Phase 13A unsigned application candidate
+
+The local Phase 13A implementation builds only on native, non-Rosetta arm64 macOS 15 or 26. It
+packages the pinned CPython runtime, the exact `uv.lock` production dependency set, TopoForge
+Core/CLI, production Web assets, deterministic `Info.plist`, a CLI launcher, and a loopback-only
+application launcher into `TopoForge.app`. It does not require a user-installed Python, `uv`,
+Node, source checkout, or development environment. Durable defaults remain under
+`~/Library/Application Support/TopoForge`.
+
+The manifest and acceptance reports bind source commit, runtime, `uv.lock`, `pyproject.toml`,
+build constraints, all package verifier hashes, the exact app payload, final archive, native OS,
+and CPU architecture. Static validation enforces bounded exact archive closure, macOS
+case/Unicode path uniqueness, internal symlink closure, ordinary-file/hard-link rules, deterministic
+ZIP metadata, `Info.plist`, real arm64 Mach-O slices and deployment floors, locked dependency
+inventory, and production Web assets. Native acceptance starts from a path containing spaces and
+non-ASCII text, executes doctor and `web --check`, rejects external host arguments, runs a
+synthetic worker job, strictly reopens STL/3MF/GLB, restarts and cancels a recovered worker, and
+backs up and restores the completed project.
+
+The workflow definition builds the same source twice, requires byte-identical archives, retains
+one checksum-bound unsigned candidate, and sends that exact archive SHA to macOS 15 and macOS 26
+hosted-package acceptance jobs. No run of that workflow exists for this implementation. Its future
+results are `hosted-package` evidence only: they cannot establish clean-system state, signing,
+notarization, quarantine/Gatekeeper first launch, public support, or Phase 13B Bambu Studio
+automation.
 
 ## CI and clean-system capacity
 
@@ -114,9 +147,10 @@ reopen/reslice on both advertised targets.
 
 ## Gates before any support claim
 
-Hosted CI now passes the locked source environment, doctor, deterministic synthetic STL/3MF/GLB
-generation and reopen, source-tree Web checks, worker recovery, and the full Python regression
-suite on both runner labels. For each literal clean-system target, one release candidate must still
+Historical hosted source-core CI passed the locked source environment, doctor, deterministic
+synthetic STL/3MF/GLB generation and reopen, source-tree Web checks, worker recovery, and the then
+current Python regression suite on both runner labels. The new packaged-app workflow has not run.
+For each literal clean-system target, the same checksum-bound release candidate must still
 pass application-data and temporary-path behavior, paths with spaces and non-ASCII text,
 backup/restore, native `TopoForge.app`, signed/notarized distribution, quarantine, normal
 Gatekeeper first launch, and packaged worker/browser behavior. Phase 13B then adds the complete

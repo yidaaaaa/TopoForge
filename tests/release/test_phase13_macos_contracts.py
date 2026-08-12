@@ -175,7 +175,8 @@ def test_native_macos_ci_uses_only_frozen_arm64_runner_labels() -> None:
     assert "Probe app-bundle working directory without an input-root override" in workflow_text
     assert "runtime.json.sha256" in workflow_text
     assert "TopoForge Phase 13/地形" in workflow_text
-    assert workflow_text.count('cmp "') == 3
+    source_core_runs = "\n".join(str(step.get("run", "")) for step in job["steps"])
+    assert source_core_runs.count('cmp "') == 3
     assert "support unverified" in workflow_text
 
 

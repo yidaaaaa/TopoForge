@@ -61,12 +61,27 @@
     "official_macos_installer": {
       "version": "3.12.10",
       "kind": "universal2",
-      "availability_status": "available-not-run"
+      "availability_status": "official-identity-pinned-local-verification-only",
+      "archive_name": "python-3.12.10-macos11.pkg",
+      "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg",
+      "bytes": 45720356,
+      "sha256": "8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4",
+      "source_architecture": "universal2",
+      "source_minimum_macos": {
+        "x86_64": "10.13",
+        "arm64": "11.0"
+      }
     },
     "embedded_application_runtime": {
-      "status": "not-selected-unverified",
+      "status": "pinned-builder-implemented-native-run-required",
       "release_gate": true,
-      "requirement": "The final arm64 runtime version, origin, archive hash, Mach-O architecture, and minimum deployment target must be recorded before application packaging can pass."
+      "provider": "Python Software Foundation",
+      "version": "3.12.10",
+      "architecture": "arm64",
+      "minimum_macos": "11.0",
+      "application_deployment_target": "15.0",
+      "runtime_sha256": "8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4",
+      "claim_boundary": "The deterministic unsigned app builder and offline contracts exist locally. No native package workflow or clean-system run has been executed for this implementation."
     }
   },
   "dependencies": {
@@ -114,7 +129,8 @@
     ],
     "runner_labels_are_public_support_contract": false,
     "nested_virtualization_available": false,
-    "limitation": "Hosted CI can establish native arm64 core behavior but cannot replace clean-system, quarantine, Gatekeeper, signing, notarization, or first-launch evidence."
+    "limitation": "Hosted CI can establish native arm64 core behavior but cannot replace clean-system, quarantine, Gatekeeper, signing, notarization, or first-launch evidence.",
+    "packaged_app_workflow_status": "local-implementation-not-run"
   },
   "hosted_ci_evidence": {
     "status": "historical-hosted-core-pass-rerun-required",
@@ -217,5 +233,25 @@
       "url": "https://github.com/bambulab/BambuStudio/wiki/Command-Line-Usage",
       "accessed_at": "2026-08-10"
     }
-  ]
+  ],
+  "phase13a_package_infrastructure": {
+    "implemented_at": "2026-08-13",
+    "status": "local-implementation-unverified",
+    "branch": "codex/phase13-macos-package",
+    "candidate_role": "phase13a-macos-arm64-unsigned-candidate",
+    "candidate_targets": [
+      "macos-15-arm64",
+      "macos-26-arm64"
+    ],
+    "builder_host_requirement": "native stable macOS 15 or 26 arm64 without Rosetta",
+    "archive_determinism": "two builds of one source commit must be byte-identical",
+    "hosted_evidence_scope": "hosted-package",
+    "workflow_run_status": "not-run",
+    "clean_system_evidence": false,
+    "signed": false,
+    "notarized": false,
+    "gatekeeper_evidence": false,
+    "public_support_status": "unverified",
+    "bambu_phase13b_evidence": false
+  }
 }

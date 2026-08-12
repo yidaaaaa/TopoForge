@@ -148,3 +148,265 @@ jobs:
             artifacts/logs/macos-${{ matrix.runner }}-runtime.json.sha256
           if-no-files-found: warn
           retention-days: 30
+  package-arm64:
+    name: Build one deterministic unsigned arm64 hosted-package candidate
+    needs: native-arm64
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "15.0"
+      PYTHONHASHSEED: "0"
+    outputs:
+      source_commit: ${{ steps.candidate.outputs.source_commit }}
+      archive_filename: ${{ steps.candidate.outputs.archive_filename }}
+      archive_sha256: ${{ steps.candidate.outputs.archive_sha256 }}
+      app_payload_sha256: ${{ steps.candidate.outputs.app_payload_sha256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          architecture: arm64
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: "0.8.24"
+          enable-cache: true
+      - name: Install locked build and verification environment
+        run: uv sync --locked --all-groups
+      - name: Build production Web assets
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+      - id: package-version
+        name: Resolve unchanged project version
+        run: echo "version=$(uv version --short)" >> "$GITHUB_OUTPUT"
+      - name: Build primary unsigned app candidate
+        run: >-
+          uv run --python 3.12 python scripts/build_macos_app.py
+          --output-dir dist/macos-primary
+          --cache-dir "$RUNNER_TEMP/topoforge-cpython-runtime"
+          --version "${{ steps.package-version.outputs.version }}"
+          --report artifacts/logs/ci-macos-app-primary-build.json
+      - name: Build repeat unsigned app candidate
+        run: >-
+          uv run --python 3.12 python scripts/build_macos_app.py
+          --output-dir dist/macos-repeat
+          --cache-dir "$RUNNER_TEMP/topoforge-cpython-runtime"
+          --version "${{ steps.package-version.outputs.version }}"
+          --report artifacts/logs/ci-macos-app-repeat-build.json
+      - id: archive-verification
+        name: Verify archive closure and repeat-build determinism
+        run: >-
+          uv run --python 3.12 python scripts/verify_macos_app.py
+          --archive
+          "dist/macos-primary/topoforge-${{ steps.package-version.outputs.version }}-macos-arm64-unsigned-candidate.zip"
+          --repeat-archive
+          "dist/macos-repeat/topoforge-${{ steps.package-version.outputs.version }}-macos-arm64-unsigned-candidate.zip"
+          --expected-source-commit "$GITHUB_SHA"
+          --report artifacts/logs/ci-macos-app-archive-verification.json
+      - id: candidate
+        name: Bind source, archive, and app payload outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="dist/macos-primary/topoforge-${{ steps.package-version.outputs.version }}-macos-arm64-unsigned-candidate.zip"
+          repeat="dist/macos-repeat/topoforge-${{ steps.package-version.outputs.version }}-macos-arm64-unsigned-candidate.zip"
+          report="artifacts/logs/ci-macos-app-archive-verification.json"
+          cmp "$archive" "$repeat"
+          archive_sha256="$(shasum -a 256 "$archive" | awk '{print $1}')"
+          report_sha256="$(uv run --python 3.12 python -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["archive"]["sha256"])' "$report")"
+          source_commit="$(uv run --python 3.12 python -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["source"]["commit"])' "$report")"
+          payload_sha256="$(uv run --python 3.12 python -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["contents"]["payload_sha256"])' "$report")"
+          test "$archive_sha256" = "$report_sha256"
+          test "$source_commit" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=all)"
+          printf '%s  %s\n' "$archive_sha256" "$(basename "$archive")" > dist/macos-primary/SHA256SUMS
+          echo "source_commit=$source_commit" >> "$GITHUB_OUTPUT"
+          echo "archive_filename=$(basename "$archive")" >> "$GITHUB_OUTPUT"
+          echo "archive_sha256=$archive_sha256" >> "$GITHUB_OUTPUT"
+          echo "app_payload_sha256=$payload_sha256" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Unsigned macOS hosted-package candidate SHA-256::$archive_sha256"
+      - name: Enforce candidate artifact bounds and detached hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --python 3.12 python - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          files = [
+              Path("dist/macos-primary") / "${{ steps.candidate.outputs.archive_filename }}",
+              Path("dist/macos-primary") / (
+                  "${{ steps.candidate.outputs.archive_filename }}.sha256"
+              ),
+              Path("dist/macos-primary/SHA256SUMS"),
+              Path("artifacts/logs/ci-macos-app-primary-build.json"),
+              Path("artifacts/logs/ci-macos-app-primary-build.json.sha256"),
+              Path("artifacts/logs/ci-macos-app-repeat-build.json"),
+              Path("artifacts/logs/ci-macos-app-repeat-build.json.sha256"),
+              Path("artifacts/logs/ci-macos-app-archive-verification.json"),
+              Path("artifacts/logs/ci-macos-app-archive-verification.json.sha256"),
+          ]
+          for path in files:
+              if not path.is_file() or path.is_symlink():
+                  raise SystemExit(f"candidate artifact member is missing or unsafe: {path}")
+          if files[0].stat().st_size > 805_306_368:
+              raise SystemExit("candidate archive exceeds its upload bound")
+          for report in files[3:]:
+              if report.suffix == ".json" and report.stat().st_size > 16_777_216:
+                  raise SystemExit(f"candidate report exceeds its upload bound: {report}")
+              if report.suffix != ".json":
+                  continue
+              expected, name = report.with_name(f"{report.name}.sha256").read_text().split()
+              if name != report.name:
+                  raise SystemExit(f"candidate report sidecar name changed: {report}")
+              observed = hashlib.sha256(report.read_bytes()).hexdigest()
+              if observed != expected:
+                  raise SystemExit(f"candidate report sidecar digest changed: {report}")
+          PY
+      - name: Retain unsigned hosted-package candidate and bounded evidence
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: topoforge-macos-arm64-unsigned-hosted-package-candidate
+          path: |
+            dist/macos-primary/*.zip
+            dist/macos-primary/*.zip.sha256
+            dist/macos-primary/SHA256SUMS
+            artifacts/logs/ci-macos-app-primary-build.json
+            artifacts/logs/ci-macos-app-primary-build.json.sha256
+            artifacts/logs/ci-macos-app-repeat-build.json
+            artifacts/logs/ci-macos-app-repeat-build.json.sha256
+            artifacts/logs/ci-macos-app-archive-verification.json
+            artifacts/logs/ci-macos-app-archive-verification.json.sha256
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain package failure diagnostics only
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: topoforge-macos-arm64-package-failed-diagnostics-${{ github.run_attempt }}
+          path: |
+            artifacts/logs/ci-macos-app-primary-build.json
+            artifacts/logs/ci-macos-app-primary-build.json.sha256
+            artifacts/logs/ci-macos-app-repeat-build.json
+            artifacts/logs/ci-macos-app-repeat-build.json.sha256
+            artifacts/logs/ci-macos-app-archive-verification.json
+            artifacts/logs/ci-macos-app-archive-verification.json.sha256
+          if-no-files-found: warn
+          retention-days: 14
+
+  packaged-app-acceptance:
+    name: ${{ matrix.target_id }} same-candidate hosted-package acceptance
+    needs: package-arm64
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target_id: macos-15-arm64
+            runner: macos-15
+          - target_id: macos-26-arm64
+            runner: macos-26
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
+    env:
+      EXPECTED_SOURCE_COMMIT: ${{ needs.package-arm64.outputs.source_commit }}
+      EXPECTED_ARCHIVE_FILENAME: ${{ needs.package-arm64.outputs.archive_filename }}
+      EXPECTED_ARCHIVE_SHA256: ${{ needs.package-arm64.outputs.archive_sha256 }}
+      EXPECTED_APP_PAYLOAD_SHA256: ${{ needs.package-arm64.outputs.app_payload_sha256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          architecture: arm64
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: "0.8.24"
+          enable-cache: true
+      - name: Install locked acceptance environment
+        run: uv sync --locked --all-groups
+      - name: Download the one source-bound candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: topoforge-macos-arm64-unsigned-hosted-package-candidate
+          path: downloaded/macos-candidate
+      - name: Verify downloaded candidate source and archive binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="downloaded/macos-candidate/dist/macos-primary/$EXPECTED_ARCHIVE_FILENAME"
+          test "$GITHUB_SHA" = "$EXPECTED_SOURCE_COMMIT"
+          test -f "$archive"
+          test ! -L "$archive"
+          observed="$(shasum -a 256 "$archive" | awk '{print $1}')"
+          test "$observed" = "$EXPECTED_ARCHIVE_SHA256"
+          test "$(find downloaded/macos-candidate -type f | wc -l | tr -d ' ')" -le 9
+          test "$(find downloaded/macos-candidate -type l | wc -l | tr -d ' ')" = 0
+      - id: packaged-system
+        name: Execute native packaged Web, recovery, and manufacturing acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="downloaded/macos-candidate/dist/macos-primary/$EXPECTED_ARCHIVE_FILENAME"
+          work_root="$RUNNER_TEMP/TopoForge Phase 13A ${{ matrix.target_id }}/验收-${GITHUB_RUN_ATTEMPT}"
+          uv run --python 3.12 python scripts/verify_macos_system.py \
+            --archive "$archive" \
+            --expected-source-commit "$EXPECTED_SOURCE_COMMIT" \
+            --expected-target "${{ matrix.target_id }}" \
+            --evidence-scope hosted-package \
+            --work-root "$work_root" \
+            --report "artifacts/logs/${{ matrix.target_id }}-hosted-package.json"
+      - name: Verify acceptance payload and report bounds
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="artifacts/logs/${{ matrix.target_id }}-hosted-package.json"
+          uv run --python 3.12 python - "$report" <<'PY'
+          import hashlib
+          import json
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          if path.stat().st_size > 16_777_216:
+              raise SystemExit("hosted-package evidence exceeds its upload bound")
+          report = json.loads(path.read_text(encoding="utf-8"))
+          if report["evidence_scope"] != "hosted-package":
+              raise SystemExit("hosted runner attempted a non-hosted evidence scope")
+          if report["source"]["commit"] != "${{ needs.package-arm64.outputs.source_commit }}":
+              raise SystemExit("hosted-package report source binding changed")
+          if report["archive"]["sha256"] != "${{ needs.package-arm64.outputs.archive_sha256 }}":
+              raise SystemExit("hosted-package report archive binding changed")
+          if report["app_payload_sha256"] != "${{ needs.package-arm64.outputs.app_payload_sha256 }}":
+              raise SystemExit("hosted-package report app payload binding changed")
+          digest, name = path.with_name(f"{path.name}.sha256").read_text().split()
+          if name != path.name or digest != hashlib.sha256(path.read_bytes()).hexdigest():
+              raise SystemExit("hosted-package report detached SHA-256 changed")
+          PY
+      - name: Retain bounded hosted-package acceptance evidence
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: topoforge-${{ matrix.target_id }}-hosted-package-evidence
+          path: |
+            artifacts/logs/${{ matrix.target_id }}-hosted-package.json
+            artifacts/logs/${{ matrix.target_id }}-hosted-package.json.sha256
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain acceptance failure diagnostics only
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: topoforge-${{ matrix.target_id }}-acceptance-failed-diagnostics-${{ github.run_attempt }}
+          path: |
+            artifacts/logs/${{ matrix.target_id }}-hosted-package.json
+            artifacts/logs/${{ matrix.target_id }}-hosted-package.json.sha256
+          if-no-files-found: warn
+          retention-days: 14
