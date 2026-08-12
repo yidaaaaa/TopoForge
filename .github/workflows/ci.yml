@@ -82,14 +82,27 @@ jobs:
         run: >-
           uv run python scripts/verify_platform_core.py
           --report artifacts/logs/ci-python-${{ matrix.python-version }}.json
-      - name: Run Python regression suite
+      - id: python-pytest
+        name: Run Python regression suite
+        env:
+          PYTEST_ADDOPTS: >-
+            --junitxml=artifacts/logs/ci-python-${{ matrix.python-version }}-pytest.xml
+            --tb=short
         run: uv run pytest
+      - name: Report Python regression failure
+        if: failure() && steps.python-pytest.outcome == 'failure'
+        run: >-
+          uv run python scripts/report_pytest_failure.py
+          --junit artifacts/logs/ci-python-${{ matrix.python-version }}-pytest.xml
+          --title "Python ${{ matrix.python-version }} pytest"
       - name: Retain compatibility evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: topoforge-python-${{ matrix.python-version }}-evidence
-          path: artifacts/logs/ci-python-${{ matrix.python-version }}.json
+          path: |
+            artifacts/logs/ci-python-${{ matrix.python-version }}.json
+            artifacts/logs/ci-python-${{ matrix.python-version }}-pytest.xml
           if-no-files-found: error
 
   windows-core:
@@ -113,6 +126,8 @@ jobs:
       - name: Verify public source boundary
         run: uv run python scripts/verify_public_tree.py
       - name: Run Windows x64 core acceptance
+        env:
+          TOPOFORGE_CI_TRACEBACK: "1"
         run: >-
           uv run python scripts/verify_platform_core.py
           --report artifacts/logs/ci-windows-x64-core.json
@@ -131,6 +146,14 @@ jobs:
             exit 0
           }
           $message = "{0}: {1}" -f $report.error.type, $report.error.message
+          if ($message.Length -gt 12000) {
+            $message = $message.Substring($message.Length - 12000)
+          }
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "### Windows core acceptance"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value '```text'
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $message
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value '```'
           $message = $message.Replace("%", "%25").Replace("`r", "%0D").Replace("`n", "%0A")
           Write-Output "::error title=Windows core acceptance::$message"
       - id: windows-system

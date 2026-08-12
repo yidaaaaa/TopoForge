@@ -114,8 +114,19 @@ jobs:
         run: uv run ruff format --check .
       - name: Run Pyright gate
         run: uv run pyright
-      - name: Run release regression suite
+      - id: release-pytest
+        name: Run release regression suite
+        env:
+          PYTEST_ADDOPTS: >-
+            --junitxml=artifacts/logs/macos-${{ matrix.runner }}-release-pytest.xml
+            --tb=short
         run: uv run pytest tests/release
+      - name: Report release regression failure
+        if: failure() && steps.release-pytest.outcome == 'failure'
+        run: >-
+          uv run python scripts/report_pytest_failure.py
+          --junit artifacts/logs/macos-${{ matrix.runner }}-release-pytest.xml
+          --title "${{ matrix.target }} release pytest"
       - name: Run slicer regression suite
         run: uv run pytest tests/slicer
       - name: Run unit regression suite
@@ -146,6 +157,7 @@ jobs:
           path: |
             artifacts/logs/macos-${{ matrix.runner }}-runtime.json
             artifacts/logs/macos-${{ matrix.runner }}-runtime.json.sha256
+            artifacts/logs/macos-${{ matrix.runner }}-release-pytest.xml
           if-no-files-found: warn
           retention-days: 30
   package-arm64:

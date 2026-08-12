@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import platform
 import shutil
 import sys
+import traceback
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Annotated, Any
@@ -204,6 +206,8 @@ def _emit(value: Any) -> None:
 
 
 def _fail(exc: Exception) -> None:
+    if os.environ.get("TOPOFORGE_CI_TRACEBACK") == "1":
+        traceback.print_exception(exc, file=sys.stderr)
     typer.echo(f"Error: {exc}", err=True)
     raise typer.Exit(code=2) from exc
 
