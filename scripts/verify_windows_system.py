@@ -22,7 +22,7 @@ import urllib.parse
 import urllib.request
 import webbrowser
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, BinaryIO, Literal, cast
 
 import topoforge
 from topoforge.exporters.three_mf import ThreeMFInspection, inspect_3mf
@@ -58,6 +58,7 @@ _TERMINAL_STATES = {JobState.COMPLETED, JobState.FAILED, JobState.CANCELLED}
 _HTTP_TERMINAL_STATES = {"completed", "failed", "cancelled"}
 _HTTP_MAX_JSON_BYTES = 4 * 1024 * 1024
 _HTTP_MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
+_SERVER_LOG_TAIL_BYTES = 12 * 1024
 _BROWSER_CALLBACK_PATH = "/__topoforge_browser_loaded__"
 _BROWSER_CALLBACK_TIMEOUT_SECONDS = 20.0
 _WINDOWS_CONTAINMENT_PROBE_CODE = r"""
@@ -343,13 +344,30 @@ def _stop_server(
     return {"method": "identity-bound-process-tree", "exit_code": process.returncode}
 
 
-def _wait_for_server(base_url: str, process: subprocess.Popen[bytes]) -> dict[str, Any]:
+def _bounded_server_log_tail(log: BinaryIO) -> str:
+    """Return a bounded UTF-8 replacement-decoded tail from an already opened log."""
+    log.flush()
+    end = log.seek(0, os.SEEK_END)
+    log.seek(max(0, end - _SERVER_LOG_TAIL_BYTES))
+    return log.read(_SERVER_LOG_TAIL_BYTES).decode("utf-8", errors="replace").strip()
+
+
+def _wait_for_server(
+    base_url: str,
+    process: subprocess.Popen[bytes],
+    *,
+    server_log: BinaryIO | None = None,
+) -> dict[str, Any]:
     deadline = time.monotonic() + 45.0
     last_error = "server did not answer"
     while time.monotonic() < deadline:
         if process.poll() is not None:
+            log_tail = "" if server_log is None else _bounded_server_log_tail(server_log)
+            detail = (
+                "server log was empty" if not log_tail else f"bounded server log tail:\n{log_tail}"
+            )
             raise RuntimeError(
-                f"TopoForge Web server exited before health check: {process.returncode}"
+                f"TopoForge Web server exited before health check: {process.returncode}; {detail}"
             )
         try:
             status, health = _http_json(f"{base_url}/api/v1/health", timeout_seconds=2.0)
@@ -579,7 +597,7 @@ def _real_http_web_acceptance(
     log_path = config.state_dir.parent / "real-http-web-server.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     shutdown: dict[str, Any] | None = None
-    with log_path.open("xb") as log:
+    with log_path.open("x+b") as log:
         process = cast(
             "subprocess.Popen[bytes]",
             subprocess.Popen(
@@ -599,7 +617,7 @@ def _real_http_web_acceptance(
             server_group = process_group_id(process.pid)
             if server_identity is None or server_group is None:
                 raise RuntimeError("Web server has no stable process identity or containment group")
-            health = _wait_for_server(base_url, process)
+            health = _wait_for_server(base_url, process, server_log=log)
             root_status, root, root_headers = _http_request(base_url + "/")
             if root_status != 200 or b"<!doctype html" not in root.lower():
                 raise RuntimeError("TopoForge Web root did not serve the packaged application")

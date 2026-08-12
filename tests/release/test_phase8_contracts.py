@@ -640,13 +640,16 @@ def test_github_release_workflow_contract() -> None:
     ) < workflow_text.index("Publish GitHub Release")
     assert "--repeat-dir dist/repeat" in workflow_text
     assert "--install" in workflow_text
-    assert "sha256sum --check --strict SHA256SUMS" in workflow_text
+    assert "SHA256SUMS differs from the canonical publication manifest" in workflow_text
     assert 'gh release create "$RELEASE_TAG"' in workflow_text
     assert "dist/release/*" not in workflow_text
     assert '"${asset_filenames[@]}" SHA256SUMS' in workflow_text
     assert "steps.release-assets.outputs.checksums_sha256" in workflow_text
-    assert "cmp --silent SHA256SUMS" in workflow_text
-    assert 'find "$release_root" -mindepth 1 -maxdepth 1' in workflow_text
+    assert "publication bundle closure differs" in workflow_text
+    assert "os.scandir(release_root)" in workflow_text
+    assert "sha256sum" not in workflow_text
+    assert "cmp --silent" not in workflow_text
+    assert "-printf" not in workflow_text
     assert "--verify-tag" in workflow_text
     release_docs = (root / "docs/release.md").read_text(encoding="utf-8")
     assert "automatic publication contract starts with `0.11.x`" in release_docs

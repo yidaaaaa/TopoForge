@@ -523,11 +523,35 @@ def test_real_server_health_rejects_early_process_exit() -> None:
         def poll() -> int:
             return 7
 
-    with pytest.raises(RuntimeError, match="exited before health check"):
+    server_log = io.BytesIO(b"INFO startup\nERROR lifespan failed: fixture detail\n")
+    with pytest.raises(RuntimeError, match="lifespan failed: fixture detail"):
         system_verifier._wait_for_server(
             "http://127.0.0.1:8765",
             ExitedProcess(),  # type: ignore[arg-type]
+            server_log=server_log,
         )
+
+
+def test_real_server_health_bounds_early_exit_log_tail() -> None:
+    class ExitedProcess:
+        returncode = 3
+
+        @staticmethod
+        def poll() -> int:
+            return 3
+
+    marker = b"bounded-tail-marker"
+    server_log = io.BytesIO(b"x" * system_verifier._SERVER_LOG_TAIL_BYTES + marker)
+    with pytest.raises(RuntimeError) as captured:
+        system_verifier._wait_for_server(
+            "http://127.0.0.1:8765",
+            ExitedProcess(),  # type: ignore[arg-type]
+            server_log=server_log,
+        )
+
+    message = str(captured.value)
+    assert marker.decode("ascii") in message
+    assert len(message.encode("utf-8")) < system_verifier._SERVER_LOG_TAIL_BYTES + 256
 
 
 def test_clean_target_refuses_skipped_browser_before_creating_root(tmp_path: Path) -> None:

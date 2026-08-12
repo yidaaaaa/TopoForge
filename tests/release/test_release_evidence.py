@@ -2272,10 +2272,16 @@ def test_evidence_schema_and_release_workflow_are_hard_blockers() -> None:
     assert 'portable_archive_sha256="$PORTABLE_SHA256"' in stage_assets
     assert "checksums_sha256=${checksums_sha256}" in stage_assets
     assert "needs.prepare.outputs.checksums_sha256" in publish_assets
-    assert 'find "$release_root" -mindepth 1 -maxdepth 1' in publish_assets
-    assert 'cmp --silent SHA256SUMS "$expected_checksums"' in publish_assets
+    assert "os.scandir(release_root)" in publish_assets
+    assert "publication bundle closure differs" in publish_assets
+    assert "SHA256SUMS differs from the canonical publication manifest" in publish_assets
+    assert "-printf" not in publish_assets
+    assert "sort -z" not in publish_assets
+    assert "cmp --silent" not in publish_assets
     assert '"${asset_filenames[@]}" SHA256SUMS' in publish_assets
     assert "stat -c" not in workflow_text
+    assert "sha256sum" not in workflow_text
+    assert "cmp --silent" not in workflow_text
     assert workflow_text.count("os.lstat(sys.argv[1]).st_nlink") == 8
     assert "dist/release/*" not in publish_assets
     assert 'gh release create "$RELEASE_TAG"' in publish_assets
