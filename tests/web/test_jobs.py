@@ -1967,9 +1967,14 @@ def test_worker_parent_death_before_gate_never_executes_workflow(
     assert not gate_path.exists()
 
 
+@pytest.mark.parametrize(
+    "native_code_field",
+    ["winerror", "errno"],
+)
 def test_worker_waits_for_windows_launch_gate_publisher_to_close(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_code_field: str,
 ) -> None:
     ready = WorkerReady(
         job_id="a" * 32,
@@ -1986,8 +1991,12 @@ def test_worker_waits_for_windows_launch_gate_publisher_to_close(
         ready=ready,
         worker_ready_sha256=ready_sha256,
     )
-    sharing_violation = OSError(32, "fixture publisher still holds the renamed gate")
-    sharing_violation.__dict__["winerror"] = 32
+    if native_code_field == "winerror":
+        sharing_violation = OSError(errno.EINVAL, "fixture native Windows error")
+        sharing_violation.__dict__["winerror"] = 32
+    else:
+        sharing_violation = OSError(32, "fixture publisher still holds the renamed gate")
+    monkeypatch.setattr(worker_module.sys, "platform", "win32")
     attempts = 0
 
     def read_gate(*_args: object, **_kwargs: object) -> bytes:

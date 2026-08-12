@@ -86,6 +86,15 @@ def _current_gate_bytes(
     )
 
 
+def _is_windows_sharing_violation(exc: OSError) -> bool:
+    native_code = getattr(exc, "winerror", None)
+    if native_code is None:
+        native_code = vars(exc).get("winerror")
+    return native_code == _WINDOWS_ERROR_SHARING_VIOLATION or (
+        sys.platform == "win32" and exc.errno == _WINDOWS_ERROR_SHARING_VIOLATION
+    )
+
+
 def _wait_for_launch_gate(
     *,
     gate_path: Path,
@@ -117,7 +126,7 @@ def _wait_for_launch_gate(
         except FileNotFoundError:
             payload = None
         except OSError as exc:
-            if getattr(exc, "winerror", None) == _WINDOWS_ERROR_SHARING_VIOLATION:
+            if _is_windows_sharing_violation(exc):
                 payload = None
             else:
                 raise RuntimeError(f"worker launch gate is unsafe or unreadable: {exc}") from exc
