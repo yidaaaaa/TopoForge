@@ -526,6 +526,7 @@ def test_termination_refuses_a_reused_worker_pid(
         processes.os,
         "killpg",
         lambda pid, sent_signal: signals.append((pid, int(sent_signal))),
+        raising=False,
     )
 
     with pytest.raises(ProcessIdentityMismatchError, match="changed identity"):
@@ -553,6 +554,7 @@ def test_posix_termination_refuses_a_forged_process_group(
         processes.os,
         "killpg",
         lambda pid, sent_signal: signals.append((pid, int(sent_signal))),
+        raising=False,
     )
 
     with pytest.raises(ProcessIdentityMismatchError, match="not bound to recorded"):
@@ -580,6 +582,7 @@ def test_posix_termination_does_not_signal_an_unbound_group_after_leader_exit(
         processes.os,
         "killpg",
         lambda pid, sent_signal: signals.append((pid, int(sent_signal))),
+        raising=False,
     )
 
     with pytest.raises(ProcessInspectionUnavailableError, match="original identity"):
@@ -602,6 +605,7 @@ def test_live_posix_termination_refuses_missing_creation_identity(
         processes.os,
         "killpg",
         lambda pid, sent_signal: signals.append((pid, int(sent_signal))),
+        raising=False,
     )
 
     with pytest.raises(ProcessInspectionUnavailableError, match="without a recorded"):
@@ -685,6 +689,10 @@ def test_live_containment_reports_unavailable_identity_inspection(
         )
 
 
+@pytest.mark.skipif(
+    not hasattr(processes.os, "getpgid") or not hasattr(processes.os, "killpg"),
+    reason="live POSIX process-group integration requires getpgid and killpg",
+)
 def test_posix_termination_kills_descendants_after_the_leader_exits() -> None:
     child_code = (
         "import os, signal, time\n"

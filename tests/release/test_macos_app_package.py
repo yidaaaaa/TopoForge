@@ -898,6 +898,7 @@ def test_repeat_archive_verifier_requires_byte_identical_candidate(tmp_path: Pat
         )
 
 
+@pytest.mark.skipif(os.name == "nt", reason="macOS launchers require a POSIX shell execution host")
 def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) -> None:
     repository = tmp_path / "repository"
     repository.mkdir()
