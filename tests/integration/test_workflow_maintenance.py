@@ -851,7 +851,7 @@ def test_backup_rejects_workspace_hard_links_without_publishing_archive(
     assert not list(tmp_path.glob(f".{archive.name}.*.tmp"))
 
 
-def test_backup_enumeration_does_not_trust_cached_direntry_link_counts(
+def test_identity_sensitive_enumeration_refreshes_cached_direntry_metadata(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -860,6 +860,11 @@ def test_backup_enumeration_does_not_trust_cached_direntry_link_counts(
     source = workspace / "workflow-launch.yaml"
     source.write_bytes(b"fixture: true\n")
     real_scandir = workflow_maintenance.os.scandir
+    cleanup_parent = tmp_path / "cleanup-parent"
+    cleanup_tree = cleanup_parent / "restore-staging"
+    cleanup_child = cleanup_tree / "backup-external" / "source.tif"
+    cleanup_child.parent.mkdir(parents=True)
+    cleanup_child.write_bytes(b"fixture")
 
     class CachedEntry:
         def __init__(self, entry: os.DirEntry[str]) -> None:
@@ -893,6 +898,15 @@ def test_backup_enumeration_does_not_trust_cached_direntry_link_counts(
     )
 
     assert [item.path for item in files] == [source]
+    workflow_maintenance._remove_owned_tree(
+        cleanup_tree,
+        parent_root=cleanup_parent,
+        parent_root_identity=workflow_maintenance._identity(cleanup_parent.lstat()),
+        expected_tree_identity=workflow_maintenance._identity(cleanup_tree.lstat()),
+        context="test restore cleanup",
+    )
+
+    assert not cleanup_tree.exists()
 
 
 def test_backup_atomic_publication_never_overwrites_racing_destination(

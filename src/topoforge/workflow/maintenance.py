@@ -511,10 +511,11 @@ def _remove_owned_tree(
         )
         try:
             with os.scandir(directory) as entries:
-                children = sorted(
-                    ((Path(entry.path), entry.stat(follow_symlinks=False)) for entry in entries),
-                    key=lambda item: item[0].name,
+                child_paths = sorted(
+                    (Path(entry.path) for entry in entries),
+                    key=lambda item: item.name,
                 )
+                children = [(child, child.lstat()) for child in child_paths]
         except OSError as exc:
             raise ConfigurationError(f"{context} is unreadable: {directory}") from exc
         for child, child_stat in children:
