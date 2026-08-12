@@ -51,7 +51,7 @@ _FILE_NON_DIRECTORY_FILE = 0x00000040
 _OBJ_CASE_INSENSITIVE = 0x00000040
 _OBJ_DONT_REPARSE = 0x00001000
 _FILE_ID_INFO_CLASS = 0x12
-_FILE_RENAME_INFO_CLASS = 3
+_NT_FILE_RENAME_INFORMATION_CLASS = 10
 _FILE_DISPOSITION_INFO_CLASS = 4
 _HANDLE_FLAG_INHERIT = 0x00000001
 _WINDOWS_CTYPES: Any = ctypes
@@ -145,7 +145,7 @@ class _WindowsLeaseBackend(Protocol):
     def rename_relative(
         self,
         handle: int,
-        parent_handle: int | None,
+        parent_handle: int,
         name: str,
         *,
         replace: bool,
@@ -211,7 +211,7 @@ class _FileIdInfo(ctypes.Structure):
 
 class _FileRenameInfoHeader(ctypes.Structure):
     _fields_ = [
-        ("ReplaceIfExists", ctypes.c_ubyte),
+        ("ReplaceIfExists", ctypes.c_uint32),
         ("RootDirectory", ctypes.c_void_p),
         ("FileNameLength", ctypes.c_uint32),
     ]
@@ -238,6 +238,7 @@ class _WindowsNativeLeaseBackend:
     _close_handle: Any
     _set_file_information: Any
     _nt_create_file: Any
+    _nt_set_information_file: Any
     _rtl_status_to_error: Any
 
     def __init__(self) -> None:
@@ -304,6 +305,15 @@ class _WindowsNativeLeaseBackend:
             ctypes.c_uint32,
         ]
         self._nt_create_file.restype = ctypes.c_int32
+        self._nt_set_information_file: Any = ntdll.NtSetInformationFile
+        self._nt_set_information_file.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(_IoStatusBlock),
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.c_int,
+        ]
+        self._nt_set_information_file.restype = ctypes.c_int32
         self._rtl_status_to_error: Any = ntdll.RtlNtStatusToDosError
         self._rtl_status_to_error.argtypes = [ctypes.c_int32]
         self._rtl_status_to_error.restype = ctypes.c_uint32
@@ -503,7 +513,7 @@ class _WindowsNativeLeaseBackend:
     def rename_relative(
         self,
         handle: int,
-        parent_handle: int | None,
+        parent_handle: int,
         name: str,
         *,
         replace: bool,
@@ -516,16 +526,26 @@ class _WindowsNativeLeaseBackend:
         )
         header = ctypes.cast(buffer, ctypes.POINTER(_FileRenameInfoHeader)).contents
         header.ReplaceIfExists = int(replace)
-        header.RootDirectory = None if parent_handle is None else ctypes.c_void_p(parent_handle)
+        header.RootDirectory = ctypes.c_void_p(parent_handle)
         header.FileNameLength = len(encoded_name)
         ctypes.memmove(ctypes.addressof(buffer) + header_bytes, encoded_name, len(encoded_name))
-        if not self._set_file_information(
-            ctypes.c_void_p(handle),
-            _FILE_RENAME_INFO_CLASS,
-            ctypes.byref(buffer),
-            ctypes.sizeof(buffer),
-        ):
-            raise self._last_error("relative atomic rename failed", name)
+        io_status = _IoStatusBlock()
+        status = int(
+            self._nt_set_information_file(
+                ctypes.c_void_p(handle),
+                ctypes.byref(io_status),
+                ctypes.byref(buffer),
+                ctypes.sizeof(buffer),
+                _NT_FILE_RENAME_INFORMATION_CLASS,
+            )
+        )
+        if status < 0:
+            error = int(self._rtl_status_to_error(status))
+            raise self._normalized_error(
+                error,
+                f"NtSetInformationFile failed with NTSTATUS 0x{status & 0xFFFFFFFF:08x}",
+                name,
+            )
 
     def delete_file(self, handle: int) -> None:
         disposition = _FileDispositionInfo(1)
@@ -1783,7 +1803,7 @@ def _write_atomic_owned_regular_bytes_windows(
         os.fsync(descriptor)
         active.rename_relative(
             native_handle,
-            None,
+            parent.handle,
             destination.name,
             replace=replace,
         )
@@ -2796,7 +2816,7 @@ def _write_atomic_regular_bytes_windows(
         os.fsync(opened_file.descriptor)
         opened_file.backend.rename_relative(
             opened_file.native_handle,
-            None,
+            opened_file.parent_handle,
             destination.name,
             replace=replace,
         )

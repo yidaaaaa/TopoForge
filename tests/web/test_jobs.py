@@ -3182,14 +3182,13 @@ class _PosixWindowsLeaseBackend:
     def rename_relative(
         self,
         handle: int,
-        parent_handle: int | None,
+        parent_handle: int,
         name: str,
         *,
         replace: bool,
     ) -> None:
         self._before_rename()
         source_parent, source_name = self._names[handle]
-        destination_parent = source_parent if parent_handle is None else parent_handle
         source_metadata = os.fstat(handle)
         if stat.S_ISDIR(source_metadata.st_mode):
             if replace:
@@ -3197,17 +3196,17 @@ class _PosixWindowsLeaseBackend:
                     source_name,
                     name,
                     src_dir_fd=source_parent,
-                    dst_dir_fd=destination_parent,
+                    dst_dir_fd=parent_handle,
                 )
             else:
                 try:
-                    os.stat(name, dir_fd=destination_parent, follow_symlinks=False)
+                    os.stat(name, dir_fd=parent_handle, follow_symlinks=False)
                 except FileNotFoundError:
                     os.rename(
                         source_name,
                         name,
                         src_dir_fd=source_parent,
-                        dst_dir_fd=destination_parent,
+                        dst_dir_fd=parent_handle,
                     )
                 else:
                     raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), name)
@@ -3216,18 +3215,18 @@ class _PosixWindowsLeaseBackend:
                 source_name,
                 name,
                 src_dir_fd=source_parent,
-                dst_dir_fd=destination_parent,
+                dst_dir_fd=parent_handle,
             )
         else:
             os.link(
                 source_name,
                 name,
                 src_dir_fd=source_parent,
-                dst_dir_fd=destination_parent,
+                dst_dir_fd=parent_handle,
                 follow_symlinks=False,
             )
             os.unlink(source_name, dir_fd=source_parent)
-        self._names[handle] = (destination_parent, name)
+        self._names[handle] = (parent_handle, name)
 
     def delete_file(self, handle: int) -> None:
         self._before_delete()
@@ -3315,7 +3314,41 @@ def test_windows_lease_ctypes_x64_abi_layout() -> None:
 def test_windows_rename_and_disposition_buffers_match_x64_abi() -> None:
     calls: list[tuple[int, bytes, int]] = []
 
-    def capture(
+    def capture_rename(
+        _handle: object,
+        _io_status: object,
+        buffer: Any,
+        length: int,
+        information_class: int,
+    ) -> int:
+        calls.append(
+            (
+                int(information_class),
+                security_module.ctypes.string_at(buffer, int(length)),
+                int(length),
+            )
+        )
+        return 1
+
+    backend = object.__new__(security_module._WindowsNativeLeaseBackend)
+    backend._nt_set_information_file = capture_rename
+    backend.rename_relative(11, 22, "x", replace=True)
+    rename_class, rename_payload, rename_length = calls.pop(0)
+    encoded_name = "x".encode("utf-16-le")
+    header_size = security_module.ctypes.sizeof(security_module._FileRenameInfoHeader)
+    header = security_module._FileRenameInfoHeader.from_buffer_copy(rename_payload[:header_size])
+    assert rename_class == security_module._NT_FILE_RENAME_INFORMATION_CLASS
+    assert rename_length == header_size + len(encoded_name)
+    assert header.ReplaceIfExists == 1
+    assert header.RootDirectory == 22
+    assert header.FileNameLength == len(encoded_name)
+    filename_offset = (
+        security_module._FileRenameInfoHeader.FileNameLength.offset
+        + security_module.ctypes.sizeof(security_module.ctypes.c_uint32)
+    )
+    assert rename_payload[filename_offset : filename_offset + len(encoded_name)] == encoded_name
+
+    def capture_disposition(
         _handle: object,
         information_class: int,
         buffer: Any,
@@ -3330,24 +3363,7 @@ def test_windows_rename_and_disposition_buffers_match_x64_abi() -> None:
         )
         return 1
 
-    backend = object.__new__(security_module._WindowsNativeLeaseBackend)
-    backend._set_file_information = capture
-    backend.rename_relative(11, None, "x", replace=True)
-    rename_class, rename_payload, rename_length = calls.pop(0)
-    encoded_name = "x".encode("utf-16-le")
-    header_size = security_module.ctypes.sizeof(security_module._FileRenameInfoHeader)
-    header = security_module._FileRenameInfoHeader.from_buffer_copy(rename_payload[:header_size])
-    assert rename_class == security_module._FILE_RENAME_INFO_CLASS
-    assert rename_length == header_size + len(encoded_name)
-    assert header.ReplaceIfExists == 1
-    assert header.RootDirectory is None
-    assert header.FileNameLength == len(encoded_name)
-    filename_offset = (
-        security_module._FileRenameInfoHeader.FileNameLength.offset
-        + security_module.ctypes.sizeof(security_module.ctypes.c_uint32)
-    )
-    assert rename_payload[filename_offset : filename_offset + len(encoded_name)] == encoded_name
-
+    backend._set_file_information = capture_disposition
     backend.delete_file(11)
     disposition_class, disposition_payload, disposition_length = calls.pop(0)
     assert disposition_class == security_module._FILE_DISPOSITION_INFO_CLASS
