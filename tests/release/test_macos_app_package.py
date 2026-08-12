@@ -882,11 +882,17 @@ def test_macos_workflow_builds_one_candidate_and_accepts_same_sha_on_both_hosts(
     assert package["needs"] == "native-arm64"
     assert package["runs-on"] == "macos-15"
     package_runs = "\n".join(str(step.get("run", "")) for step in package["steps"])
+    package_steps = {step.get("name"): step for step in package["steps"]}
     assert package_runs.count("scripts/build_macos_app.py") == 2
     assert "scripts/verify_macos_app.py" in package_runs
     assert "--repeat-archive" in package_runs
     assert 'cmp "$archive" "$repeat"' in package_runs
     assert "git status --porcelain --untracked-files=all" in package_runs
+    assert package_steps["Build primary unsigned app candidate"]["id"] == "primary-build"
+    diagnostic = package_steps["Report primary candidate build failure"]
+    assert diagnostic["if"] == "failure() && steps.primary-build.outcome == 'failure'"
+    assert "scripts/report_json_failure.py" in diagnostic["run"]
+    assert "ci-macos-app-primary-build.json" in diagnostic["run"]
 
     assert acceptance["needs"] == "package-arm64"
     assert acceptance["strategy"]["matrix"]["include"] == [
