@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ from rasterio.transform import from_bounds
 from rasterio.warp import transform_bounds
 from typer.testing import CliRunner
 
+import topoforge.web.security as web_security
 from topoforge.cli.app import app
 from topoforge.config import dump_resolved_config
 from topoforge.exceptions import ConfigurationError, ProviderFetchError
@@ -45,6 +47,7 @@ from topoforge.workflow import (
     run_local_workflow,
     verify_global_source,
 )
+from topoforge.workflow.acquisition import exact_regular_file_inventory
 
 runner = CliRunner()
 
@@ -336,6 +339,45 @@ def test_global_source_rejects_raster_and_quality_mask_tampering(tmp_path: Path)
         verify_global_source(config, quality_raster)
 
 
+@pytest.mark.parametrize(
+    "entry_kind",
+    ["extra-file", "directory", "symlink", "hardlink", "fifo"],
+)
+def test_provider_snapshot_inventory_rejects_undeclared_or_ambiguous_entries(
+    tmp_path: Path,
+    entry_kind: str,
+) -> None:
+    output = tmp_path / entry_kind
+    output.mkdir()
+    raster = output / "global-aoi.tif"
+    manifest = output / "global-aoi.tif.source_acquisition.json"
+    raster.write_bytes(b"raster")
+    manifest.write_bytes(b"{}\n")
+
+    try:
+        if entry_kind == "extra-file":
+            (output / "undeclared.bin").write_bytes(b"extra")
+        elif entry_kind == "directory":
+            (output / "undeclared-directory").mkdir()
+        elif entry_kind == "symlink":
+            (output / "undeclared-link").symlink_to(raster.name)
+        elif entry_kind == "hardlink":
+            os.link(raster, tmp_path / "external-hardlink.tif")
+        else:
+            if not hasattr(os, "mkfifo"):
+                pytest.skip("FIFO creation is unavailable on this platform")
+            os.mkfifo(output / "undeclared-fifo")
+    except OSError as exc:
+        pytest.skip(f"{entry_kind} creation is unavailable on this host: {exc}")
+
+    with pytest.raises(ValueError, match=r"inventory changed|non-linked regular file"):
+        exact_regular_file_inventory(
+            output,
+            (raster, manifest),
+            context="provider output",
+        )
+
+
 def test_global_workflow_reuses_acquisition_and_rejects_manifest_tampering(
     tmp_path: Path,
 ) -> None:
@@ -407,6 +449,68 @@ def test_global_workflow_reuses_acquisition_and_rejects_manifest_tampering(
             acquisition_providers=providers,
             acquisition_descriptors=descriptors,
         )
+
+
+def test_global_acquisition_rejects_undeclared_private_output(tmp_path: Path) -> None:
+    config = workflow_config(tmp_path)
+
+    class ExtraOutputProvider(MetricFixtureProvider):
+        private_output: Path | None = None
+
+        def fetch(self, aoi: AreaOfInterest, destination: Path) -> ProviderAcquisition:
+            acquisition = super().fetch(aoi, destination)
+            self.private_output = destination.parent
+            (destination.parent / "undeclared-provider-output.bin").write_bytes(b"undeclared\n")
+            return acquisition
+
+    provider = ExtraOutputProvider()
+    with pytest.raises(
+        ProviderFetchError,
+        match="safe private snapshot",
+    ):
+        run_local_workflow(
+            config,
+            acquisition_providers={provider.provider_id: provider},
+            acquisition_descriptors=[fixture_descriptor()],
+        )
+
+    assert provider.private_output is not None
+    assert (
+        provider.private_output / "undeclared-provider-output.bin"
+    ).read_bytes() == b"undeclared\n"
+    assert not (config.workspace_dir / "stages" / "00-acquire").exists()
+
+
+def test_private_root_cleanup_failure_does_not_undo_committed_publication(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    config = workflow_config(tmp_path)
+    original_remove = web_security.remove_owned_path
+    deferred_root: Path | None = None
+
+    def fail_first_private_root_cleanup(path: Path, **kwargs: Any) -> None:
+        nonlocal deferred_root
+        if deferred_root is None and kwargs.get("context") == (
+            "acquisition stage publication private root cleanup"
+        ):
+            deferred_root = path
+            raise PermissionError("synthetic private-root cleanup failure")
+        original_remove(path, **kwargs)
+
+    monkeypatch.setattr(web_security, "remove_owned_path", fail_first_private_root_cleanup)
+    provider = MetricFixtureProvider()
+    with caplog.at_level("WARNING", logger="topoforge.workflow.local"):
+        result = run_local_workflow(
+            config,
+            acquisition_providers={provider.provider_id: provider},
+            acquisition_descriptors=[fixture_descriptor()],
+        )
+
+    assert result.required_checks_passed is True
+    assert deferred_root is not None and deferred_root.is_dir()
+    assert "publication committed, but private staging-root cleanup was deferred" in caplog.text
 
 
 def test_failed_global_acquisition_records_status_and_recovers(tmp_path: Path) -> None:

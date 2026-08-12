@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -67,7 +68,8 @@ from topoforge.validation.slicers import (
 from topoforge.workflow.acquisition import (
     GlobalAcquisitionConfig,
     GlobalSourceEvidence,
-    acquire_global_source,
+    acquire_global_source_snapshot,
+    exact_regular_file_inventory,
     verify_global_source,
 )
 
@@ -75,6 +77,8 @@ _WORKFLOW_SCHEMA_VERSION = "topoforge-local-workflow-v1"
 _WORKFLOW_STATUS_SCHEMA_VERSION = "topoforge-local-workflow-status-v1"
 _SOURCE_SCHEMA_VERSION = "topoforge-local-source-v1"
 _ACQUISITION_STAGE_SCHEMA_VERSION = "topoforge-global-acquisition-stage-v1"
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -351,14 +355,6 @@ def _publish_private_stage(
             directory=True,
             context=context,
         )
-        remove_owned_path(
-            stage.lease.root,
-            root=stage.parent.root,
-            root_identity=stage.parent.identity,
-            expected_identity=stage.lease.identity,
-            directory=True,
-            context=f"{context} private root cleanup",
-        )
     except (OSError, ValueError) as exc:
         if getattr(exc, "committed", False):
             raise ConfigurationError(
@@ -369,6 +365,23 @@ def _publish_private_stage(
             f"{context} refused a changed workspace or private stage; "
             f"preserve {stage.lease.root} for inspection"
         ) from exc
+
+    try:
+        remove_owned_path(
+            stage.lease.root,
+            root=stage.parent.root,
+            root_identity=stage.parent.identity,
+            expected_identity=stage.lease.identity,
+            directory=True,
+            context=f"{context} private root cleanup",
+        )
+    except (OSError, ValueError) as exc:
+        _LOGGER.warning(
+            "%s publication committed, but private staging-root cleanup was deferred for %s: %s",
+            context,
+            stage.lease.root,
+            exc,
+        )
 
 
 def _ensure_workspace_directory(
@@ -646,6 +659,148 @@ def _normalize_private_build_stage(
         ) from exc
 
 
+def _require_exact_acquisition_inventory(
+    directory: _WorkspaceLease,
+    paths: Sequence[Path],
+    *,
+    context: str,
+) -> None:
+    """Require exactly the declared flat set of non-linked regular files."""
+    exact_regular_file_inventory(directory.root, paths, context=context)
+
+
+def _prepare_private_acquisition_stage(
+    stage: _PrivateStage,
+    config: GlobalAcquisitionConfig,
+    evidence: GlobalSourceEvidence,
+    *,
+    destination: Path,
+) -> str:
+    """Rebind verified paths and finish the complete ACQUIRE stage before publication."""
+    from topoforge.web.security import (
+        atomic_write_owned_regular_bytes,
+        owned_directory_identity,
+        read_owned_regular_bytes,
+    )
+
+    try:
+        output_identity = owned_directory_identity(
+            stage.output,
+            root=stage.lease.root,
+            root_identity=stage.lease.identity,
+            context="private acquisition output",
+        )
+        output = _WorkspaceLease(stage.output, output_identity)
+        private_raster = evidence.raster_path
+        private_manifest = evidence.acquisition_manifest_path
+        if (
+            private_raster.parent != output.root
+            or private_manifest.parent != output.root
+            or private_raster.name != "global-aoi.tif"
+            or private_manifest.name != "global-aoi.tif.source_acquisition.json"
+        ):
+            raise ValueError("private acquisition evidence paths changed shape")
+        _require_exact_acquisition_inventory(
+            output,
+            (private_raster, private_manifest, *evidence.quality_mask_paths),
+            context="private provider acquisition snapshot",
+        )
+        stage_payload = _acquisition_stage_payload(config, evidence)
+
+        manifest_bytes = read_owned_regular_bytes(
+            private_manifest,
+            root=output.root,
+            root_identity=output.identity,
+            context="private provider acquisition manifest",
+        )
+        if sha256_bytes(manifest_bytes) != evidence.acquisition_manifest_sha256:
+            raise ValueError("private provider manifest changed after strict verification")
+        manifest_payload = json.loads(manifest_bytes)
+        if not isinstance(manifest_payload, dict):
+            raise ValueError("private provider acquisition manifest root is not an object")
+        if manifest_payload.get("raster_path") != str(private_raster) or manifest_payload.get(
+            "acquisition_manifest_path"
+        ) != str(private_manifest):
+            raise ValueError("private provider manifest root paths do not match verified evidence")
+
+        manifest_payload["raster_path"] = str(destination / private_raster.name)
+        manifest_payload["acquisition_manifest_path"] = str(destination / private_manifest.name)
+        expected_quality = {path.name: path for path in evidence.quality_mask_paths}
+        observed_quality: set[str] = set()
+        quality_records = manifest_payload.get("quality_masks", [])
+        if not isinstance(quality_records, list):
+            raise ValueError("private provider quality_masks is not a list")
+        for record in quality_records:
+            if not isinstance(record, dict):
+                raise ValueError("private provider quality mask record is not an object")
+            if record.get("availability") != "present":
+                continue
+            output_record = record.get("output")
+            if not isinstance(output_record, dict):
+                raise ValueError("present private provider mask has no output record")
+            raw_path = output_record.get("path")
+            if not isinstance(raw_path, str):
+                raise ValueError("present private provider mask has no output path")
+            recorded_path = Path(os.path.abspath(Path(raw_path).expanduser()))
+            if (
+                recorded_path.parent != output.root
+                or recorded_path.name not in expected_quality
+                or expected_quality[recorded_path.name] != recorded_path
+                or recorded_path.name in observed_quality
+            ):
+                raise ValueError("private provider quality mask path inventory changed")
+            observed_quality.add(recorded_path.name)
+            output_record["path"] = str(destination / recorded_path.name)
+        if observed_quality != set(expected_quality):
+            raise ValueError("private provider quality mask path set is incomplete")
+
+        rebound = (
+            json.dumps(manifest_payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+        ).encode("utf-8")
+        atomic_write_owned_regular_bytes(
+            private_manifest,
+            rebound,
+            root=output.root,
+            root_identity=output.identity,
+            context="private provider acquisition manifest rebind",
+            replace=True,
+        )
+        rebound_sha256 = sha256_bytes(rebound)
+        stage_payload["raster_path"] = str(destination / private_raster.name)
+        stage_payload["acquisition_manifest_path"] = str(destination / private_manifest.name)
+        stage_payload["acquisition_manifest_sha256"] = rebound_sha256
+        stage_quality = stage_payload.get("quality_masks")
+        if not isinstance(stage_quality, list) or len(stage_quality) != len(
+            evidence.quality_mask_paths
+        ):
+            raise ValueError("private acquisition stage quality inventory changed")
+        for record, path in zip(stage_quality, evidence.quality_mask_paths, strict=True):
+            if not isinstance(record, dict):
+                raise ValueError("private acquisition stage quality record is invalid")
+            record["path"] = str(destination / path.name)
+        private_stage_manifest = stage.output / "acquire.json"
+        _write_canonical(
+            private_stage_manifest,
+            stage_payload,
+            workspace=output,
+        )
+        _require_exact_acquisition_inventory(
+            output,
+            (
+                private_raster,
+                private_manifest,
+                *evidence.quality_mask_paths,
+                private_stage_manifest,
+            ),
+            context="complete private provider acquisition stage",
+        )
+        return rebound_sha256
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise ConfigurationError(
+            f"private acquisition stage could not be prepared for {destination}"
+        ) from exc
+
+
 def _relative(root: Path, path: Path) -> str:
     resolved_root = root.resolve()
     resolved = path.resolve()
@@ -747,33 +902,23 @@ def _acquisition_stage_payload(
     }
 
 
-def _write_acquisition_stage_manifest(
-    path: Path,
-    config: GlobalAcquisitionConfig,
-    evidence: GlobalSourceEvidence,
-    *,
-    workspace: _WorkspaceLease,
-) -> Path:
-    manifest = _write_canonical(
-        path,
-        _acquisition_stage_payload(config, evidence),
-        workspace=workspace,
-    )
-    _verify_acquisition_stage_manifest(manifest, config, evidence)
-    return manifest
-
-
 def _verify_acquisition_stage_manifest(
     path: Path,
     config: GlobalAcquisitionConfig,
     evidence: GlobalSourceEvidence,
 ) -> dict[str, Any]:
+    from topoforge.web.security import read_stable_regular_bytes
+
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        manifest_bytes = read_stable_regular_bytes(
+            path,
+            context="acquisition stage manifest",
+        )
+        payload = json.loads(manifest_bytes)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
         raise ConfigurationError(f"acquisition stage manifest is unreadable: {path}") from exc
     expected = _acquisition_stage_payload(config, evidence)
-    if payload != expected or path.read_bytes() != _canonical_bytes(expected):
+    if payload != expected or manifest_bytes != _canonical_bytes(expected):
         raise ConfigurationError("acquisition stage manifest is non-canonical or changed")
     return expected
 
@@ -1628,6 +1773,14 @@ def _verify_relocated_global_source(
         )
     ):
         raise ConfigurationError("relocated acquisition provider selection binding changed")
+    try:
+        exact_regular_file_inventory(
+            acquisition_dir,
+            (raster_path, provider_manifest_path, *quality_paths, stage_manifest_path),
+            context="relocated provider acquisition stage",
+        )
+    except ValueError as exc:
+        raise ConfigurationError("relocated acquisition file inventory changed") from exc
     return evidence
 
 
@@ -2738,8 +2891,20 @@ def run_local_workflow(
             acquisition_dir = _stage_directory(root, 0, current, acquisition_identity)
             acquisition_raster = acquisition_dir / "global-aoi.tif"
             acquisition_stage_manifest = acquisition_dir / "acquire.json"
-            if acquisition_dir.exists() and any(acquisition_dir.iterdir()):
+            if acquisition_dir.exists():
                 try:
+                    from topoforge.web.security import owned_directory_identity
+
+                    _require_workspace(workspace, context="acquisition stage reuse")
+                    acquisition_stage = _WorkspaceLease(
+                        acquisition_dir,
+                        owned_directory_identity(
+                            acquisition_dir,
+                            root=workspace.root,
+                            root_identity=workspace.identity,
+                            context="acquisition stage reuse",
+                        ),
+                    )
                     acquisition_evidence = verify_global_source(
                         acquisition_config, acquisition_raster
                     )
@@ -2747,6 +2912,20 @@ def run_local_workflow(
                         acquisition_stage_manifest,
                         acquisition_config,
                         acquisition_evidence,
+                    )
+                    _require_exact_acquisition_inventory(
+                        acquisition_stage,
+                        (
+                            acquisition_evidence.raster_path,
+                            acquisition_evidence.acquisition_manifest_path,
+                            *acquisition_evidence.quality_mask_paths,
+                            acquisition_stage_manifest,
+                        ),
+                        context="reused provider acquisition stage",
+                    )
+                    _require_workspace(
+                        workspace,
+                        context="acquisition stage reuse completion",
                     )
                 except Exception as exc:
                     raise ConfigurationError(
@@ -2756,25 +2935,81 @@ def run_local_workflow(
                     ) from exc
                 reused.append(current)
             else:
-                _ensure_workspace_directory(
+                _require_workspace(workspace, context="acquisition stage launch")
+                private_acquisition = _create_private_stage(
                     acquisition_dir,
                     workspace=workspace,
-                    context="acquisition stage output",
+                    context="acquisition stage",
                 )
-                _require_workspace(workspace, context="acquisition stage launch")
-                acquisition_evidence = acquire_global_source(
+                private_evidence = acquire_global_source_snapshot(
                     acquisition_config,
-                    acquisition_raster,
+                    private_acquisition.output,
+                    private_root=private_acquisition.lease.root,
+                    private_root_identity=private_acquisition.lease.identity,
                     providers=acquisition_providers,
                     descriptors=acquisition_descriptors,
                 )
                 _require_workspace(workspace, context="acquisition stage completion")
-                _write_acquisition_stage_manifest(
+                rebound_manifest_sha256 = _prepare_private_acquisition_stage(
+                    private_acquisition,
+                    acquisition_config,
+                    private_evidence,
+                    destination=acquisition_dir,
+                )
+                _publish_private_stage(
+                    private_acquisition,
+                    acquisition_dir,
+                    workspace=workspace,
+                    context="acquisition stage publication",
+                )
+                from topoforge.web.security import owned_directory_identity
+
+                acquisition_stage = _WorkspaceLease(
+                    acquisition_dir,
+                    owned_directory_identity(
+                        acquisition_dir,
+                        root=workspace.root,
+                        root_identity=workspace.identity,
+                        context="published provider acquisition stage",
+                    ),
+                )
+                expected_published_paths = (
+                    acquisition_raster,
+                    acquisition_raster.with_suffix(
+                        acquisition_raster.suffix + ".source_acquisition.json"
+                    ),
+                    *(acquisition_dir / path.name for path in private_evidence.quality_mask_paths),
+                    acquisition_stage_manifest,
+                )
+                _require_exact_acquisition_inventory(
+                    acquisition_stage,
+                    expected_published_paths,
+                    context="published provider acquisition stage",
+                )
+                acquisition_evidence = verify_global_source(
+                    acquisition_config,
+                    acquisition_raster,
+                    cache_summary=private_evidence.cache_summary,
+                )
+                if (
+                    acquisition_evidence.raster_sha256 != private_evidence.raster_sha256
+                    or acquisition_evidence.acquisition_manifest_sha256 != rebound_manifest_sha256
+                    or acquisition_evidence.dataset != private_evidence.dataset
+                    or acquisition_evidence.normalized_aoi != private_evidence.normalized_aoi
+                    or acquisition_evidence.provider_selection
+                    != private_evidence.provider_selection
+                    or tuple(path.name for path in acquisition_evidence.quality_mask_paths)
+                    != tuple(path.name for path in private_evidence.quality_mask_paths)
+                ):
+                    raise ConfigurationError(
+                        "published provider evidence differs from its verified private snapshot"
+                    )
+                _verify_acquisition_stage_manifest(
                     acquisition_stage_manifest,
                     acquisition_config,
                     acquisition_evidence,
-                    workspace=workspace,
                 )
+                _require_workspace(workspace, context="acquisition stage strict reopen")
                 completed.append(current)
             acquisition_verification = {
                 "status": "ready",
