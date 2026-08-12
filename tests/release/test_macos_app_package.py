@@ -1052,6 +1052,11 @@ def test_macos_workflow_builds_one_candidate_and_accepts_same_sha_on_both_hosts(
     assert "--evidence-scope clean-system" not in acceptance_runs
     assert "EXPECTED_ARCHIVE_SHA256" in acceptance_runs
     assert "EXPECTED_SOURCE_COMMIT" in acceptance_runs
+    acceptance_steps = {step.get("name"): step for step in acceptance["steps"]}
+    diagnostic = acceptance_steps["Report packaged acceptance failure"]
+    assert diagnostic["if"] == "failure() && steps.packaged-system.outcome == 'failure'"
+    assert "scripts/report_json_failure.py" in diagnostic["run"]
+    assert "hosted-package.json" in diagnostic["run"]
 
     action_revision = re.compile(r"^[^@]+@[0-9a-f]{40}$")
     artifact_names: list[str] = []

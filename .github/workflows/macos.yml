@@ -406,6 +406,13 @@ jobs:
             --evidence-scope hosted-package \
             --work-root "$work_root" \
             --report "artifacts/logs/${{ matrix.target_id }}-hosted-package.json"
+      - name: Report packaged acceptance failure
+        if: failure() && steps.packaged-system.outcome == 'failure'
+        shell: bash
+        run: |
+          uv run --python 3.12 python scripts/report_json_failure.py \
+            --report "artifacts/logs/${{ matrix.target_id }}-hosted-package.json" \
+            --title "${{ matrix.target_id }} packaged acceptance"
       - name: Verify acceptance payload and report bounds
         shell: bash
         run: |
