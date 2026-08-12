@@ -1822,7 +1822,11 @@ def _workspace_backup_files(
         with os.scandir(directory) as entries:
             for entry in sorted(entries, key=lambda item: item.name):
                 path = Path(entry.path)
-                entry_stat = entry.stat(follow_symlinks=False)
+                # Windows DirEntry caches WIN32_FIND_DATA for ordinary files;
+                # that record has no hard-link count and may expose st_nlink=0.
+                # A real lstat supplies the identity/link metadata later bound
+                # again by the pinned native handle in _owned_file_sha256().
+                entry_stat = path.lstat()
                 if stat_result_is_link_like(entry_stat):
                     raise ConfigurationError(
                         f"workflow backups do not follow link-like entries: {path}"

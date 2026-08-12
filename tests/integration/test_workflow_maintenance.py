@@ -851,6 +851,50 @@ def test_backup_rejects_workspace_hard_links_without_publishing_archive(
     assert not list(tmp_path.glob(f".{archive.name}.*.tmp"))
 
 
+def test_backup_enumeration_does_not_trust_cached_direntry_link_counts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    source = workspace / "workflow-launch.yaml"
+    source.write_bytes(b"fixture: true\n")
+    real_scandir = workflow_maintenance.os.scandir
+
+    class CachedEntry:
+        def __init__(self, entry: os.DirEntry[str]) -> None:
+            self.name = entry.name
+            self.path = entry.path
+
+        def stat(self, *, follow_symlinks: bool = True) -> os.stat_result:
+            del follow_symlinks
+            raise AssertionError("backup enumeration trusted cached DirEntry metadata")
+
+    class CachedScandir:
+        def __init__(self, path: Path) -> None:
+            with real_scandir(path) as entries:
+                self._entries = [CachedEntry(entry) for entry in entries]
+
+        def __enter__(self) -> list[CachedEntry]:
+            return self._entries
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(
+        workflow_maintenance.os,
+        "scandir",
+        lambda path: CachedScandir(Path(path)),
+    )
+
+    files = workflow_maintenance._workspace_backup_files(
+        workspace,
+        (workspace.stat().st_dev, workspace.stat().st_ino),
+    )
+
+    assert [item.path for item in files] == [source]
+
+
 def test_backup_atomic_publication_never_overwrites_racing_destination(
     tmp_path: Path,
     completed_workflow_workspace: Path,
