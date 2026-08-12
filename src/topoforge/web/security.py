@@ -3150,6 +3150,48 @@ def _open_owned_regular_readwrite_descriptor(
         raise
 
 
+def _verify_owned_regular_path_with_open_writer(
+    path: Path,
+    *,
+    root: Path,
+    root_identity: tuple[int, int],
+    expected_identity: tuple[int, int],
+    context: str,
+    windows_backend: _WindowsLeaseBackend | None = None,
+) -> None:
+    """Verify a pinned path without conflicting with its already open writer."""
+    if os.name == "nt" or windows_backend is not None:
+        opened = _open_windows_owned_entry(
+            root,
+            path,
+            expected_root_identity=root_identity,
+            expected_identity=expected_identity,
+            directory=False,
+            create=False,
+            desired_access=_FILE_READ_ATTRIBUTES | _SYNCHRONIZE,
+            share_access=_FILE_SHARE_READ | _FILE_SHARE_WRITE,
+            context=context,
+            backend=windows_backend,
+        )
+        try:
+            return
+        finally:
+            try:
+                opened.parent.backend.close_handle(opened.handle)
+            finally:
+                _close_windows_handles(opened.parent.backend, opened.parent.handles)
+    with open_owned_regular_binary(
+        path,
+        root=root,
+        root_identity=root_identity,
+        context=context,
+        expected_identity=expected_identity,
+    ) as verification:
+        verified = os.fstat(verification.fileno())
+    if _identity_tuple(verified) != expected_identity:
+        raise ValueError(f"{context} changed while its path was verified: {path}")
+
+
 @dataclass
 class WebManagerLease:
     """Lifetime OS file lock proving exclusive ownership of one Web state root."""
@@ -3262,18 +3304,13 @@ class WebManagerLease:
                 try:
                     assert root is not None
                     assert root_identity is not None
-                    with open_owned_regular_binary(
+                    _verify_owned_regular_path_with_open_writer(
                         candidate,
                         root=root,
                         root_identity=root_identity,
                         context="Web manager lease verification",
                         expected_identity=_identity_tuple(opened),
-                    ) as verification:
-                        verified = os.fstat(verification.fileno())
-                    if _identity_tuple(verified) != _identity_tuple(opened):
-                        raise RuntimeError(
-                            f"Web manager lease path changed during acquisition: {candidate}"
-                        )
+                    )
                 except (OSError, ValueError) as exc:
                     raise RuntimeError(
                         f"Web manager lease path changed during acquisition: {candidate}"
@@ -3315,6 +3352,28 @@ class WebManagerLease:
                     with contextlib.suppress(OSError):
                         _WindowsNativeLeaseBackend().close_handle(windows_parent_handle)
             raise
+
+    def validate_owned_path(
+        self,
+        *,
+        root: Path,
+        root_identity: tuple[int, int],
+    ) -> None:
+        """Verify that the lifetime-locked descriptor still owns its anchored path."""
+        if self.descriptor < 0:
+            raise RuntimeError("Web manager lease has already been released")
+        locked = os.fstat(self.descriptor)
+        if stat_result_is_link_like(locked) or not stat.S_ISREG(locked.st_mode):
+            raise ValueError(f"Web manager lease is not a real regular file: {self.path}")
+        if locked.st_nlink != 1:
+            raise ValueError(f"Web manager lease is hard-linked: {self.path}")
+        _verify_owned_regular_path_with_open_writer(
+            self.path,
+            root=root,
+            root_identity=root_identity,
+            expected_identity=_identity_tuple(locked),
+            context="Web manager lease validation",
+        )
 
     def release(self) -> None:
         """Release this manager's lifetime lease; the evidence file remains durable."""

@@ -766,23 +766,13 @@ class LocalJobManager:
                 raise ConfigurationError(
                     f"Web adapter-owned root identity changed during manager lifetime: {path}"
                 )
-        locked_metadata = os.fstat(self._lease.descriptor)
         try:
-            with open_owned_regular_binary(
-                self.manager_lease_path,
+            self._lease.validate_owned_path(
                 root=self.config.state_dir,
                 root_identity=self._owned_root_identities[self.config.state_dir],
-                context="Web manager lease validation",
-                expected_identity=(locked_metadata.st_dev, locked_metadata.st_ino),
-            ) as lease_stream:
-                path_metadata = os.fstat(lease_stream.fileno())
-        except (OSError, ValueError) as exc:
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
             raise ConfigurationError("Web manager lease path changed or became unsafe") from exc
-        if (path_metadata.st_dev, path_metadata.st_ino) != (
-            locked_metadata.st_dev,
-            locked_metadata.st_ino,
-        ):
-            raise ConfigurationError("Web manager lease path changed or became unsafe")
 
     def _validate_if_owned(self) -> None:
         """Revalidate roots before an operation when this manager has been started."""

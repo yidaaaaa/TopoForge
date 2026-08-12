@@ -3199,6 +3199,61 @@ class _PosixWindowsLeaseBackend:
             os.unlink(name, dir_fd=parent_handle)
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="POSIX fake backend exercises Windows manager-lease sharing",
+)
+def test_windows_manager_lease_path_verification_shares_with_locked_writer(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    candidate = state / "manager.lock"
+    candidate.write_bytes(b"locked lease\n")
+    observed_shares: list[int] = []
+
+    class ShareCheckingBackend(_PosixWindowsLeaseBackend):
+        def open_relative_file(
+            self,
+            parent_handle: int,
+            name: str,
+            *,
+            create: bool,
+            directory: bool = False,
+            desired_access: int | None = None,
+            share_access: int | None = None,
+        ) -> int:
+            if name == candidate.name:
+                observed_shares.append(0 if share_access is None else share_access)
+                if share_access is None or not share_access & security_module._FILE_SHARE_WRITE:
+                    raise BrokenPipeError(
+                        errno.EPIPE,
+                        "fixture writer rejects a verification handle without write sharing",
+                        name,
+                    )
+            return super().open_relative_file(
+                parent_handle,
+                name,
+                create=create,
+                directory=directory,
+                desired_access=desired_access,
+                share_access=share_access,
+            )
+
+    metadata = candidate.stat()
+    security_module._verify_owned_regular_path_with_open_writer(
+        candidate,
+        root=state,
+        root_identity=(state.stat().st_dev, state.stat().st_ino),
+        expected_identity=(metadata.st_dev, metadata.st_ino),
+        context="fixture manager lease verification",
+        windows_backend=ShareCheckingBackend(),
+    )
+
+    assert observed_shares
+    assert all(share & security_module._FILE_SHARE_WRITE for share in observed_shares)
+
+
 def test_windows_lease_ctypes_x64_abi_layout() -> None:
     if security_module.ctypes.sizeof(security_module.ctypes.c_void_p) != 8:
         pytest.skip("Windows portable support targets x64")
