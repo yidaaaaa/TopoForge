@@ -3221,20 +3221,25 @@ def test_rollback_producer_binds_later_release_commit_and_rejects_nonancestor(
         work_root: Path,
         label: str,
     ) -> tuple[dict[str, Any], Path]:
-        launcher = work_root / f"{label}-environment/bin/topoforge"
+        launcher_relative = (
+            Path("Scripts/topoforge.cmd") if os.name == "nt" else Path("bin/topoforge")
+        )
+        launcher = work_root / f"{label}-environment" / launcher_relative
         launcher.parent.mkdir(parents=True)
         doctor_bytes = f'{{"topoforge":"{version}"}}\n'.encode()
-        launcher.write_text(
-            f"#!/bin/sh\nprintf '%s\\n' '{{\"topoforge\":\"{version}\"}}'\n",
-            encoding="utf-8",
+        launcher_payload = (
+            f'@echo off\r\necho {{"topoforge":"{version}"}}\r\n'
+            if os.name == "nt"
+            else f"#!/bin/sh\nprintf '%s\\n' '{{\"topoforge\":\"{version}\"}}'\n"
         )
+        launcher.write_bytes(launcher_payload.encode("utf-8"))
         launcher.chmod(0o755)
         return (
             {
                 "version": version,
                 "wheel_filename": wheel.name,
                 "wheel_sha256": expected_wheel_sha256,
-                "launcher_relative_path": "bin/topoforge",
+                "launcher_relative_path": launcher_relative.as_posix(),
                 "launcher_sha256": _sha256(launcher.read_bytes()),
                 "doctor_output_sha256": _sha256(doctor_bytes),
                 "doctor_exit_code": 0,
@@ -3271,9 +3276,10 @@ def test_rollback_producer_binds_later_release_commit_and_rejects_nonancestor(
     assert report["release_commit"] == release_commit
     assert report["source_checkout"]["previous_commit"] == previous_commit
     activation = report["installed_environment"]["activation"]
+    launcher_relative = "Scripts/topoforge.cmd" if os.name == "nt" else "bin/topoforge"
     assert activation["atomic_pointer_switch"] is True
-    assert activation["before_launcher_target"] == "current-environment/bin/topoforge"
-    assert activation["after_launcher_target"] == "previous-environment/bin/topoforge"
+    assert activation["before_launcher_target"] == (f"current-environment/{launcher_relative}")
+    assert activation["after_launcher_target"] == (f"previous-environment/{launcher_relative}")
 
     _git(repository, "checkout", "-qb", "unrelated", previous_commit)
     (repository / "unrelated.txt").write_text("unrelated\n", encoding="utf-8")
@@ -3299,6 +3305,27 @@ def test_rollback_producer_binds_later_release_commit_and_rejects_nonancestor(
             previous_checksums_asset_id=710005,
             retained_evidence_root=evidence_root,
             work_root=tmp_path / "nonancestor-work",
+        )
+
+
+def test_rollback_bash_paths_are_portable_to_git_for_windows() -> None:
+    assert rollback_verifier._path_for_bash(Path(r"C:\TopoForge Work\rollback.sh")) == (
+        "/c/TopoForge Work/rollback.sh"
+    )
+    assert rollback_verifier._path_for_bash(Path("/tmp/TopoForge Work/rollback.sh")) == (
+        "/tmp/TopoForge Work/rollback.sh"
+    )
+
+
+def test_rollback_command_failure_retains_bounded_stderr(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="fixture rollback stderr"):
+        rollback_verifier._run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; sys.stderr.write('fixture rollback stderr'); sys.exit(3)",
+            ],
+            cwd=tmp_path,
         )
 
 

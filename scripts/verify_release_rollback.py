@@ -677,12 +677,21 @@ def _run(
     )
     if completed.returncode != 0:
         command = " ".join(arguments[:3])
-        raise RuntimeError(f"rollback evidence command failed ({command})")
+        detail = (completed.stderr.strip() or completed.stdout.strip())[-4000:]
+        suffix = f": {detail}" if detail else ""
+        raise RuntimeError(f"rollback evidence command failed ({command}){suffix}")
     return completed
 
 
 def _git(repository: Path, *arguments: str) -> str:
     return _run(["git", *arguments], cwd=repository).stdout.strip()
+
+
+def _path_for_bash(path: Path) -> str:
+    rendered = os.fspath(path).replace("\\", "/")
+    if len(rendered) >= 2 and rendered[0].isalpha() and rendered[1] == ":":
+        return f"/{rendered[0].lower()}{rendered[2:]}"
+    return rendered
 
 
 def _inventory(root: Path) -> dict[str, Any]:
@@ -1024,9 +1033,13 @@ def generate_runtime_report(
     _git(checkout, "checkout", "--detach", release_commit)
     rollback_checkout = work_root / "rollback-source"
     environment = os.environ.copy()
-    environment["TOPOFORGE_ROLLBACK_DIR"] = str(rollback_checkout)
+    environment["TOPOFORGE_ROLLBACK_DIR"] = _path_for_bash(rollback_checkout)
     completed = _run(
-        ["bash", str(checkout / script_path.relative_to(repository_root)), "--confirm-rollback"],
+        [
+            "bash",
+            _path_for_bash(checkout / script_path.relative_to(repository_root)),
+            "--confirm-rollback",
+        ],
         cwd=checkout,
         environment=environment,
     )
