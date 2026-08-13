@@ -95,6 +95,9 @@ def _write_dependency_install_fixture(site_packages: Path) -> None:
     script = site_packages / "Scripts" / "demo.exe"
     script.parent.mkdir()
     script.write_bytes(b"MZ-demo-script")
+    target_local_script = site_packages / "bin" / "normalizer.exe"
+    target_local_script.parent.mkdir()
+    target_local_script.write_bytes(b"MZ-normalizer-script")
     (site_packages / ".lock").write_bytes(b"")
 
     rows = [
@@ -107,6 +110,11 @@ def _write_dependency_install_fixture(site_packages: Path) -> None:
                 "../../../Scripts/demo.exe",
                 _record_hash(script.read_bytes()),
                 str(script.stat().st_size),
+            ),
+            (
+                "bin/normalizer.exe",
+                _record_hash(target_local_script.read_bytes()),
+                str(target_local_script.stat().st_size),
             ),
             ("demo_package-1.0.dist-info/RECORD", "", ""),
         ]
@@ -472,6 +480,7 @@ def test_dependency_install_preserves_normalized_record_projection(tmp_path: Pat
     assert record.is_file()
     assert not (site_packages / "demo_package-1.0.dist-info" / "INSTALLER").exists()
     assert not (site_packages / "Scripts").exists()
+    assert not (site_packages / "bin").exists()
     assert not (site_packages / ".lock").exists()
     assert dependencies[0]["name"] == "Demo_Package"
     assert dependencies[0]["record_sha256"] == hashlib.sha256(record.read_bytes()).hexdigest()

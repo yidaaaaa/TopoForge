@@ -642,6 +642,8 @@ def _normalize_distribution_record(
                 raise ValueError(f"dependency RECORD escapes site-packages: {raw_path}")
             continue
         relative = _safe_relative_path(raw_path)
+        if relative.parts[0].casefold() in {"bin", "scripts"}:
+            continue
         relative_text = relative.as_posix()
         _register_windows_path(relative, windows_paths)
         if relative_text in seen_original:
