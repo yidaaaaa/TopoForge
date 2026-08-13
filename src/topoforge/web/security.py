@@ -38,6 +38,7 @@ _FILE_READ_ATTRIBUTES = 0x00000080
 _SYNCHRONIZE = 0x00100000
 _GENERIC_READ = 0x80000000
 _GENERIC_WRITE = 0x40000000
+_WINDOWS_SHARING_ERRORS = {32, 33}
 _OPEN_EXISTING = 3
 _FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
 _FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
@@ -55,6 +56,16 @@ _NT_FILE_RENAME_INFORMATION_CLASS = 10
 _FILE_DISPOSITION_INFO_CLASS = 4
 _HANDLE_FLAG_INHERIT = 0x00000001
 _WINDOWS_CTYPES: Any = ctypes
+
+
+def is_windows_sharing_violation(exc: OSError) -> bool:
+    """Return whether an OS error is a native Windows sharing violation."""
+    native_code = getattr(exc, "winerror", None)
+    if native_code is None:
+        native_code = vars(exc).get("winerror")
+    return native_code in _WINDOWS_SHARING_ERRORS or (
+        (os.name == "nt" or sys.platform == "win32") and exc.errno in _WINDOWS_SHARING_ERRORS
+    )
 
 
 class CommittedStateUncertainError(OSError):
@@ -3272,6 +3283,11 @@ class WebManagerLease:
                     context="Web manager lease",
                 )
             except (OSError, ValueError) as exc:
+                if isinstance(exc, OSError) and is_windows_sharing_violation(exc):
+                    raise RuntimeError(
+                        "another TopoForge Web manager owns the state directory: "
+                        f"{candidate.parent}"
+                    ) from exc
                 raise RuntimeError(
                     f"Web manager lease could not be opened safely: {candidate}"
                 ) from exc

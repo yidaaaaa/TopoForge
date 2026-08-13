@@ -2538,6 +2538,33 @@ def test_manager_lease_and_adapter_roots_fail_closed(
     assert marker.read_bytes() == b"external evidence"
 
 
+def test_anchored_manager_lease_classifies_native_sharing_contention(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    sharing_violation = OSError(errno.EINVAL, "fixture Windows sharing violation")
+    sharing_violation.__dict__["winerror"] = 32
+
+    def fail_open(*_args: object, **_kwargs: object) -> int:
+        raise sharing_violation
+
+    monkeypatch.setattr(
+        security_module,
+        "_open_owned_regular_readwrite_descriptor",
+        fail_open,
+    )
+
+    with pytest.raises(RuntimeError, match="another TopoForge Web manager"):
+        WebManagerLease.acquire(
+            state / "manager.lock",
+            {"schema_version": "test-lease-v1"},
+            root=state,
+            root_identity=(1, 2),
+        )
+
+
 def test_owned_write_includes_bounded_exception_chain_only_in_ci(
     web_config: WebAppConfig,
     monkeypatch: pytest.MonkeyPatch,
