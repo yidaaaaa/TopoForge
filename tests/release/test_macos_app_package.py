@@ -64,6 +64,7 @@ from scripts.verify_macos_system import (
     _RECOVERY_RASTER_SHAPE,
     SYSTEM_SCHEMA_VERSION,
     _copernicus_job_request,
+    _copernicus_manifest_evidence,
     _recovery_job_request,
     _strict_artifact_reopen_passed,
     validate_evidence_report,
@@ -597,6 +598,7 @@ def _valid_system_report(archive: Path) -> dict[str, Any]:
                 "raster_sha256": "e" * 64,
                 "acquisition_manifest_sha256": "f" * 64,
                 "quality_mask_count": 4,
+                "workflow_manifest_sha256": "1" * 64,
                 "required_checks_passed": True,
             },
             "backup_restore": {
@@ -1432,6 +1434,87 @@ def test_native_acceptance_requests_real_copernicus_through_packaged_web(tmp_pat
     }
     assert launch["build"]["max_grid_cells"] == 10_000
     assert launch["build"]["resource_budget_mode"] == "strict"
+
+
+def test_native_acceptance_reopens_hash_bound_copernicus_acquire_manifest(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "provider workspace"
+    workspace.mkdir()
+    workflow_id = "fixture-provider-workflow"
+    manifest_path = workspace / "workflow-manifest.json"
+    manifest = {
+        "schema_version": "topoforge-local-workflow-v1",
+        "workflow_id": workflow_id,
+        "request_sha256": "1" * 64,
+        "source_dem_sha256": "2" * 64,
+        "source_dem_path": "010-acquire/global-aoi.tif",
+        "slicing_enabled": False,
+        "stages": [
+            {
+                "name": "acquire",
+                "identity_sha256": "3" * 64,
+                "output_path": "010-acquire",
+                "manifest_path": "010-acquire/acquire.json",
+                "manifest_sha256": "4" * 64,
+                "required_checks_passed": True,
+                "verification": {
+                    "status": "ready",
+                    "selected_provider": "copernicus-aws",
+                    "dataset_name": "Copernicus DEM GLO-30 AWS 2021",
+                    "raster_sha256": "5" * 64,
+                    "acquisition_manifest_sha256": "6" * 64,
+                    "quality_mask_count": 4,
+                    "required_checks_passed": True,
+                },
+            }
+        ],
+        "final_stage": "acquire",
+        "required_checks_passed": True,
+    }
+    _write_file(
+        manifest_path,
+        (json.dumps(manifest, ensure_ascii=False, sort_keys=True) + "\n").encode(),
+    )
+    manifest_sha256 = sha256_file(manifest_path)
+    normalized_aoi = {
+        "kind": "bbox",
+        "bbox_wgs84": [101.2, 29.2, 101.205, 29.205],
+    }
+    completed = {
+        "job_id": "fixture-provider-job",
+        "workspace_dir": str(workspace),
+        "summary": {"workflow_id": workflow_id, "source_mode": "global"},
+        "artifacts": [
+            {
+                "artifact_id": "workflow_manifest",
+                "relative_path": manifest_path.name,
+                "kind": "file",
+                "sha256": manifest_sha256,
+            }
+        ],
+    }
+
+    evidence = _copernicus_manifest_evidence(
+        completed,
+        normalized_aoi=normalized_aoi,
+    )
+
+    assert evidence == {
+        "job_id": "fixture-provider-job",
+        "workflow_id": workflow_id,
+        "aoi": normalized_aoi,
+        "selected_provider": "copernicus-aws",
+        "dataset_name": "Copernicus DEM GLO-30 AWS 2021",
+        "raster_sha256": "5" * 64,
+        "acquisition_manifest_sha256": "6" * 64,
+        "quality_mask_count": 4,
+        "workflow_manifest_sha256": manifest_sha256,
+        "required_checks_passed": True,
+    }
+    manifest_path.write_bytes(manifest_path.read_bytes() + b" ")
+    with pytest.raises(RuntimeError, match="manifest identity changed"):
+        _copernicus_manifest_evidence(completed, normalized_aoi=normalized_aoi)
 
 
 def test_macos_workflow_builds_one_candidate_and_accepts_same_sha_on_both_hosts() -> None:

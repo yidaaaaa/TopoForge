@@ -9,6 +9,7 @@ import json
 import os
 import signal
 import socket
+import stat
 import subprocess
 import time
 import urllib.error
@@ -19,6 +20,7 @@ from typing import Any
 import jsonschema
 
 from topoforge.raster.sampling import triangle_count_for_shape
+from topoforge.workflow.local import LocalWorkflowManifest, WorkflowStage
 
 if __package__:
     from scripts.macos_app import (
@@ -315,6 +317,104 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _sha256_value(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _copernicus_manifest_evidence(
+    completed: dict[str, Any],
+    *,
+    normalized_aoi: dict[str, Any],
+) -> dict[str, Any]:
+    """Reopen the hash-bound acquire record from one completed packaged Web job."""
+    summary = completed.get("summary")
+    if (
+        not isinstance(summary, dict)
+        or summary.get("source_mode") != "global"
+        or not isinstance(summary.get("workflow_id"), str)
+    ):
+        raise RuntimeError("packaged Copernicus Web job summary is not a global workflow")
+    raw_artifacts = completed.get("artifacts")
+    if not isinstance(raw_artifacts, list):
+        raise RuntimeError("packaged Copernicus Web job artifacts are missing")
+    artifacts = [
+        item
+        for item in raw_artifacts
+        if isinstance(item, dict) and item.get("artifact_id") == "workflow_manifest"
+    ]
+    if len(artifacts) != 1:
+        raise RuntimeError("packaged Copernicus Web job has no unique workflow manifest")
+    artifact = artifacts[0]
+    relative_value = artifact.get("relative_path")
+    if not isinstance(relative_value, str):
+        raise RuntimeError("packaged Copernicus workflow manifest path is invalid")
+    relative = Path(relative_value)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise RuntimeError("packaged Copernicus workflow manifest path escapes its workspace")
+    workspace_value = completed.get("workspace_dir")
+    if not isinstance(workspace_value, str):
+        raise RuntimeError("packaged Copernicus Web workspace path is invalid")
+    workspace = Path(workspace_value).resolve()
+    manifest_path = workspace.joinpath(*relative.parts)
+    try:
+        resolved_manifest = manifest_path.resolve(strict=True)
+        metadata = manifest_path.lstat()
+    except OSError as exc:
+        raise RuntimeError("packaged Copernicus workflow manifest is unavailable") from exc
+    if workspace != resolved_manifest and workspace not in resolved_manifest.parents:
+        raise RuntimeError("packaged Copernicus workflow manifest escapes its workspace")
+    if (
+        artifact.get("kind") != "file"
+        or not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_nlink != 1
+        or not 0 < metadata.st_size <= 8 * 1024 * 1024
+        or not _sha256_value(artifact.get("sha256"))
+        or _sha256(manifest_path) != artifact["sha256"]
+    ):
+        raise RuntimeError("packaged Copernicus workflow manifest identity changed")
+    try:
+        manifest = LocalWorkflowManifest.model_validate_json(manifest_path.read_bytes())
+    except ValueError as exc:
+        raise RuntimeError("packaged Copernicus workflow manifest is invalid") from exc
+    acquire_records = [item for item in manifest.stages if item.name is WorkflowStage.ACQUIRE]
+    if (
+        not manifest.required_checks_passed
+        or manifest.workflow_id != summary["workflow_id"]
+        or len(acquire_records) != 1
+        or not acquire_records[0].required_checks_passed
+    ):
+        raise RuntimeError("packaged Copernicus acquire-stage identity changed")
+    verification = acquire_records[0].verification
+    if (
+        verification.get("status") != "ready"
+        or verification.get("selected_provider") != "copernicus-aws"
+        or not isinstance(verification.get("dataset_name"), str)
+        or not verification["dataset_name"]
+        or not _sha256_value(verification.get("raster_sha256"))
+        or not _sha256_value(verification.get("acquisition_manifest_sha256"))
+        or type(verification.get("quality_mask_count")) is not int
+        or verification["quality_mask_count"] < 0
+        or verification.get("required_checks_passed") is not True
+    ):
+        raise RuntimeError("packaged Copernicus acquire-stage evidence is incomplete")
+    return {
+        "job_id": completed["job_id"],
+        "workflow_id": manifest.workflow_id,
+        "aoi": normalized_aoi,
+        "selected_provider": verification["selected_provider"],
+        "dataset_name": verification["dataset_name"],
+        "raster_sha256": verification["raster_sha256"],
+        "acquisition_manifest_sha256": verification["acquisition_manifest_sha256"],
+        "quality_mask_count": verification["quality_mask_count"],
+        "workflow_manifest_sha256": artifact["sha256"],
+        "required_checks_passed": True,
+    }
+
+
 def _strict_artifact_reopen_passed(role: str, result: dict[str, Any]) -> bool:
     if role == "model_3mf":
         positive_counts = ("object_count", "build_item_count", "vertex_count", "triangle_count")
@@ -476,21 +576,10 @@ def verify_web_lifecycle(
                 "packaged Copernicus Web job failed: "
                 + json.dumps(provider_completed.get("error"), ensure_ascii=False, sort_keys=True)
             )
-        provider_summary = provider_completed.get("summary")
-        provider_metrics = (
-            provider_summary.get("metrics") if isinstance(provider_summary, dict) else None
+        provider_evidence = _copernicus_manifest_evidence(
+            provider_completed,
+            normalized_aoi=provider_validated["normalized_aoi"],
         )
-        if (
-            not isinstance(provider_summary, dict)
-            or provider_summary.get("source_mode") != "global"
-            or not isinstance(provider_metrics, dict)
-            or provider_metrics.get("selected_provider") != "copernicus-aws"
-            or not isinstance(provider_metrics.get("raster_sha256"), str)
-            or len(provider_metrics["raster_sha256"]) != 64
-            or not isinstance(provider_metrics.get("acquisition_manifest_sha256"), str)
-            or len(provider_metrics["acquisition_manifest_sha256"]) != 64
-        ):
-            raise RuntimeError("packaged Copernicus Web job did not retain provider evidence")
 
         backup, _headers = _http(
             base_url,
@@ -585,17 +674,7 @@ def verify_web_lifecycle(
                 },
             },
             "strict_reopen": reopen,
-            "copernicus_provider": {
-                "job_id": provider_completed["job_id"],
-                "workflow_id": provider_summary["workflow_id"],
-                "aoi": provider_validated["normalized_aoi"],
-                "selected_provider": provider_metrics["selected_provider"],
-                "dataset_name": provider_metrics["dataset_name"],
-                "raster_sha256": provider_metrics["raster_sha256"],
-                "acquisition_manifest_sha256": provider_metrics["acquisition_manifest_sha256"],
-                "quality_mask_count": provider_metrics["quality_mask_count"],
-                "required_checks_passed": True,
-            },
+            "copernicus_provider": provider_evidence,
             "backup_restore": {
                 "backup_id": backup["backup_id"],
                 "archive_sha256": backup["archive_sha256"],

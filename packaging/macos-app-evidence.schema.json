@@ -467,6 +467,7 @@
             "raster_sha256",
             "acquisition_manifest_sha256",
             "quality_mask_count",
+            "workflow_manifest_sha256",
             "required_checks_passed"
           ],
           "properties": {
@@ -478,6 +479,7 @@
             "raster_sha256": {"$ref": "#/$defs/sha256"},
             "acquisition_manifest_sha256": {"$ref": "#/$defs/sha256"},
             "quality_mask_count": {"type": "integer", "minimum": 0},
+            "workflow_manifest_sha256": {"$ref": "#/$defs/sha256"},
             "required_checks_passed": {"const": true}
           }
         },
