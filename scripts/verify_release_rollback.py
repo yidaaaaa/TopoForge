@@ -142,6 +142,19 @@ def _file_identity(information: os.stat_result) -> tuple[int, int, int, int, int
     )
 
 
+def _pinned_content_identity(
+    information: os.stat_result,
+) -> tuple[int, int, int, int, int, int]:
+    return (
+        information.st_dev,
+        information.st_ino,
+        stat.S_IFMT(information.st_mode),
+        information.st_nlink,
+        information.st_size,
+        information.st_mtime_ns,
+    )
+
+
 def _checked_path_chain(path: Path, *, label: str) -> tuple[os.stat_result, ...]:
     """Inspect every lexical component without accepting links or reparse points."""
     absolute = _absolute_lexical_path(path)
@@ -274,12 +287,12 @@ def _open_pinned_regular_file(
         raise ValueError(f"{label} cannot be opened without following links: {path}") from exc
     try:
         opened = os.fstat(descriptor)
-        if _file_identity(opened) != _file_identity(before):
+        if _pinned_content_identity(opened) != _pinned_content_identity(before):
             raise ValueError(f"{label} changed while it was opened: {path}")
         chain_opened = _checked_path_chain(path, label=label)
         if not _same_path_objects(chain_before, chain_opened):
             raise ValueError(f"{label} path changed while it was opened: {path}")
-        if _file_identity(chain_opened[-1]) != _file_identity(opened):
+        if _pinned_content_identity(chain_opened[-1]) != _pinned_content_identity(opened):
             raise ValueError(f"{label} path no longer names its opened file: {path}")
     except BaseException:
         os.close(descriptor)
@@ -293,9 +306,11 @@ def _open_pinned_regular_file(
                 if _file_identity(os.fstat(handle.fileno())) != _file_identity(opened):
                     raise ValueError(f"{label} changed while it was being read: {path}")
                 chain_after_error = _checked_path_chain(path, label=label)
-                if not _same_path_objects(chain_before, chain_after_error) or _file_identity(
-                    chain_after_error[-1]
-                ) != _file_identity(opened):
+                if not _same_path_objects(
+                    chain_before, chain_after_error
+                ) or _pinned_content_identity(chain_after_error[-1]) != _pinned_content_identity(
+                    opened
+                ):
                     raise ValueError(f"{label} path changed while it was being read: {path}")
             except BaseException as integrity_error:
                 exc.add_note(f"additional {label} integrity failure: {integrity_error}")
@@ -303,9 +318,9 @@ def _open_pinned_regular_file(
         if _file_identity(os.fstat(handle.fileno())) != _file_identity(opened):
             raise ValueError(f"{label} changed while it was being read: {path}")
         chain_after = _checked_path_chain(path, label=label)
-        if not _same_path_objects(chain_before, chain_after) or _file_identity(
+        if not _same_path_objects(chain_before, chain_after) or _pinned_content_identity(
             chain_after[-1]
-        ) != _file_identity(opened):
+        ) != _pinned_content_identity(opened):
             raise ValueError(f"{label} path changed while it was being read: {path}")
 
 

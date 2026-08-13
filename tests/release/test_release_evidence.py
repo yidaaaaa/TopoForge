@@ -10,6 +10,7 @@ import subprocess
 import sys
 import zipfile
 from collections.abc import Callable
+from functools import cache
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -50,6 +51,47 @@ RELEASE_ACTION_PINS = {
     "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
     "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
 }
+
+
+@cache
+def _release_bash() -> str:
+    candidates: list[Path] = []
+    if os.name == "nt":
+        git = shutil.which("git")
+        if git is not None:
+            git_root = Path(git).resolve().parent.parent
+            candidates.extend((git_root / "bin/bash.exe", git_root / "usr/bin/bash.exe"))
+        for variable in ("ProgramFiles", "ProgramFiles(x86)"):
+            root = os.environ.get(variable)
+            if root:
+                candidates.extend(
+                    (
+                        Path(root) / "Git/bin/bash.exe",
+                        Path(root) / "Git/usr/bin/bash.exe",
+                    )
+                )
+    discovered = shutil.which("bash")
+    if discovered is not None:
+        candidates.append(Path(discovered))
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        identity = str(candidate).casefold()
+        if identity in seen or not candidate.is_file():
+            continue
+        seen.add(identity)
+        try:
+            probe = subprocess.run(
+                [str(candidate), "-c", "exit 0"],
+                check=False,
+                capture_output=True,
+                timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if probe.returncode == 0:
+            return str(candidate)
+    pytest.skip("release workflow shell regression requires a working Bash executable")
 
 
 def _json_bytes(value: dict[str, Any]) -> bytes:
@@ -1923,7 +1965,7 @@ def test_main_release_selection_skips_tags_without_phase12_contract(tmp_path: Pa
     }
 
     completed = subprocess.run(
-        ["bash", "-c", _release_target_step_script()],
+        [_release_bash(), "-c", _release_target_step_script()],
         cwd=tmp_path,
         env=environment,
         check=False,
@@ -1951,7 +1993,7 @@ def test_explicit_unsupported_release_tag_fails_before_checkout(tmp_path: Path) 
     }
 
     completed = subprocess.run(
-        ["bash", "-c", _release_target_step_script()],
+        [_release_bash(), "-c", _release_target_step_script()],
         cwd=tmp_path,
         env=environment,
         check=False,
@@ -2003,7 +2045,7 @@ def test_explicit_tag_rejects_each_missing_release_contract_capability(
     }
 
     completed = subprocess.run(
-        ["bash", "-c", _release_target_step_script()],
+        [_release_bash(), "-c", _release_target_step_script()],
         cwd=tmp_path,
         env=environment,
         check=False,
@@ -2415,7 +2457,7 @@ def test_release_staging_rejects_a_wheel_changed_after_archive_verification(
         environment["PATH"] = f"{tools_dir}{os.pathsep}{environment['PATH']}"
 
     completed = subprocess.run(
-        ["bash", "-c", script],
+        [_release_bash(), "-c", script],
         cwd=tmp_path,
         env=environment,
         check=False,
@@ -2471,7 +2513,7 @@ def test_windows_portable_staging_rejects_changed_archive(
         environment["PATH"] = f"{tools_dir}{os.pathsep}{environment['PATH']}"
 
     completed = subprocess.run(
-        ["bash", "-c", script],
+        [_release_bash(), "-c", script],
         cwd=tmp_path,
         env=environment,
         check=False,
@@ -2522,7 +2564,7 @@ def _stage_release_assets_for_publish(tmp_path: Path) -> dict[str, str]:
         "PORTABLE_SHA256": "0" * 64,
     }
     completed = subprocess.run(
-        ["bash", "-c", script],
+        [_release_bash(), "-c", script],
         cwd=tmp_path,
         env=environment,
         check=False,
@@ -2646,7 +2688,7 @@ def test_release_publish_rejects_stage_to_publish_tamper_or_injection(
 
     environment, gh_log = _mock_gh_environment(tmp_path, values)
     completed = subprocess.run(
-        ["bash", "-c", _publish_step_script()],
+        [_release_bash(), "-c", _publish_step_script()],
         cwd=tmp_path,
         env=environment,
         check=False,
@@ -2672,7 +2714,7 @@ def test_release_publish_invokes_gh_with_exact_verified_assets(
     environment["MOCK_TAG_CHAIN"] = json.dumps(tag_chain)
 
     completed = subprocess.run(
-        ["bash", "-c", _publish_step_script()],
+        [_release_bash(), "-c", _publish_step_script()],
         cwd=tmp_path,
         env=environment,
         check=False,
@@ -2702,7 +2744,7 @@ def test_release_publish_rejects_tag_moved_after_prepare(tmp_path: Path) -> None
     environment["MOCK_TAG_COMMIT"] = "f" * 40
 
     completed = subprocess.run(
-        ["bash", "-c", _publish_step_script()],
+        [_release_bash(), "-c", _publish_step_script()],
         cwd=tmp_path,
         env=environment,
         check=False,
@@ -2719,7 +2761,7 @@ def test_release_workflow_rejects_same_name_wrong_rest_identity(
     tmp_path: Path,
     mutation: str,
 ) -> None:
-    if shutil.which("bash") is None or shutil.which("jq") is None:
+    if shutil.which("jq") is None:
         pytest.skip("release workflow identity regression requires bash and jq")
     root = Path(__file__).parents[2]
     workflow = yaml.safe_load((root / ".github/workflows/release.yml").read_text())
@@ -2798,7 +2840,7 @@ def test_release_workflow_rejects_same_name_wrong_rest_identity(
         ),
     }
     passing = subprocess.run(
-        ["bash", "-c", script],
+        [_release_bash(), "-c", script],
         env=environment,
         check=False,
         capture_output=True,
@@ -2812,7 +2854,7 @@ def test_release_workflow_rejects_same_name_wrong_rest_identity(
         artifact_payload["id"] = 999999
         environment["MOCK_ARTIFACT_JSON"] = json.dumps(artifact_payload)
     completed = subprocess.run(
-        ["bash", "-c", script],
+        [_release_bash(), "-c", script],
         env=environment,
         check=False,
         capture_output=True,
@@ -2826,7 +2868,7 @@ def test_release_workflow_rejects_forged_previous_release_identity(
     tmp_path: Path,
     mutation: str,
 ) -> None:
-    if shutil.which("bash") is None or shutil.which("jq") is None:
+    if shutil.which("jq") is None:
         pytest.skip("previous release identity regression requires bash and jq")
     root = Path(__file__).parents[2]
     workflow = yaml.safe_load((root / ".github/workflows/release.yml").read_text())
@@ -2913,7 +2955,7 @@ def test_release_workflow_rejects_forged_previous_release_identity(
         "MOCK_CHECKSUMS_SOURCE": str(checksums_source),
     }
     passing = subprocess.run(
-        ["bash", "-c", script],
+        [_release_bash(), "-c", script],
         env=environment,
         check=False,
         capture_output=True,
@@ -2928,7 +2970,7 @@ def test_release_workflow_rejects_forged_previous_release_identity(
         release_payload["assets"][0]["id"] = 999998
     environment["MOCK_PREVIOUS_RELEASE_JSON"] = json.dumps(release_payload)
     completed = subprocess.run(
-        ["bash", "-c", script],
+        [_release_bash(), "-c", script],
         env=environment,
         check=False,
         capture_output=True,
@@ -3272,6 +3314,41 @@ def test_rollback_pinned_reader_preserves_consumer_oserror(tmp_path: Path) -> No
         raise failure
 
     assert captured.value is failure
+
+
+def test_rollback_pinned_reader_accepts_path_handle_ctime_representation_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"bounded input")
+    original_lstat = Path.lstat
+
+    class CtimeView:
+        def __init__(self, original: os.stat_result) -> None:
+            self._original = original
+
+        @property
+        def st_ctime_ns(self) -> int:
+            return self._original.st_ctime_ns - 1
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._original, name)
+
+    def lstat_with_ctime_drift(self: Path) -> os.stat_result:
+        result = original_lstat(self)
+        if self == source:
+            return CtimeView(result)  # type: ignore[return-value]
+        return result
+
+    monkeypatch.setattr(Path, "lstat", lstat_with_ctime_drift)
+
+    with rollback_verifier._open_pinned_regular_file(
+        source,
+        label="test input",
+        maximum_bytes=1024,
+    ) as (handle, _information):
+        assert handle.read() == b"bounded input"
 
 
 def test_rollback_release_wheel_rejects_lexical_symlink_component(tmp_path: Path) -> None:
