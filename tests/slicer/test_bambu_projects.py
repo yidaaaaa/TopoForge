@@ -10,7 +10,8 @@ import os
 import shutil
 import stat
 import struct
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -745,28 +746,27 @@ def test_archive_evidence_uses_pinned_zip_and_primary_handles_after_path_swaps(
     primary_replacement = tmp_path / "primary.replacement"
     project_replacement.write_bytes(b"not a ZIP")
     primary_replacement.write_bytes(b"attacker G-code")
-    real_open = bambu_projects_module.os.open
+    real_open_pinned = bambu_projects_module._open_pinned_regular_file
     swapped: set[str] = set()
 
-    def racing_open(
-        path: Any,
-        flags: int,
-        mode: int = 0o777,
-        *,
-        dir_fd: int | None = None,
-    ) -> int:
-        descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
-        if dir_fd is not None and path == project.name and "project" not in swapped:
-            swapped.add("project")
-            project.rename(project_detached)
-            project_replacement.rename(project)
-        elif dir_fd is not None and path == primary.name and "primary" not in swapped:
-            swapped.add("primary")
-            primary.rename(primary_detached)
-            primary_replacement.rename(primary)
-        return descriptor
+    @contextmanager
+    def racing_open_pinned(path: Path, *, label: str) -> Iterator[Any]:
+        with real_open_pinned(path, label=label) as pinned:
+            if path == project and "project" not in swapped:
+                swapped.add("project")
+                project.rename(project_detached)
+                project_replacement.rename(project)
+            elif path == primary and "primary" not in swapped:
+                swapped.add("primary")
+                primary.rename(primary_detached)
+                primary_replacement.rename(primary)
+            yield pinned
 
-    monkeypatch.setattr(bambu_projects_module.os, "open", racing_open)
+    monkeypatch.setattr(
+        bambu_projects_module,
+        "_open_pinned_regular_file",
+        racing_open_pinned,
+    )
     evidence = archive_evidence(project, primary)
 
     assert evidence["archive_test_passed"] is True
@@ -949,10 +949,18 @@ def test_canonical_writer_replaces_destination_symlink_without_touching_target(
     assert victim.read_text(encoding="utf-8") == "preserve me"
 
 
+@pytest.mark.parametrize("force_fallback", [False, True])
 def test_canonical_writer_anchors_replace_when_parent_is_swapped(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    force_fallback: bool,
 ) -> None:
+    if force_fallback:
+        monkeypatch.setattr(
+            bambu_projects_module,
+            "_descriptor_relative_supported",
+            lambda: False,
+        )
     parent = tmp_path / "evidence"
     detached_parent = tmp_path / "evidence.original"
     parent.mkdir()
@@ -982,11 +990,21 @@ def test_canonical_writer_anchors_replace_when_parent_is_swapped(
 
     monkeypatch.setattr(bambu_projects_module.os, "replace", racing_replace)
 
-    with pytest.raises(RuntimeError, match="parent changed during publication"):
-        write_canonical(destination, {"safe": True})
+    anchored = (
+        bambu_projects_module._descriptor_relative_supported() and os.rename in os.supports_dir_fd
+    )
+    if anchored:
+        with pytest.raises(RuntimeError, match="parent changed during publication"):
+            write_canonical(destination, {"safe": True})
+        assert (detached_parent / destination.name).read_bytes() == b'{"safe":true}\n'
+    else:
+        with pytest.raises(FileNotFoundError):
+            write_canonical(destination, {"safe": True})
+        retained = list(detached_parent.glob(".manifest.json.*.tmp"))
+        assert len(retained) == 1
+        assert retained[0].read_bytes() == b'{"safe":true}\n'
 
     assert destination.read_text(encoding="utf-8") == "attacker file"
-    assert (detached_parent / destination.name).read_bytes() == b'{"safe":true}\n'
 
 
 @pytest.mark.parametrize("operation", ["copy", "atomic_write"])
