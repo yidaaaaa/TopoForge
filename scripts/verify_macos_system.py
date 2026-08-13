@@ -30,7 +30,7 @@ if __package__:
         load_config,
         write_json_with_sha256,
     )
-    from scripts.verify_macos_app import execute_archive
+    from scripts.verify_macos_app import _poison_host_tls_environment, execute_archive
 else:
     from macos_app import (  # type: ignore[import-not-found]
         CLI_LAUNCHER_PATH,
@@ -41,7 +41,10 @@ else:
         load_config,
         write_json_with_sha256,
     )
-    from verify_macos_app import execute_archive  # type: ignore[import-not-found]
+    from verify_macos_app import (  # type: ignore[import-not-found]
+        _poison_host_tls_environment,
+        execute_archive,
+    )
 
 TARGETS = {
     "macos-15-arm64": 15,
@@ -52,6 +55,7 @@ EVIDENCE_SCHEMA = (
     Path(__file__).resolve().parents[1] / "packaging" / ("macos-app-evidence.schema.json")
 )
 _RECOVERY_RASTER_SHAPE = (768, 768)
+_COPERNICUS_AOI_BBOX = (101.2, 29.2, 101.205, 29.205)
 
 
 def _free_loopback_port() -> int:
@@ -227,6 +231,41 @@ def _recovery_job_request(source: Path, workspace: Path) -> dict[str, Any]:
     )
 
 
+def _copernicus_job_request(root: Path, workspace: Path) -> dict[str, Any]:
+    return {
+        "launch": {
+            "workspace_dir": str(workspace),
+            "build": {
+                "dem_path": str(root / "inputs" / "unused global source placeholder.tif"),
+                "output_dir": str(workspace),
+                "model_width_mm": 48.0,
+                "base_thickness_mm": 3.0,
+                "max_height_mm": 20.0,
+                "terrain_mode": "dsm",
+                "sampling_mode": "source-preserving",
+                "max_grid_cells": 10_000,
+                "max_estimated_triangles": 50_000,
+                "max_estimated_memory_mb": 1024.0,
+                "resource_budget_mode": "strict",
+            },
+            "global_source": {
+                "aoi": {"bbox_wgs84": list(_COPERNICUS_AOI_BBOX)},
+                "requested_provider_id": "copernicus-aws",
+                "terrain_mode": "dsm",
+                "allow_semantic_fallback": False,
+                "preferred_provider_ids": [],
+                "cache_dir": str(root / "provider cache"),
+                "timeout_seconds": 30.0,
+                "max_attempts": 4,
+                "min_request_interval_seconds": 0.2,
+            },
+            "maximum_tile_width_mm": 180.0,
+            "maximum_tile_depth_mm": 180.0,
+            "slicing_enabled": False,
+        }
+    }
+
+
 def _wait_job(base_url: str, job_id: str, *, timeout: float) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -335,6 +374,7 @@ def verify_web_lifecycle(
             "PYTHONNOUSERSITE": "1",
         }
     )
+    _poison_host_tls_environment(environment, root)
     cli = app / CLI_LAUNCHER_PATH
     web = app / WEB_LAUNCHER_PATH
     commands: list[dict[str, Any]] = []
@@ -404,6 +444,53 @@ def verify_web_lifecycle(
             if not _strict_artifact_reopen_passed(role, result):
                 raise RuntimeError(f"strict packaged artifact reopen failed: {role}")
             reopen[role] = result
+
+        provider_request = _copernicus_job_request(
+            root,
+            root / "workspaces" / "Copernicus Web job 地形",
+        )
+        provider_validated, _headers = _http(
+            base_url,
+            "/api/v1/jobs/validate",
+            method="POST",
+            payload=provider_request,
+        )
+        if (
+            provider_validated.get("valid") is not True
+            or provider_validated.get("expected_stages", [None])[0] != "acquire"
+        ):
+            raise RuntimeError("packaged Copernicus Web job validation did not pass")
+        provider_created, _headers = _http(
+            base_url,
+            "/api/v1/jobs",
+            method="POST",
+            payload=provider_request,
+        )
+        provider_completed = _wait_job(
+            base_url,
+            provider_created["job_id"],
+            timeout=900,
+        )
+        if provider_completed["state"] != "completed":
+            raise RuntimeError(
+                "packaged Copernicus Web job failed: "
+                + json.dumps(provider_completed.get("error"), ensure_ascii=False, sort_keys=True)
+            )
+        provider_summary = provider_completed.get("summary")
+        provider_metrics = (
+            provider_summary.get("metrics") if isinstance(provider_summary, dict) else None
+        )
+        if (
+            not isinstance(provider_summary, dict)
+            or provider_summary.get("source_mode") != "global"
+            or not isinstance(provider_metrics, dict)
+            or provider_metrics.get("selected_provider") != "copernicus-aws"
+            or not isinstance(provider_metrics.get("raster_sha256"), str)
+            or len(provider_metrics["raster_sha256"]) != 64
+            or not isinstance(provider_metrics.get("acquisition_manifest_sha256"), str)
+            or len(provider_metrics["acquisition_manifest_sha256"]) != 64
+        ):
+            raise RuntimeError("packaged Copernicus Web job did not retain provider evidence")
 
         backup, _headers = _http(
             base_url,
@@ -498,6 +585,17 @@ def verify_web_lifecycle(
                 },
             },
             "strict_reopen": reopen,
+            "copernicus_provider": {
+                "job_id": provider_completed["job_id"],
+                "workflow_id": provider_summary["workflow_id"],
+                "aoi": provider_validated["normalized_aoi"],
+                "selected_provider": provider_metrics["selected_provider"],
+                "dataset_name": provider_metrics["dataset_name"],
+                "raster_sha256": provider_metrics["raster_sha256"],
+                "acquisition_manifest_sha256": provider_metrics["acquisition_manifest_sha256"],
+                "quality_mask_count": provider_metrics["quality_mask_count"],
+                "required_checks_passed": True,
+            },
             "backup_restore": {
                 "backup_id": backup["backup_id"],
                 "archive_sha256": backup["archive_sha256"],

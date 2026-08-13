@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://topoforge.local/schemas/macos-app-evidence-v2.json",
+  "$id": "https://topoforge.local/schemas/macos-app-evidence-v3.json",
   "title": "TopoForge Phase 13A unsigned macOS arm64 app evidence",
   "description": "A source-, runtime-, lock-, payload-, archive-, OS-, and architecture-bound packaged-app acceptance report. Hosted-package scope is never clean-system, signing, notarization, quarantine/Gatekeeper, public-support, or Bambu Studio evidence.",
   "type": "object",
@@ -29,7 +29,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "topoforge-macos-system-acceptance-v2"
+      "const": "topoforge-macos-system-acceptance-v3"
     },
     "package_role": {
       "const": "phase13a-macos-arm64-unsigned-candidate"
@@ -145,6 +145,7 @@
         "python_runtime",
         "build_identity",
         "locked_dependencies",
+        "tls_trust",
         "contents",
         "macho",
         "static_checks_passed",
@@ -153,7 +154,7 @@
       ],
       "properties": {
         "schema_version": {
-          "const": "topoforge-macos-app-verification-v2"
+          "const": "topoforge-macos-app-verification-v3"
         },
         "archive": {
           "$ref": "#/properties/archive"
@@ -287,6 +288,9 @@
             }
           }
         },
+        "tls_trust": {
+          "$ref": "#/$defs/tlsTrust"
+        },
         "contents": {
           "type": "object",
           "required": [
@@ -403,6 +407,7 @@
       "required": [
         "completed_job",
         "strict_reopen",
+        "copernicus_provider",
         "backup_restore",
         "restart_cancellation",
         "server_binding",
@@ -449,6 +454,32 @@
         },
         "strict_reopen": {
           "type": "object"
+        },
+        "copernicus_provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "job_id",
+            "workflow_id",
+            "aoi",
+            "selected_provider",
+            "dataset_name",
+            "raster_sha256",
+            "acquisition_manifest_sha256",
+            "quality_mask_count",
+            "required_checks_passed"
+          ],
+          "properties": {
+            "job_id": {"type": "string", "minLength": 1},
+            "workflow_id": {"type": "string", "minLength": 1},
+            "aoi": {"type": "object"},
+            "selected_provider": {"const": "copernicus-aws"},
+            "dataset_name": {"type": "string", "minLength": 1},
+            "raster_sha256": {"$ref": "#/$defs/sha256"},
+            "acquisition_manifest_sha256": {"$ref": "#/$defs/sha256"},
+            "quality_mask_count": {"type": "integer", "minimum": 0},
+            "required_checks_passed": {"const": true}
+          }
         },
         "backup_restore": {
           "type": "object",
@@ -708,6 +739,70 @@
         "required_checks_passed": {"const": true}
       }
     },
+    "tlsTrust": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_package",
+        "ca_bundle",
+        "environment",
+        "required_checks_passed"
+      ],
+      "properties": {
+        "source_package": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["canonical_name", "version", "path", "bytes", "sha256"],
+          "properties": {
+            "canonical_name": {"const": "certifi"},
+            "version": {"type": "string", "minLength": 1},
+            "path": {
+              "const": "Contents/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/certifi/cacert.pem"
+            },
+            "bytes": {"type": "integer", "minimum": 1, "maximum": 4194304},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "ca_bundle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "bytes", "sha256", "certificate_count"],
+          "properties": {
+            "path": {"const": "Contents/Resources/certificates/certifi-cacert.pem"},
+            "bytes": {"type": "integer", "minimum": 1, "maximum": 4194304},
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "certificate_count": {"type": "integer", "minimum": 100}
+          }
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file_variables",
+            "directory_variable",
+            "directory_path",
+            "external_overrides_allowed"
+          ],
+          "properties": {
+            "file_variables": {
+              "type": "array",
+              "prefixItems": [
+                {"const": "SSL_CERT_FILE"},
+                {"const": "REQUESTS_CA_BUNDLE"},
+                {"const": "CURL_CA_BUNDLE"},
+                {"const": "GDAL_HTTP_CA_BUNDLE"},
+                {"const": "AWS_CA_BUNDLE"}
+              ],
+              "items": false
+            },
+            "directory_variable": {"const": "SSL_CERT_DIR"},
+            "directory_path": {"const": "Contents/Resources/certificates"},
+            "external_overrides_allowed": {"const": false}
+          }
+        },
+        "required_checks_passed": {"const": true}
+      }
+    },
     "tlsProbe": {
       "type": "object",
       "additionalProperties": false,
@@ -718,6 +813,19 @@
         "ssl_context_type",
         "https_connection_type",
         "https_handler_type",
+        "url",
+        "response_url",
+        "status",
+        "response_prefix_sha256",
+        "response_prefix_bytes",
+        "ca_bundle_path",
+        "ca_bundle_sha256",
+        "default_cafile",
+        "default_capath",
+        "ca_cert_count",
+        "verify_mode",
+        "check_hostname",
+        "environment",
         "required_checks_passed"
       ],
       "properties": {
@@ -727,6 +835,42 @@
         "ssl_context_type": {"const": "SSLContext"},
         "https_connection_type": {"const": "HTTPSConnection"},
         "https_handler_type": {"const": "HTTPSHandler"},
+        "url": {
+          "const": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/tileList.txt"
+        },
+        "response_url": {
+          "const": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/tileList.txt"
+        },
+        "status": {"const": 200},
+        "response_prefix_sha256": {"$ref": "#/$defs/sha256"},
+        "response_prefix_bytes": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "ca_bundle_path": {"type": "string", "minLength": 1},
+        "ca_bundle_sha256": {"$ref": "#/$defs/sha256"},
+        "default_cafile": {"type": "string", "minLength": 1},
+        "default_capath": {"type": "string", "minLength": 1},
+        "ca_cert_count": {"type": "integer", "minimum": 100},
+        "verify_mode": {"const": "CERT_REQUIRED"},
+        "check_hostname": {"const": true},
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "SSL_CERT_FILE",
+            "REQUESTS_CA_BUNDLE",
+            "CURL_CA_BUNDLE",
+            "GDAL_HTTP_CA_BUNDLE",
+            "AWS_CA_BUNDLE",
+            "SSL_CERT_DIR"
+          ],
+          "properties": {
+            "SSL_CERT_FILE": {"type": "string", "minLength": 1},
+            "REQUESTS_CA_BUNDLE": {"type": "string", "minLength": 1},
+            "CURL_CA_BUNDLE": {"type": "string", "minLength": 1},
+            "GDAL_HTTP_CA_BUNDLE": {"type": "string", "minLength": 1},
+            "AWS_CA_BUNDLE": {"type": "string", "minLength": 1},
+            "SSL_CERT_DIR": {"type": "string", "minLength": 1}
+          }
+        },
         "required_checks_passed": {"const": true}
       }
     }

@@ -8,8 +8,11 @@ TopoForge does **not** currently claim macOS support. Native hosted macOS core C
 packaged-app CI has run on both frozen arm64 runner labels, but the first hosted unsigned candidate was disproved
 by a real launch from a user account without a system Python Framework: its embedded `_ssl` still
 loaded `/Library/Frameworks/Python.framework/Versions/3.12/lib/libssl.3.dylib`. The hosted runner's
-preinstalled framework masked that non-self-contained dependency. That candidate is invalid even
-though its hosted jobs passed. Clean-system, Gatekeeper, signing/notarization, first-launch, and
+preinstalled framework masked that non-self-contained dependency. The next hosted candidate closed
+that Mach-O defect but was also disproved by a real land-AOI fetch: neither launcher selected the
+locked `certifi` trust store, so embedded `urllib` could not validate the Copernicus AWS certificate.
+Both candidates are invalid even though their hosted jobs passed. Clean-system, Gatekeeper,
+signing/notarization, first-launch, and
 Bambu Studio gates remain open. The machine-readable contract is
 [`macos-support-matrix.json`](macos-support-matrix.json).
 
@@ -86,10 +89,15 @@ archiving, every non-Apple dependency is resolved inside the bundle and rewritte
 external images only under `/System/Library/` and `/usr/lib/` and never consults matching host
 paths. Native acceptance clears all `DYLD_*` search fallbacks, explicitly exercises `ssl`, `_ssl`,
 `hashlib`, `_hashlib`, `http.client`, and `urllib.request`, records dyld-loaded images, and rejects
-any non-system image outside the extracted app. It also starts from a path containing spaces and
+any non-system image outside the extracted app. The replacement contract copies the CA collection
+from the exact locked `certifi` dependency to an ordinary app resource, binds both copies to the
+manifest, overrides all supported TLS CA environment inputs for CLI, Web, and inherited workers,
+and completes a verified HTTPS request to the authoritative Copernicus catalog while hostile host
+CA variables point outside the app. It also starts from a path containing spaces and
 non-ASCII text, executes doctor and `web --check`, rejects external host arguments, runs a
-synthetic worker job, strictly reopens STL/3MF/GLB, restarts and cancels a recovered worker, and
-backs up and restores the completed project.
+synthetic worker job plus a real small-land Copernicus Web provider job, strictly reopens
+STL/3MF/GLB, restarts and cancels a recovered worker, and backs up and restores the completed
+project.
 
 The workflow definition builds the same source twice, requires byte-identical archives, retains
 one checksum-bound unsigned candidate, and sends that exact archive SHA to macOS 15 and macOS 26
@@ -97,7 +105,7 @@ hosted-package acceptance jobs. Its results are `hosted-package` evidence only: 
 establish clean-system state, signing, notarization, quarantine/Gatekeeper first launch, public
 support, or Phase 13B Bambu Studio automation.
 
-### Invalidated hosted candidate
+### Invalidated hosted candidates
 
 [macOS workflow run 31670153746](https://github.com/yidaaaaa/TopoForge/actions/runs/31670153746)
 completed its hosted gates for source
@@ -110,6 +118,20 @@ executables, OpenSSL, curses/panel, and Tk extensions, plus build-host RPATHs. T
 invalidates the archive for all uses; it must not be renamed, promoted, or treated as usable
 package evidence. Historical artifacts remain retained according to GitHub policy so the failure
 record is not erased.
+
+[macOS workflow run 31731949652](https://github.com/yidaaaaa/TopoForge/actions/runs/31731949652)
+then completed hosted gates for source
+`a5366a8ea2c47e204fe8c933852f3e146b3e69d7`, producing archive SHA-256
+`d745e5d22a2e7e3862a263f2763efdc3232d8643bcdd9887c7e05c69b5b5c4bc` and app-payload SHA-256
+`bb24493c3cf8863beffbbfe2ba7f144137c14dacfb32cbeb3f63770fc71b4eb5`. It closed the Mach-O
+dependency defect, but a real user land-AOI acquisition still failed with the generic provider
+selection error. Diagnostic run
+[31738905128](https://github.com/yidaaaaa/TopoForge/actions/runs/31738905128) reproduced the raw
+candidate-Python failure on both macOS 15 and 26 with host CA paths made unavailable:
+`ssl.SSLCertVerificationError: CERTIFICATE_VERIFY_FAILED` (`unable to get local issuer
+certificate`), wrapped by `urllib.error.URLError`. The archive contained locked `certifi` CA bytes,
+but neither launcher selected them. This second archive is also unusable and retained only as
+historical failure evidence.
 
 ## CI and clean-system capacity
 

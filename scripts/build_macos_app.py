@@ -24,12 +24,17 @@ if __package__:
     from scripts.macos_app import (
         APP_ROOT,
         BUILD_SCHEMA_VERSION,
+        CA_BUNDLE_PATH,
+        CA_DIRECTORY_PATH,
+        CERTIFI_CA_SOURCE_PATH,
         CLI_LAUNCHER_PATH,
         DEFAULT_CONFIG,
         INFO_PLIST_PATH,
         MANIFEST_PATH,
         MANIFEST_SCHEMA_VERSION,
         PYTHON_PATH,
+        TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE,
+        TLS_CA_FILE_ENVIRONMENT_VARIABLES,
         WEB_LAUNCHER_PATH,
         archive_sidecar,
         bundle_entries,
@@ -49,12 +54,17 @@ else:
     from macos_app import (  # type: ignore[import-not-found]
         APP_ROOT,
         BUILD_SCHEMA_VERSION,
+        CA_BUNDLE_PATH,
+        CA_DIRECTORY_PATH,
+        CERTIFI_CA_SOURCE_PATH,
         CLI_LAUNCHER_PATH,
         DEFAULT_CONFIG,
         INFO_PLIST_PATH,
         MANIFEST_PATH,
         MANIFEST_SCHEMA_VERSION,
         PYTHON_PATH,
+        TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE,
+        TLS_CA_FILE_ENVIRONMENT_VARIABLES,
         WEB_LAUNCHER_PATH,
         archive_sidecar,
         bundle_entries,
@@ -90,18 +100,41 @@ else:
         macho_rewrite_plans,
     )
 
-CLI_LAUNCHER = """#!/bin/sh
+_CA_BUNDLE_FROM_CONTENTS = PurePosixPath(CA_BUNDLE_PATH).relative_to("Contents").as_posix()
+_CA_DIRECTORY_FROM_CONTENTS = PurePosixPath(CA_DIRECTORY_PATH).relative_to("Contents").as_posix()
+_TLS_ENVIRONMENT = "\n".join(
+    (
+        f'CA_BUNDLE="$CONTENTS_DIR/{_CA_BUNDLE_FROM_CONTENTS}"',
+        f'CA_DIRECTORY="$CONTENTS_DIR/{_CA_DIRECTORY_FROM_CONTENTS}"',
+        'if [ ! -f "$CA_BUNDLE" ] || [ -L "$CA_BUNDLE" ]; then',
+        '  echo "TopoForge.app packaged CA bundle is missing or unsafe." >&2',
+        "  exit 78",
+        "fi",
+        "unset "
+        + " ".join((*TLS_CA_FILE_ENVIRONMENT_VARIABLES, TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE)),
+        *(f'export {name}="$CA_BUNDLE"' for name in TLS_CA_FILE_ENVIRONMENT_VARIABLES),
+        f'export {TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE}="$CA_DIRECTORY"',
+    )
+)
+
+CLI_LAUNCHER = (
+    """#!/bin/sh
 set -eu
 CONTENTS_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 unset PYTHONHOME PYTHONPATH PYTHONSTARTUP DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH
 unset DYLD_FALLBACK_LIBRARY_PATH DYLD_FALLBACK_FRAMEWORK_PATH
 export PYTHONUTF8=1
 export PYTHONNOUSERSITE=1
+"""
+    + _TLS_ENVIRONMENT
+    + """
 exec "$CONTENTS_DIR/Frameworks/Python.framework/Versions/3.12/bin/python3.12" \
   -I -X utf8 -m topoforge.cli.app "$@"
 """
+)
 
-WEB_LAUNCHER = """#!/bin/sh
+WEB_LAUNCHER = (
+    """#!/bin/sh
 set -eu
 for argument in "$@"; do
   case "$argument" in
@@ -116,9 +149,13 @@ unset PYTHONHOME PYTHONPATH PYTHONSTARTUP DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH
 unset DYLD_FALLBACK_LIBRARY_PATH DYLD_FALLBACK_FRAMEWORK_PATH
 export PYTHONUTF8=1
 export PYTHONNOUSERSITE=1
+"""
+    + _TLS_ENVIRONMENT
+    + """
 exec "$CONTENTS_DIR/Frameworks/Python.framework/Versions/3.12/bin/python3.12" \
   -I -X utf8 -m topoforge.cli.app web --host 127.0.0.1 "$@"
 """
+)
 
 README = """TopoForge.app Phase 13A unsigned arm64 candidate
 =================================================
@@ -569,6 +606,72 @@ def _dependency_inventory(site_packages: Path) -> list[dict[str, str]]:
     return packages
 
 
+def _install_locked_ca_bundle(
+    app: Path,
+    dependencies: list[dict[str, str]],
+) -> dict[str, Any]:
+    """Copy the locked certifi trust store to one explicit app resource."""
+    certifi = [item for item in dependencies if item["canonical_name"] == "certifi"]
+    if len(certifi) != 1:
+        raise ValueError("locked runtime dependencies must contain exactly one certifi package")
+    source = app.joinpath(*PurePosixPath(CERTIFI_CA_SOURCE_PATH).parts)
+    try:
+        source_metadata = source.lstat()
+    except OSError as exc:
+        raise ValueError("locked certifi package does not contain cacert.pem") from exc
+    if (
+        not stat.S_ISREG(source_metadata.st_mode)
+        or source_metadata.st_nlink != 1
+        or source_metadata.st_size > 4 * 1024 * 1024
+    ):
+        raise ValueError("locked certifi cacert.pem must be one bounded ordinary file")
+    payload = source.read_bytes()
+    begin_count = payload.count(b"-----BEGIN CERTIFICATE-----")
+    end_count = payload.count(b"-----END CERTIFICATE-----")
+    if begin_count < 100 or begin_count != end_count:
+        raise ValueError("locked certifi cacert.pem does not contain a complete CA collection")
+
+    destination = app.joinpath(*PurePosixPath(CA_BUNDLE_PATH).parts)
+    destination.parent.mkdir(parents=True, exist_ok=False)
+    with source.open("rb") as source_stream, destination.open("xb") as destination_stream:
+        shutil.copyfileobj(source_stream, destination_stream, 1024 * 1024)
+        destination_stream.flush()
+        os.fsync(destination_stream.fileno())
+    destination.chmod(0o644)
+    destination_metadata = destination.lstat()
+    source_sha256 = sha256_file(source)
+    destination_sha256 = sha256_file(destination)
+    if (
+        not stat.S_ISREG(destination_metadata.st_mode)
+        or destination_metadata.st_nlink != 1
+        or destination_metadata.st_size != source_metadata.st_size
+        or destination_sha256 != source_sha256
+    ):
+        raise ValueError("packaged CA bundle differs from the locked certifi source")
+    return {
+        "source_package": {
+            "canonical_name": "certifi",
+            "version": certifi[0]["version"],
+            "path": CERTIFI_CA_SOURCE_PATH,
+            "bytes": source_metadata.st_size,
+            "sha256": source_sha256,
+        },
+        "ca_bundle": {
+            "path": CA_BUNDLE_PATH,
+            "bytes": destination_metadata.st_size,
+            "sha256": destination_sha256,
+            "certificate_count": begin_count,
+        },
+        "environment": {
+            "file_variables": list(TLS_CA_FILE_ENVIRONMENT_VARIABLES),
+            "directory_variable": TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE,
+            "directory_path": CA_DIRECTORY_PATH,
+            "external_overrides_allowed": False,
+        },
+        "required_checks_passed": True,
+    }
+
+
 def _normalize_site_packages(site_packages: Path) -> None:
     for name in ("bin", "Scripts"):
         path = site_packages / name
@@ -842,6 +945,7 @@ def build_macos_app(
         )
         _normalize_site_packages(site_packages)
         dependencies = _dependency_inventory(site_packages)
+        tls_trust = _install_locked_ca_bundle(app, dependencies)
 
         wheel_dir = temporary / "wheel"
         wheel_dir.mkdir()
@@ -939,6 +1043,7 @@ def build_macos_app(
                 "uv_lock_path": "Contents/Resources/provenance/uv.lock",
                 "uv_lock_sha256": build_identity["uv_lock_sha256"],
             },
+            "tls_trust": tls_trust,
             "project_wheel": {
                 **wheel_identity,
                 "path": f"Contents/Resources/provenance/{wheel.name}",
@@ -954,6 +1059,8 @@ def build_macos_app(
                 "node_required": False,
                 "source_checkout_required": False,
                 "default_data_root": "~/Library/Application Support/TopoForge",
+                "ca_bundle_path": CA_BUNDLE_PATH,
+                "tls_environment": tls_trust["environment"],
             },
             "contents": {
                 "file_count": len(files),
@@ -1018,6 +1125,7 @@ def build_macos_app(
         "build_identity": build_identity,
         "app_payload_sha256": verification["contents"]["payload_sha256"],
         "dependency_count": len(dependencies),
+        "tls_trust": tls_trust,
         "macho_file_count": len(macho),
         "macho_closure": macho_summary,
         "verification": verification,

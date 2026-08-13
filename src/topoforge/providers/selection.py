@@ -101,8 +101,78 @@ class ProviderSelectionError(ProviderFetchError):
     """Aggregated selection/fetch failure with a machine-readable trace."""
 
     def __init__(self, message: str, trace: ProviderSelectionTrace) -> None:
-        super().__init__(message)
+        detail = _selection_failure_detail(trace)
+        super().__init__(f"{message}; {detail}" if detail else message)
         self.trace = trace
+
+
+_SELECTION_ERROR_DETAIL_MAX_CHARS = 6000
+_SELECTION_ERROR_REASON_MAX_CHARS = 1000
+
+
+def _bounded_single_line(value: str) -> str:
+    normalized = " ".join(value.split())
+    if len(normalized) <= _SELECTION_ERROR_REASON_MAX_CHARS:
+        return normalized
+    return normalized[: _SELECTION_ERROR_REASON_MAX_CHARS - 14] + "... [truncated]"
+
+
+def _failure_category(*, status: str, reasons: list[str], semantic_status: str | None) -> str:
+    rendered = " ".join(reasons).casefold()
+    if "certificate_verify_failed" in rendered or "certificate verify failed" in rendered:
+        return "tls-certificate"
+    if any(
+        marker in rendered
+        for marker in (
+            "urlerror",
+            "connection",
+            "network",
+            "name or service not known",
+            "nodename nor servname",
+            "timed out",
+            "timeout",
+        )
+    ):
+        return "network"
+    if semantic_status == "incompatible" or "semantic fallback is disabled" in rendered:
+        return "semantic-mismatch"
+    if "coverage" in rendered or "does not cover" in rendered or "source cell" in rendered:
+        return "coverage"
+    return status
+
+
+def _selection_failure_detail(trace: ProviderSelectionTrace) -> str:
+    """Render bounded, single-line trace reasons for local CLI/Web task errors."""
+    entries = [f"provider outcome={_bounded_single_line(trace.outcome)}"]
+    for evaluation in trace.evaluations:
+        reasons = [_bounded_single_line(reason) for reason in evaluation.reasons]
+        category = _failure_category(
+            status=evaluation.status,
+            reasons=evaluation.reasons,
+            semantic_status=evaluation.semantic_status,
+        )
+        entries.append(
+            f"evaluation {evaluation.provider_id}[{evaluation.status}/{category}]: "
+            + (" | ".join(reasons) if reasons else "no reason recorded")
+        )
+    for attempt in trace.fetch_attempts:
+        reason = _bounded_single_line(
+            ": ".join(
+                value
+                for value in (attempt.error_type or "fetch failure", attempt.error_message or "")
+                if value
+            )
+        )
+        category = _failure_category(
+            status=attempt.status,
+            reasons=[reason],
+            semantic_status=None,
+        )
+        entries.append(f"fetch {attempt.provider_id}[{attempt.status}/{category}]: {reason}")
+    rendered = "; ".join(entries)
+    if len(rendered) <= _SELECTION_ERROR_DETAIL_MAX_CHARS:
+        return rendered
+    return rendered[: _SELECTION_ERROR_DETAIL_MAX_CHARS - 14] + "... [truncated]"
 
 
 def _semantic_rank(

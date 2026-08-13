@@ -389,6 +389,77 @@ def test_all_fetch_failures_are_aggregated(aoi: Any, tmp_path: Path) -> None:
     assert "two failed" in str(caught.value)
 
 
+def test_no_eligible_provider_error_preserves_reason_categories(aoi: Any) -> None:
+    tls = FakeProvider("tls", dataset_type=DatasetType.DSM, resolution_m=30)
+    network = FakeProvider("network", dataset_type=DatasetType.DSM, resolution_m=30)
+    coverage = FakeProvider(
+        "coverage",
+        dataset_type=DatasetType.DSM,
+        resolution_m=30,
+        covered=False,
+    )
+    semantic = FakeProvider("semantic", dataset_type=DatasetType.DSM, resolution_m=30)
+
+    def failed_probe(provider_id: str) -> Any:
+        if provider_id == "tls":
+            raise OSError("[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer")
+        if provider_id == "network":
+            raise OSError("network connection timed out")
+        return {"coverage": coverage, "semantic": semantic}[provider_id].probe(aoi)
+
+    tls.probe = lambda _aoi: failed_probe("tls")  # type: ignore[method-assign]
+    network.probe = lambda _aoi: failed_probe("network")  # type: ignore[method-assign]
+
+    with pytest.raises(ProviderSelectionError) as caught:
+        fetch_with_provider_selection(
+            aoi=aoi,
+            destination=Path("unused.tif"),
+            providers={
+                "tls": tls,
+                "network": network,
+                "coverage": coverage,
+                "semantic": semantic,
+            },
+            descriptors=[
+                descriptor("tls", DatasetType.DSM),
+                descriptor("network", DatasetType.DSM),
+                descriptor("coverage", DatasetType.DSM),
+                descriptor("semantic", DatasetType.DSM),
+            ],
+            policy=ProviderSelectionPolicy(requested_terrain_mode=TerrainMode.DTM),
+        )
+
+    message = str(caught.value)
+    assert "tls[probe-failed/tls-certificate]" in message
+    assert "network[probe-failed/network]" in message
+    assert "coverage[rejected/coverage]" in message
+    assert "semantic[rejected/semantic-mismatch]" in message
+    assert caught.value.trace.evaluations[0].reasons == [
+        "coverage probe failed with OSError: [SSL: CERTIFICATE_VERIFY_FAILED] "
+        "unable to get local issuer"
+    ]
+
+
+def test_provider_selection_error_detail_is_bounded_and_single_line(aoi: Any) -> None:
+    provider = FakeProvider("tls", dataset_type=DatasetType.DSM, resolution_m=30)
+    provider.probe = lambda _aoi: (_ for _ in ()).throw(  # type: ignore[method-assign]
+        OSError("CERTIFICATE_VERIFY_FAILED\n" + "x" * 10_000)
+    )
+
+    with pytest.raises(ProviderSelectionError) as caught:
+        fetch_with_provider_selection(
+            aoi=aoi,
+            destination=Path("unused.tif"),
+            providers={"tls": provider},
+            descriptors=[descriptor("tls", DatasetType.DSM)],
+            policy=ProviderSelectionPolicy(requested_terrain_mode=TerrainMode.DSM),
+        )
+
+    assert len(str(caught.value)) < 6200
+    assert "\n" not in str(caught.value)
+    assert "[truncated]" in str(caught.value)
+
+
 def test_explicit_provider_mode_ignores_higher_ranked_auto_candidate(
     aoi: Any, tmp_path: Path
 ) -> None:

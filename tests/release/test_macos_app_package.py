@@ -27,11 +27,16 @@ import scripts.verify_macos_app as app_verifier
 import yaml
 from scripts.macos_app import (
     APP_ROOT,
+    CA_BUNDLE_PATH,
+    CERTIFI_CA_SOURCE_PATH,
     CLI_LAUNCHER_PATH,
     INFO_PLIST_PATH,
     MANIFEST_PATH,
     MANIFEST_SCHEMA_VERSION,
     PYTHON_PATH,
+    TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE,
+    TLS_CA_FILE_ENVIRONMENT_VARIABLES,
+    TLS_PROBE_URL,
     VERIFICATION_SCHEMA_VERSION,
     WEB_LAUNCHER_PATH,
     bundle_entries,
@@ -58,6 +63,7 @@ from scripts.verify_macos_app import verify_macos_app
 from scripts.verify_macos_system import (
     _RECOVERY_RASTER_SHAPE,
     SYSTEM_SCHEMA_VERSION,
+    _copernicus_job_request,
     _recovery_job_request,
     _strict_artifact_reopen_passed,
     validate_evidence_report,
@@ -309,6 +315,8 @@ def _fixture_archive(
     )
     _write_file(site_packages / "topoforge/web/static/index.html", web_payload)
     _write_file(site_packages / "fixture_dependency.py", b"VALUE = 1\n")
+    ca_payload = b"-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n" * 100
+    _write_file(app / CERTIFI_CA_SOURCE_PATH, ca_payload)
     _write_file(
         app / "Contents/Frameworks/Python.framework/Versions/3.12/Resources/runtime.txt",
         b"runtime fixture\n",
@@ -317,6 +325,19 @@ def _fixture_archive(
     (framework / "Versions/Current").symlink_to("3.12")
     (framework / "Resources").symlink_to("Versions/Current/Resources")
 
+    dependencies = [
+        {
+            "name": "certifi",
+            "canonical_name": "certifi",
+            "version": "2026.7.22",
+        },
+        {
+            "name": "fixture-dependency",
+            "canonical_name": "fixture-dependency",
+            "version": "1.0",
+        },
+    ]
+    tls_trust = builder._install_locked_ca_bundle(app, dependencies)
     config = _config()
     files = bundle_entries(app, bounds=config["bounds"])
     primary = macho_slices(python)[0]
@@ -386,18 +407,26 @@ def _fixture_archive(
         },
         "python_runtime": runtime,
         "locked_dependencies": {
-            "count": 1,
-            "packages": [
-                {
-                    "name": "fixture-dependency",
-                    "canonical_name": "fixture-dependency",
-                    "version": "1.0",
-                }
-            ],
+            "count": len(dependencies),
+            "packages": dependencies,
             "requirements_path": "Contents/Resources/provenance/requirements.txt",
             "requirements_sha256": "9" * 64,
             "uv_lock_path": "Contents/Resources/provenance/uv.lock",
             "uv_lock_sha256": uv_lock_digest,
+        },
+        "tls_trust": tls_trust,
+        "launchers": {
+            "web": WEB_LAUNCHER_PATH,
+            "cli": CLI_LAUNCHER_PATH,
+            "web_host": "127.0.0.1",
+            "python_isolated_mode": True,
+            "system_python_required": False,
+            "uv_required": False,
+            "node_required": False,
+            "source_checkout_required": False,
+            "default_data_root": "~/Library/Application Support/TopoForge",
+            "ca_bundle_path": CA_BUNDLE_PATH,
+            "tls_environment": tls_trust["environment"],
         },
         "contents": {
             "file_count": len(files),
@@ -497,6 +526,34 @@ def _valid_system_report(archive: Path) -> dict[str, Any]:
             "ssl_context_type": "SSLContext",
             "https_connection_type": "HTTPSConnection",
             "https_handler_type": "HTTPSHandler",
+            "url": TLS_PROBE_URL,
+            "response_url": TLS_PROBE_URL,
+            "status": 200,
+            "response_prefix_sha256": "c" * 64,
+            "response_prefix_bytes": 4096,
+            "ca_bundle_path": (
+                "/candidate/TopoForge.app/Contents/Resources/certificates/certifi-cacert.pem"
+            ),
+            "ca_bundle_sha256": archive_report["tls_trust"]["ca_bundle"]["sha256"],
+            "default_cafile": (
+                "/candidate/TopoForge.app/Contents/Resources/certificates/certifi-cacert.pem"
+            ),
+            "default_capath": "/candidate/TopoForge.app/Contents/Resources/certificates",
+            "ca_cert_count": 100,
+            "verify_mode": "CERT_REQUIRED",
+            "check_hostname": True,
+            "environment": {
+                **{
+                    name: (
+                        "/candidate/TopoForge.app/Contents/Resources/certificates/"
+                        "certifi-cacert.pem"
+                    )
+                    for name in TLS_CA_FILE_ENVIRONMENT_VARIABLES
+                },
+                TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE: (
+                    "/candidate/TopoForge.app/Contents/Resources/certificates"
+                ),
+            },
             "required_checks_passed": True,
         },
         "status": "passed",
@@ -531,6 +588,17 @@ def _valid_system_report(archive: Path) -> dict[str, Any]:
                 },
             },
             "strict_reopen": {},
+            "copernicus_provider": {
+                "job_id": "fixture-provider-job",
+                "workflow_id": "fixture-provider-workflow",
+                "aoi": {"kind": "bbox"},
+                "selected_provider": "copernicus-aws",
+                "dataset_name": "Copernicus DEM GLO-30",
+                "raster_sha256": "e" * 64,
+                "acquisition_manifest_sha256": "f" * 64,
+                "quality_mask_count": 4,
+                "required_checks_passed": True,
+            },
             "backup_restore": {
                 "backup_id": "fixture-backup",
                 "archive_sha256": "d" * 64,
@@ -916,6 +984,88 @@ def test_rewritten_internal_macho_closure_archive_is_deterministic(tmp_path: Pat
     assert report["macho"]["dylib_id_count"] == 2
     assert report["macho"]["rpath_count"] == 0
     assert report["macho"]["required_checks_passed"] is True
+    assert report["tls_trust"]["source_package"]["canonical_name"] == "certifi"
+    assert (
+        report["tls_trust"]["source_package"]["sha256"]
+        == report["tls_trust"]["ca_bundle"]["sha256"]
+    )
+    assert report["tls_trust"]["ca_bundle"]["path"] == CA_BUNDLE_PATH
+    assert report["tls_trust"]["environment"]["external_overrides_allowed"] is False
+
+
+def test_ca_bundle_install_rejects_missing_unlocked_and_malformed_sources(
+    tmp_path: Path,
+) -> None:
+    app = tmp_path / APP_ROOT
+    dependencies = [{"name": "certifi", "canonical_name": "certifi", "version": "2026.7.22"}]
+    with pytest.raises(ValueError, match=r"does not contain cacert[.]pem"):
+        builder._install_locked_ca_bundle(app, dependencies)
+
+    source = app / CERTIFI_CA_SOURCE_PATH
+    _write_file(source, b"not a certificate collection\n")
+    with pytest.raises(ValueError, match="complete CA collection"):
+        builder._install_locked_ca_bundle(app, dependencies)
+
+    source.unlink()
+    _write_file(
+        source,
+        b"-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n" * 100,
+    )
+    with pytest.raises(ValueError, match="exactly one certifi"):
+        builder._install_locked_ca_bundle(app, [])
+
+
+def test_static_archive_rejects_ca_tampering_even_when_manifest_hash_is_rebound(
+    tmp_path: Path,
+) -> None:
+    archive = _fixture_archive(tmp_path / "primary")
+    app = archive.parent / APP_ROOT
+    packaged_ca = app / CA_BUNDLE_PATH
+    packaged_ca.write_bytes(packaged_ca.read_bytes() + b"host injected certificate\n")
+    records = [
+        record
+        for record in bundle_entries(app, bounds=_config()["bounds"])
+        if record["path"] != MANIFEST_PATH
+    ]
+    manifest_path = app / MANIFEST_PATH
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["contents"] = {
+        "file_count": len(records),
+        "payload_sha256": payload_sha256(records),
+        "files": records,
+    }
+    manifest["tls_trust"]["ca_bundle"].update(
+        {
+            "bytes": packaged_ca.stat().st_size,
+            "sha256": sha256_file(packaged_ca),
+        }
+    )
+    manifest_path.write_bytes(canonical_json_bytes(manifest))
+    mutated = archive.parent / "tampered-ca.zip"
+    write_reproducible_zip(
+        app,
+        mutated,
+        source_date_epoch=_config()["source_date_epoch"],
+        bounds=_config()["bounds"],
+        overwrite=False,
+    )
+
+    with pytest.raises(ValueError, match="differs from the locked certifi source"):
+        inspect_archive(mutated, config=_config())
+
+
+def test_native_probe_requires_real_verified_copernicus_https_and_packaged_ca() -> None:
+    for fragment in (
+        "urllib.request.urlopen",
+        TLS_PROBE_URL,
+        "ssl.create_default_context",
+        "check_hostname",
+        "Copernicus_DSM_COG_",
+        "SSL_CERT_FILE",
+    ):
+        assert fragment in app_verifier.DEPENDENCY_PROBE
+    assert "_create_unverified_context" not in app_verifier.DEPENDENCY_PROBE
+    assert "CERT_NONE" not in app_verifier.DEPENDENCY_PROBE
 
 
 def test_static_archive_rejects_noncanonical_member_order(tmp_path: Path) -> None:
@@ -1036,8 +1186,14 @@ def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) ->
         (repository / name).write_text(f"{name}\n", encoding="utf-8")
     app = tmp_path / "候选 app with spaces" / APP_ROOT
     builder._write_support_files(app, repository, "0.10.3")
+    ca_bundle = app / CA_BUNDLE_PATH
+    _write_file(ca_bundle, b"packaged CA fixture\n")
     capture = tmp_path / "launcher-capture.txt"
     fake_python = app / PYTHON_PATH
+    tls_capture = "".join(
+        f"  printf '%s\\n' \"${{{name}-unset}}\"\n"
+        for name in (*TLS_CA_FILE_ENVIRONMENT_VARIABLES, TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE)
+    ).encode()
     _write_file(
         fake_python,
         (
@@ -1047,7 +1203,8 @@ def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) ->
             b"  printf '%s\\n' \"${DYLD_FRAMEWORK_PATH-unset}\"\n"
             b"  printf '%s\\n' \"${DYLD_FALLBACK_LIBRARY_PATH-unset}\"\n"
             b"  printf '%s\\n' \"${DYLD_FALLBACK_FRAMEWORK_PATH-unset}\"\n"
-            b"  printf '%s\\n' \"$@\"\n"
+            + tls_capture
+            + b"  printf '%s\\n' \"$@\"\n"
             b'} > "$CAPTURE"\n'
         ),
         0o755,
@@ -1059,6 +1216,8 @@ def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) ->
             "DYLD_FRAMEWORK_PATH": "/host/framework",
             "DYLD_FALLBACK_LIBRARY_PATH": "/host/fallback-library",
             "DYLD_FALLBACK_FRAMEWORK_PATH": "/host/fallback-framework",
+            **{name: f"/host/unsafe/{name}.pem" for name in TLS_CA_FILE_ENVIRONMENT_VARIABLES},
+            TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE: "/host/unsafe/cert-directory",
         }
     )
     environment["CAPTURE"] = str(capture)
@@ -1071,7 +1230,10 @@ def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) ->
     )
     cli_lines = capture.read_text(encoding="utf-8").splitlines()
     assert cli_lines[:4] == ["unset"] * 4
-    assert cli_lines[4:] == [
+    assert cli_lines[4:10] == [str(ca_bundle)] * len(TLS_CA_FILE_ENVIRONMENT_VARIABLES) + [
+        str(ca_bundle.parent)
+    ]
+    assert cli_lines[10:] == [
         "-I",
         "-X",
         "utf8",
@@ -1088,7 +1250,10 @@ def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) ->
     )
     web_lines = capture.read_text(encoding="utf-8").splitlines()
     assert web_lines[:4] == ["unset"] * 4
-    assert web_lines[4:11] == [
+    assert web_lines[4:10] == [str(ca_bundle)] * len(TLS_CA_FILE_ENVIRONMENT_VARIABLES) + [
+        str(ca_bundle.parent)
+    ]
+    assert web_lines[10:17] == [
         "-I",
         "-X",
         "utf8",
@@ -1097,7 +1262,7 @@ def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) ->
         "web",
         "--host",
     ]
-    assert web_lines[11:] == ["127.0.0.1", "--check", "--no-open"]
+    assert web_lines[17:] == ["127.0.0.1", "--check", "--no-open"]
 
     rejected = subprocess.run(
         [str(app / WEB_LAUNCHER_PATH), "--host=0.0.0.0"],
@@ -1245,6 +1410,29 @@ def test_github_hosted_runner_cannot_emit_clean_system_evidence(
         )
 
 
+def test_native_acceptance_requests_real_copernicus_through_packaged_web(tmp_path: Path) -> None:
+    root = tmp_path / "acceptance root"
+    workspace = root / "workspaces" / "provider job"
+    request = _copernicus_job_request(root, workspace)
+    launch = request["launch"]
+
+    assert launch["workspace_dir"] == str(workspace)
+    assert launch["slicing_enabled"] is False
+    assert launch["global_source"] == {
+        "aoi": {"bbox_wgs84": [101.2, 29.2, 101.205, 29.205]},
+        "requested_provider_id": "copernicus-aws",
+        "terrain_mode": "dsm",
+        "allow_semantic_fallback": False,
+        "preferred_provider_ids": [],
+        "cache_dir": str(root / "provider cache"),
+        "timeout_seconds": 30.0,
+        "max_attempts": 4,
+        "min_request_interval_seconds": 0.2,
+    }
+    assert launch["build"]["max_grid_cells"] == 10_000
+    assert launch["build"]["resource_budget_mode"] == "strict"
+
+
 def test_macos_workflow_builds_one_candidate_and_accepts_same_sha_on_both_hosts() -> None:
     workflow_path = _repository_root() / ".github/workflows/macos.yml"
     workflow_text = workflow_path.read_text(encoding="utf-8")
@@ -1318,17 +1506,23 @@ def test_documentation_keeps_phase13a_unverified_and_phase13b_separate() -> None
 
     assert "does **not** currently claim macOS support" in docs
     assert "7036ea340734d284b9b406b43dbb9547ba6e28186fe16aee4433a5e4ff0c6e78" in docs
+    assert "d745e5d22a2e7e3862a263f2763efdc3232d8643bcdd9887c7e05c69b5b5c4bc" in docs
+    assert "CERTIFICATE_VERIFY_FAILED" in docs
     assert "invalidates the archive for all uses" in docs
     assert "hosted-package" in docs
     assert "cannot establish clean-system" in compact_docs
     assert matrix["public_support_status"] == "unverified"
     package = matrix["phase13a_package_infrastructure"]
-    assert package["invalidated_candidates"][0]["usable_candidate"] is False
+    assert len(package["invalidated_candidates"]) == 2
+    assert all(item["usable_candidate"] is False for item in package["invalidated_candidates"])
     assert package["dynamic_library_closure"]["host_filesystem_resolution_allowed"] is False
     assert package["dynamic_library_closure"]["native_loaded_image_inventory_required"] is True
     assert package["workflow_run_status"] == (
-        "run-31670153746-passed-hosted-but-candidate-invalidated"
+        "run-31738905128-reproduced-ca-failure-replacement-gated"
     )
+    assert package["tls_trust_closure"]["external_ca_environment_allowed"] is False
+    assert package["tls_trust_closure"]["candidate_python_https_handshake_required"] is True
+    assert package["tls_trust_closure"]["packaged_web_copernicus_acquisition_required"] is True
     assert package["signed"] is False
     assert package["notarized"] is False
     assert package["gatekeeper_evidence"] is False
@@ -1351,7 +1545,7 @@ def test_builder_contract_thins_and_unsigns_every_macho() -> None:
     assert "export DYLD_FRAMEWORK_PATH" not in builder.WEB_LAUNCHER
     assert "DYLD_FALLBACK_FRAMEWORK_PATH" in builder.CLI_LAUNCHER
     assert "DYLD_FALLBACK_FRAMEWORK_PATH" in builder.WEB_LAUNCHER
-    assert VERIFICATION_SCHEMA_VERSION == "topoforge-macos-app-verification-v2"
+    assert VERIFICATION_SCHEMA_VERSION == "topoforge-macos-app-verification-v3"
 
 
 def _cpython_macho_payloads_with_absolute_dependencies() -> dict[str, bytes]:
