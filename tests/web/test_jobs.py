@@ -1172,7 +1172,7 @@ def test_recovered_pid_identity_mismatch_fails_closed(
         progress_fraction=0.0,
         pid=os.getpid(),
         process_identity="linux:stale-worker:1",
-        process_group_id=os.getpgrp(),
+        process_group_id=os.getpid(),
     )
     manager._write_record(record)
     monkeypatch.setattr(

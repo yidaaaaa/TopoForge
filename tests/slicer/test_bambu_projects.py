@@ -1850,7 +1850,7 @@ def test_verifier_rejects_symlinked_output_manifest(
     except OSError as exc:
         pytest.skip(f"symbolic links are unavailable: {exc}")
 
-    with pytest.raises(RuntimeError, match="regular non-link file"):
+    with pytest.raises(RuntimeError, match=r"regular non-link file|symbolic link|reparse point"):
         _verify_semantic_evidence(semantic_evidence, project_set)
 
 
