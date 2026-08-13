@@ -1967,6 +1967,73 @@ def test_worker_parent_death_before_gate_never_executes_workflow(
     assert not gate_path.exists()
 
 
+def test_manager_waits_for_windows_ready_publisher_to_close(
+    web_config: WebAppConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = LocalJobManager(web_config)
+    now = utc_now()
+    record = JobRecord(
+        job_id="a" * 32,
+        created_at=now,
+        updated_at=now,
+        state=JobState.STARTING,
+        workspace_dir=web_config.workspace_root / "ready-sharing-window",
+        expected_stages=(),
+        progress_fraction=0.0,
+        request_sha256="b" * 64,
+        launch_nonce="c" * 32,
+    )
+    ready = WorkerReady(
+        job_id=record.job_id,
+        launch_nonce="c" * 32,
+        request_sha256="b" * 64,
+        pid=12345,
+        process_identity="fixture-worker",
+        process_group_id=12345,
+        jobs_root_device=1,
+        jobs_root_inode=2,
+    )
+    digest = "d" * 64
+    sharing_violation = OSError(errno.EINVAL, "fixture native Windows sharing violation")
+    sharing_violation.__dict__["winerror"] = 32
+    attempts = 0
+
+    def read_ready(_record: JobRecord) -> tuple[WorkerReady, str]:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            try:
+                raise sharing_violation
+            except OSError as exc:
+                raise ConfigurationError("worker ready record is unreadable") from exc
+        return ready, digest
+
+    class FakeProcess:
+        pid = ready.pid
+
+        @staticmethod
+        def poll() -> None:
+            return None
+
+    process = cast("subprocess.Popen[bytes]", FakeProcess())
+    monkeypatch.setattr(manager, "_read_worker_ready", read_ready)
+    monkeypatch.setattr(manager, "_verify_worker_ready_live", lambda _ready: None)
+
+    assert manager._wait_for_worker_ready(record, process) == (ready, digest)
+    assert attempts == 2
+
+    unsafe = ConfigurationError("fixture non-sharing readiness failure")
+    monkeypatch.setattr(
+        manager,
+        "_read_worker_ready",
+        lambda _record: (_ for _ in ()).throw(unsafe),
+    )
+    with pytest.raises(ConfigurationError) as captured:
+        manager._wait_for_worker_ready(record, process)
+    assert captured.value is unsafe
+
+
 @pytest.mark.parametrize(
     "native_code_field",
     ["winerror", "errno"],

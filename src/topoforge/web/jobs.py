@@ -89,6 +89,7 @@ from topoforge.web.security import (
     canonical_json_bytes,
     create_owned_directory,
     ensure_real_directory_tree,
+    is_windows_sharing_violation,
     move_owned_path,
     open_exclusive_owned_regular_binary,
     open_owned_regular_binary,
@@ -2439,6 +2440,11 @@ class LocalJobManager:
             try:
                 ready, digest = self._read_worker_ready(record)
             except FileNotFoundError:
+                ready = None
+            except ConfigurationError as exc:
+                cause = exc.__cause__
+                if not (isinstance(cause, OSError) and is_windows_sharing_violation(cause)):
+                    raise
                 ready = None
             if ready is not None:
                 if digest is None:
