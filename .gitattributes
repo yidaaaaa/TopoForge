@@ -1,6 +1,8 @@
 artifacts/patches/*.patch -whitespace
 # Frozen release identities hash these bytes directly on every checkout.
 uv.lock text eol=lf
+# Canonical rollback scripts are hash-bound release evidence.
+scripts/rollback-topoforge-*.sh text eol=lf
 # The Web manifest binds generated asset bytes; checkout must never translate them.
 src/topoforge/web/static/** -text
 src/topoforge/web/static/assets/*.css -whitespace

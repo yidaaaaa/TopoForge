@@ -3141,10 +3141,15 @@ def test_rollback_producer_binds_later_release_commit_and_rejects_nonancestor(
     repository = tmp_path / "repository"
     repository.mkdir()
     _git(repository, "init", "-q")
+    _git(repository, "config", "core.autocrlf", "true")
     _git(repository, "config", "user.name", "TopoForge test")
     _git(repository, "config", "user.email", "test@topoforge.invalid")
+    (repository / ".gitattributes").write_text(
+        "scripts/rollback-topoforge-*.sh text eol=lf\n",
+        encoding="utf-8",
+    )
     (repository / "previous.txt").write_text("0.10.3\n", encoding="utf-8")
-    _git(repository, "add", "previous.txt")
+    _git(repository, "add", ".gitattributes", "previous.txt")
     _git(repository, "commit", "-qm", "previous release")
     previous_commit = _git(repository, "rev-parse", "HEAD")
     _git(repository, "tag", "v0.10.3")
@@ -3282,6 +3287,13 @@ def test_rollback_bash_paths_are_portable_to_git_for_windows() -> None:
     assert rollback_verifier._path_for_bash(Path("/tmp/TopoForge Work/rollback.sh")) == (
         "/tmp/TopoForge Work/rollback.sh"
     )
+
+
+def test_canonical_rollback_scripts_have_checkout_stable_bytes() -> None:
+    root = Path(__file__).parents[2]
+    attributes = (root / ".gitattributes").read_text(encoding="utf-8").splitlines()
+
+    assert "scripts/rollback-topoforge-*.sh text eol=lf" in attributes
 
 
 def test_rollback_bash_selection_rejects_nonworking_system_placeholders() -> None:
