@@ -56,43 +56,10 @@ RELEASE_ACTION_PINS = {
 
 @cache
 def _release_bash() -> str:
-    candidates: list[Path] = []
-    if os.name == "nt":
-        git = shutil.which("git")
-        if git is not None:
-            git_root = Path(git).resolve().parent.parent
-            candidates.extend((git_root / "bin/bash.exe", git_root / "usr/bin/bash.exe"))
-        for variable in ("ProgramFiles", "ProgramFiles(x86)"):
-            root = os.environ.get(variable)
-            if root:
-                candidates.extend(
-                    (
-                        Path(root) / "Git/bin/bash.exe",
-                        Path(root) / "Git/usr/bin/bash.exe",
-                    )
-                )
-    discovered = shutil.which("bash")
-    if discovered is not None:
-        candidates.append(Path(discovered))
-
-    seen: set[str] = set()
-    for candidate in candidates:
-        identity = str(candidate).casefold()
-        if identity in seen or not candidate.is_file():
-            continue
-        seen.add(identity)
-        try:
-            probe = subprocess.run(
-                [str(candidate), "-c", "exit 0"],
-                check=False,
-                capture_output=True,
-                timeout=10,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            continue
-        if probe.returncode == 0:
-            return str(candidate)
-    pytest.skip("release workflow shell regression requires a working Bash executable")
+    try:
+        return rollback_verifier._working_bash()
+    except RuntimeError:
+        pytest.skip("release workflow shell regression requires a working Bash executable")
 
 
 def _path_for_release_bash(path: str) -> str:
@@ -3315,6 +3282,19 @@ def test_rollback_bash_paths_are_portable_to_git_for_windows() -> None:
     assert rollback_verifier._path_for_bash(Path("/tmp/TopoForge Work/rollback.sh")) == (
         "/tmp/TopoForge Work/rollback.sh"
     )
+
+
+def test_rollback_bash_selection_rejects_nonworking_system_placeholders() -> None:
+    bash = rollback_verifier._working_bash()
+
+    completed = subprocess.run(
+        [bash, "-c", "exit 0"],
+        check=False,
+        capture_output=True,
+        timeout=10,
+    )
+
+    assert completed.returncode == 0
 
 
 def test_rollback_command_failure_retains_bounded_stderr(tmp_path: Path) -> None:

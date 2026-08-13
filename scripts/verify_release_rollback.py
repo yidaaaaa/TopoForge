@@ -9,6 +9,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import stat
 import subprocess
 import unicodedata
@@ -694,6 +695,48 @@ def _path_for_bash(path: Path) -> str:
     return rendered
 
 
+def _working_bash() -> str:
+    candidates: list[Path] = []
+    if os.name == "nt":
+        git = shutil.which("git")
+        if git is not None:
+            git_root = Path(git).resolve().parent.parent
+            candidates.extend((git_root / "bin/bash.exe", git_root / "usr/bin/bash.exe"))
+        for variable in ("ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"):
+            root = os.environ.get(variable)
+            if root:
+                candidates.extend(
+                    (
+                        Path(root) / "Git/bin/bash.exe",
+                        Path(root) / "Git/usr/bin/bash.exe",
+                    )
+                )
+    discovered = shutil.which("bash")
+    if discovered is not None:
+        candidates.append(Path(discovered))
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        identity = str(candidate).casefold()
+        if identity in seen or not candidate.is_file():
+            continue
+        seen.add(identity)
+        try:
+            probe = subprocess.run(
+                [str(candidate), "-c", "exit 0"],
+                check=False,
+                capture_output=True,
+                timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if probe.returncode == 0:
+            return str(candidate)
+    raise RuntimeError(
+        "rollback evidence requires a working Bash; on Windows install Git for Windows"
+    )
+
+
 def _inventory(root: Path) -> dict[str, Any]:
     root_chain = _checked_path_chain(root, label="retained evidence root")
     if not stat.S_ISDIR(root_chain[-1].st_mode):
@@ -1036,7 +1079,7 @@ def generate_runtime_report(
     environment["TOPOFORGE_ROLLBACK_DIR"] = _path_for_bash(rollback_checkout)
     completed = _run(
         [
-            "bash",
+            _working_bash(),
             _path_for_bash(checkout / script_path.relative_to(repository_root)),
             "--confirm-rollback",
         ],
