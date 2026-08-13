@@ -69,6 +69,13 @@ for name in modules:
     imports[name] = str(pathlib.Path(module.__file__).resolve())
 
 context = ssl.create_default_context()
+tls_url = "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/tileList.txt"
+request = urllib.request.Request(
+    tls_url,
+    headers={"User-Agent": "TopoForge-macOS-HTTPS-Probe/1"},
+)
+with urllib.request.urlopen(request, timeout=30, context=context) as response:
+    tls_payload = response.read(4096)
 tls_probe = {
     "openssl_version": ssl.OPENSSL_VERSION,
     "sha256": hashlib.sha256(b"TopoForge Mach-O closure probe").hexdigest(),
@@ -76,6 +83,10 @@ tls_probe = {
     "ssl_context_type": type(context).__name__,
     "https_connection_type": http.client.HTTPSConnection.__name__,
     "https_handler_type": urllib.request.HTTPSHandler.__name__,
+    "url": tls_url,
+    "status": response.status,
+    "response_prefix_sha256": hashlib.sha256(tls_payload).hexdigest(),
+    "response_prefix_bytes": len(tls_payload),
     "required_checks_passed": True,
 }
 
@@ -327,6 +338,11 @@ def execute_archive(
             "CFFIXED_USER_HOME": str(fake_home),
             "PYTHONUTF8": "1",
             "PYTHONNOUSERSITE": "1",
+            # Reproduce a clean user host with no Python Framework trust store.
+            # The packaged runtime must not borrow a CA file or directory from
+            # whichever Framework happens to be installed on the hosted runner.
+            "SSL_CERT_FILE": str(root / "absent-host-ca.pem"),
+            "SSL_CERT_DIR": str(root / "absent-host-ca-directory"),
         }
     )
     commands: list[dict[str, Any]] = []
