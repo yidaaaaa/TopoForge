@@ -1018,7 +1018,7 @@ def test_source_binding_rejects_dirty_and_wrong_commit(
         return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
 
     monkeypatch.setattr(windows_acceptance.subprocess, "run", dirty_run)
-    with pytest.raises(RuntimeError, match="modifications or untracked"):
+    with pytest.raises(RuntimeError, match=r"bounded Git status:\n M tracked[.]py"):
         windows_acceptance.source_repository_record(
             tmp_path,
             expected_commit=commit,

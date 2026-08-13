@@ -452,9 +452,14 @@ def source_repository_record(
             "check out the exact candidate commit"
         )
     if require_clean and dirty:
+        status_lines = status.splitlines()
+        bounded_status = "\n".join(status_lines[:20])[:2000]
+        if len(status_lines) > 20:
+            bounded_status += f"\n... {len(status_lines) - 20} additional entries omitted"
         raise RuntimeError(
             "candidate source checkout has modifications or untracked files; commit, remove, "
-            "or revert them before collecting release evidence"
+            "or revert them before collecting release evidence; bounded Git status:\n"
+            f"{bounded_status}"
         )
     return {
         "repository_root": str(root),
