@@ -47,18 +47,51 @@ else:
     from verify_platform_core import verify_platform_core  # type: ignore[import-not-found]
 
 DEPENDENCY_PROBE = r"""
+import _hashlib
+import _ssl
+import ctypes
+import hashlib
+import http.client
 import importlib
 import importlib.metadata
 import json
 import pathlib
+import ssl
 import sys
+import urllib.request
 
-modules = ("fastapi", "lib3mf", "manifold3d", "numpy", "PIL", "pydantic", "pyproj",
+modules = ("ssl", "_ssl", "hashlib", "_hashlib", "http.client", "urllib.request",
+           "fastapi", "lib3mf", "manifold3d", "numpy", "PIL", "pydantic", "pyproj",
            "rasterio", "scipy", "shapely", "trimesh", "typer", "uvicorn", "topoforge")
 imports = {}
 for name in modules:
     module = importlib.import_module(name)
     imports[name] = str(pathlib.Path(module.__file__).resolve())
+
+context = ssl.create_default_context()
+tls_probe = {
+    "openssl_version": ssl.OPENSSL_VERSION,
+    "sha256": hashlib.sha256(b"TopoForge Mach-O closure probe").hexdigest(),
+    "sha256_constructor": _hashlib.openssl_sha256(b"TopoForge").hexdigest(),
+    "ssl_context_type": type(context).__name__,
+    "https_connection_type": http.client.HTTPSConnection.__name__,
+    "https_handler_type": urllib.request.HTTPSHandler.__name__,
+    "required_checks_passed": True,
+}
+
+dyld = ctypes.CDLL(None)
+image_count = dyld._dyld_image_count
+image_count.argtypes = []
+image_count.restype = ctypes.c_uint32
+image_name = dyld._dyld_get_image_name
+image_name.argtypes = [ctypes.c_uint32]
+image_name.restype = ctypes.c_char_p
+loaded_images = []
+for index in range(image_count()):
+    value = image_name(index)
+    if value:
+        loaded_images.append(value.decode("utf-8"))
+
 packages = []
 for distribution in importlib.metadata.distributions():
     name = distribution.metadata.get("Name")
@@ -70,8 +103,12 @@ print(json.dumps({
     "sys_path": sys.path,
     "imports": imports,
     "packages": sorted(packages, key=lambda item: item["name"].casefold()),
+    "tls_probe": tls_probe,
+    "loaded_images": sorted(set(loaded_images)),
 }, sort_keys=True))
 """
+
+_APPLE_SYSTEM_IMAGE_PREFIXES = ("/System/Library/", "/usr/lib/")
 
 
 def _native_host(config: dict[str, Any]) -> dict[str, Any]:
@@ -197,6 +234,28 @@ def _inside_app(path: str, app: Path) -> bool:
     return candidate.is_absolute() and candidate.resolve().is_relative_to(app.resolve())
 
 
+def _loaded_image_inventory(images: Any, app: Path) -> dict[str, list[str]]:
+    if not isinstance(images, list) or not images:
+        raise RuntimeError("packaged TLS probe did not report loaded Mach-O images")
+    app_images: list[str] = []
+    apple_images: list[str] = []
+    external_images: list[str] = []
+    for value in images:
+        if not isinstance(value, str) or not value or "\0" in value:
+            raise RuntimeError("packaged TLS probe reported an invalid loaded image path")
+        if value.startswith(_APPLE_SYSTEM_IMAGE_PREFIXES):
+            apple_images.append(value)
+        elif _inside_app(value, app):
+            app_images.append(value)
+        else:
+            external_images.append(value)
+    return {
+        "app": sorted(set(app_images)),
+        "apple_system": sorted(set(apple_images)),
+        "external": sorted(set(external_images)),
+    }
+
+
 def execute_archive(
     archive: Path,
     *,
@@ -255,11 +314,17 @@ def execute_archive(
     environment = os.environ.copy()
     fake_home = root / "用户 home with spaces"
     fake_home.mkdir()
+    for variable in (
+        "DYLD_LIBRARY_PATH",
+        "DYLD_FRAMEWORK_PATH",
+        "DYLD_FALLBACK_LIBRARY_PATH",
+        "DYLD_FALLBACK_FRAMEWORK_PATH",
+    ):
+        environment.pop(variable, None)
     environment.update(
         {
             "HOME": str(fake_home),
             "CFFIXED_USER_HOME": str(fake_home),
-            "DYLD_FRAMEWORK_PATH": str(app / "Contents" / "Frameworks"),
             "PYTHONUTF8": "1",
             "PYTHONNOUSERSITE": "1",
         }
@@ -289,6 +354,25 @@ def execute_archive(
         )
     if not _inside_app(str(dependency_probe["python_executable"]), app):
         raise RuntimeError("packaged Python executable resolved outside the app")
+    loaded_images = _loaded_image_inventory(dependency_probe.get("loaded_images"), app)
+    if loaded_images["external"]:
+        raise RuntimeError(
+            "packaged process loaded non-system Mach-O images outside the app: "
+            f"{loaded_images['external'][:20]}"
+        )
+    required_loaded_images = {
+        "_ssl.cpython-312-darwin.so",
+        "_hashlib.cpython-312-darwin.so",
+        "libssl.3.dylib",
+        "libcrypto.3.dylib",
+    }
+    observed_loaded_names = {Path(value).name for value in loaded_images["app"]}
+    missing_loaded_images = sorted(required_loaded_images - observed_loaded_names)
+    if missing_loaded_images:
+        raise RuntimeError(
+            "packaged TLS probe did not load required embedded Mach-O images: "
+            f"{missing_loaded_images}"
+        )
     expected_dependencies = {
         (_canonical_name(item["name"]), item["version"])
         for item in manifest["locked_dependencies"]["packages"]
@@ -346,7 +430,6 @@ def execute_archive(
         root / "platform core with spaces" / "地形",
         python_executable=python,
         environment_overrides={
-            "DYLD_FRAMEWORK_PATH": str(app / "Contents" / "Frameworks"),
             "HOME": str(fake_home),
             "CFFIXED_USER_HOME": str(fake_home),
             "PYTHONNOUSERSITE": "1",
@@ -361,17 +444,14 @@ def execute_archive(
                 "contains_non_ascii": True,
                 "required_checks_passed": True,
             },
-            "macho": {
-                "file_count": len(macho_records),
-                "architecture": "arm64",
-                "minimum_versions": sorted({item["minimum_macos"] for item in macho_records}),
-                "required_checks_passed": True,
-            },
+            "macho": {**static["macho"]},
             "dependencies": {
                 "count": len(expected_dependencies),
                 "imports": dependency_probe["imports"],
                 "source_checkout_leak": False,
                 "sys_path_closed": True,
+                "tls_probe": dependency_probe["tls_probe"],
+                "loaded_non_system_macho": loaded_images["app"],
                 "required_checks_passed": True,
             },
             "doctor": doctor,
@@ -384,6 +464,11 @@ def execute_archive(
             "native_execution": {
                 "status": "passed",
                 "native_arm64": True,
+                "loaded_non_system_macho": loaded_images["app"],
+                "loaded_non_system_macho_count": len(loaded_images["app"]),
+                "apple_system_image_count": len(loaded_images["apple_system"]),
+                "host_external_macho_count": 0,
+                "tls_probe": dependency_probe["tls_probe"],
                 "required_checks_passed": True,
             },
             "signed": False,

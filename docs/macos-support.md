@@ -4,13 +4,13 @@ Frozen: 2026-08-10
 
 ## Current truth
 
-TopoForge does **not** currently claim macOS support. Linux x86_64 remains the only verified
-platform and Windows Phase 12 is unfinished. Native hosted macOS core CI has passed on both frozen
-arm64 runner labels as historical source-tree feasibility evidence, but clean-system,
-application-package, Gatekeeper, signing/notarization,
-first-launch, and Bambu Studio gates have not passed. Phase 13A now has a local, unexecuted
-unsigned-app builder and acceptance workflow implementation; that implementation is not native
-package evidence and has not been pushed or run on GitHub. The machine-readable contract is
+TopoForge does **not** currently claim macOS support. Native hosted macOS core CI has passed, and
+packaged-app CI has run on both frozen arm64 runner labels, but the first hosted unsigned candidate was disproved
+by a real launch from a user account without a system Python Framework: its embedded `_ssl` still
+loaded `/Library/Frameworks/Python.framework/Versions/3.12/lib/libssl.3.dylib`. The hosted runner's
+preinstalled framework masked that non-self-contained dependency. That candidate is invalid even
+though its hosted jobs passed. Clean-system, Gatekeeper, signing/notarization, first-launch, and
+Bambu Studio gates remain open. The machine-readable contract is
 [`macos-support-matrix.json`](macos-support-matrix.json).
 
 This document freezes Phase 13 release candidates; it does not widen README or package support
@@ -79,18 +79,37 @@ The manifest and acceptance reports bind source commit, runtime, `uv.lock`, `pyp
 build constraints, all package verifier hashes, the exact app payload, final archive, native OS,
 and CPU architecture. Static validation enforces bounded exact archive closure, macOS
 case/Unicode path uniqueness, internal symlink closure, ordinary-file/hard-link rules, deterministic
-ZIP metadata, `Info.plist`, real arm64 Mach-O slices and deployment floors, locked dependency
-inventory, and production Web assets. Native acceptance starts from a path containing spaces and
+ZIP metadata, `Info.plist`, real arm64 Mach-O slices and deployment floors, every dynamic load
+command and dylib identity, locked dependency inventory, and production Web assets. Before
+archiving, every non-Apple dependency is resolved inside the bundle and rewritten to a canonical
+`@loader_path` reference; build-machine `LC_RPATH` values are removed. Final verification allows
+external images only under `/System/Library/` and `/usr/lib/` and never consults matching host
+paths. Native acceptance clears all `DYLD_*` search fallbacks, explicitly exercises `ssl`, `_ssl`,
+`hashlib`, `_hashlib`, `http.client`, and `urllib.request`, records dyld-loaded images, and rejects
+any non-system image outside the extracted app. It also starts from a path containing spaces and
 non-ASCII text, executes doctor and `web --check`, rejects external host arguments, runs a
 synthetic worker job, strictly reopens STL/3MF/GLB, restarts and cancels a recovered worker, and
 backs up and restores the completed project.
 
 The workflow definition builds the same source twice, requires byte-identical archives, retains
 one checksum-bound unsigned candidate, and sends that exact archive SHA to macOS 15 and macOS 26
-hosted-package acceptance jobs. No run of that workflow exists for this implementation. Its future
-results are `hosted-package` evidence only: they cannot establish clean-system state, signing,
-notarization, quarantine/Gatekeeper first launch, public support, or Phase 13B Bambu Studio
-automation.
+hosted-package acceptance jobs. Its results are `hosted-package` evidence only: they cannot
+establish clean-system state, signing, notarization, quarantine/Gatekeeper first launch, public
+support, or Phase 13B Bambu Studio automation.
+
+### Invalidated hosted candidate
+
+[macOS workflow run 31670153746](https://github.com/yidaaaaa/TopoForge/actions/runs/31670153746)
+completed its hosted gates for source
+`ce1b5dabc9f5a69dcf2c64536076fc88827112fb`. It produced archive SHA-256
+`7036ea340734d284b9b406b43dbb9547ba6e28186fe16aee4433a5e4ff0c6e78` and app-payload SHA-256
+`580fd9c2911117958ca15658814db33769fb8577d329b1c413f23782bdb6fa13`. A subsequent real user
+launch without `/Library/Frameworks/Python.framework` failed while importing `_ssl`. Complete
+load-command enumeration found 14 absolute Python Framework load edges across the framework
+executables, OpenSSL, curses/panel, and Tk extensions, plus build-host RPATHs. This result
+invalidates the archive for all uses; it must not be renamed, promoted, or treated as usable
+package evidence. Historical artifacts remain retained according to GitHub policy so the failure
+record is not erased.
 
 ## CI and clean-system capacity
 
@@ -149,7 +168,8 @@ reopen/reslice on both advertised targets.
 
 Historical hosted source-core CI passed the locked source environment, doctor, deterministic
 synthetic STL/3MF/GLB generation and reopen, source-tree Web checks, worker recovery, and the then
-current Python regression suite on both runner labels. The new packaged-app workflow has not run.
+current Python regression suite on both runner labels. A packaged-app workflow also passed, but
+its archive was invalidated by the clean-user dynamic-library failure described above.
 For each literal clean-system target, the same checksum-bound release candidate must still
 pass application-data and temporary-path behavior, paths with spaces and non-ASCII text,
 backup/restore, native `TopoForge.app`, signed/notarized distribution, quarantine, normal

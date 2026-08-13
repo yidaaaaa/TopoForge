@@ -16,11 +16,19 @@ from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
 from typing import IO, Any
 
+if __package__:
+    from scripts.macos_macho import macho_closure_records, macho_closure_summary
+else:
+    from macos_macho import (  # type: ignore[import-not-found]
+        macho_closure_records,
+        macho_closure_summary,
+    )
+
 CONFIG_SCHEMA_VERSION = "topoforge-macos-arm64-runtime-v1"
-MANIFEST_SCHEMA_VERSION = "topoforge-macos-app-manifest-v1"
-BUILD_SCHEMA_VERSION = "topoforge-macos-app-build-v1"
-VERIFICATION_SCHEMA_VERSION = "topoforge-macos-app-verification-v1"
-SYSTEM_SCHEMA_VERSION = "topoforge-macos-system-acceptance-v1"
+MANIFEST_SCHEMA_VERSION = "topoforge-macos-app-manifest-v2"
+BUILD_SCHEMA_VERSION = "topoforge-macos-app-build-v2"
+VERIFICATION_SCHEMA_VERSION = "topoforge-macos-app-verification-v2"
+SYSTEM_SCHEMA_VERSION = "topoforge-macos-system-acceptance-v2"
 DEFAULT_CONFIG = Path("packaging/macos-arm64-runtime.json")
 APP_ROOT = "TopoForge.app"
 MANIFEST_PATH = "Contents/Resources/manifest.json"
@@ -569,7 +577,7 @@ def inspect_archive(
             build_identity.get("verifier_sha256"),
             "manifest.build_identity.verifier_sha256",
         )
-        for role in ("builder", "shared", "archive", "system"):
+        for role in ("builder", "shared", "macho", "archive", "system"):
             _sha256_value(verifier_hashes.get(role), f"manifest verifier {role}")
         if locked_dependencies.get("uv_lock_sha256") != build_identity["uv_lock_sha256"]:
             raise ValueError("locked dependency uv.lock identity differs from the build identity")
@@ -602,7 +610,8 @@ def inspect_archive(
         expected_records: list[dict[str, Any]] = []
         expected_paths: list[str] = []
         symlink_targets: dict[str, str] = {}
-        observed_macho: list[dict[str, Any]] = []
+        observed_macho_base: dict[str, dict[str, Any]] = {}
+        macho_payloads: dict[str, bytes] = {}
         for index, value in enumerate(raw_records):
             record = _json_object(value, f"manifest.contents.files[{index}]")
             relative = _string(record.get("path"), "manifest file path")
@@ -640,15 +649,14 @@ def inspect_archive(
                             f"archived Mach-O requires macOS {minimum}, above app target: "
                             f"{relative}"
                         )
-                    observed_macho.append(
-                        {
-                            "path": relative,
-                            "architecture": "arm64",
-                            "minimum_macos": minimum,
-                            "bytes": len(payload),
-                            "sha256": hashlib.sha256(payload).hexdigest(),
-                        }
-                    )
+                    macho_payloads[relative] = payload
+                    observed_macho_base[relative] = {
+                        "path": relative,
+                        "architecture": "arm64",
+                        "minimum_macos": minimum,
+                        "bytes": len(payload),
+                        "sha256": hashlib.sha256(payload).hexdigest(),
+                    }
             expected_records.append(record)
             expected_paths.append(relative)
         if expected_paths != sorted(expected_paths) or len(expected_paths) != len(
@@ -671,12 +679,25 @@ def inspect_archive(
                 symlink_targets=symlink_targets,
             )
 
-        observed_macho.sort(key=lambda item: item["path"])
+        bundle_directories = {
+            path[len(APP_ROOT) + 1 :]
+            for path, kind in object_kinds.items()
+            if kind == "directory" and path.startswith(f"{APP_ROOT}/")
+        }
+        closure_records = macho_closure_records(
+            macho_payloads,
+            executable_path=PYTHON_PATH,
+            bundle_directories=bundle_directories,
+        )
+        observed_macho = [{**observed_macho_base[item["path"]], **item} for item in closure_records]
+        closure_summary = macho_closure_summary(closure_records)
         declared_macho = runtime.get("macho_files")
         if declared_macho != observed_macho:
             raise ValueError("archived Mach-O identity differs from the app manifest")
         if runtime.get("macho_file_count") != len(observed_macho):
             raise ValueError("archived Mach-O file count differs from the app manifest")
+        if runtime.get("macho_closure") != closure_summary:
+            raise ValueError("archived Mach-O closure summary differs from the app manifest")
         if not observed_macho or not any(item["path"] == PYTHON_PATH for item in observed_macho):
             raise ValueError("embedded CPython Mach-O is missing from the archive")
 
@@ -727,7 +748,7 @@ def inspect_archive(
             "file_count": len(observed_macho),
             "architecture": "arm64",
             "minimum_versions": sorted({item["minimum_macos"] for item in observed_macho}),
-            "required_checks_passed": True,
+            **closure_summary,
         },
         "info_plist": expected_plist,
         "static_checks_passed": True,

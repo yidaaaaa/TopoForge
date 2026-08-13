@@ -46,6 +46,14 @@ from scripts.macos_app import (
     sha256_file,
     write_reproducible_zip,
 )
+from scripts.macos_macho import (
+    PYTHON_FRAMEWORK_BUNDLE_PREFIX,
+    PYTHON_FRAMEWORK_INSTALL_PREFIX,
+    macho_closure_records,
+    macho_closure_summary,
+    macho_dynamic_slices_bytes,
+    macho_rewrite_plans,
+)
 from scripts.verify_macos_app import verify_macos_app
 from scripts.verify_macos_system import (
     _RECOVERY_RASTER_SHAPE,
@@ -85,22 +93,47 @@ def _encoded_version(value: str) -> int:
     return (parts[0] << 16) | (parts[1] << 8) | parts[2]
 
 
-def _thin_macho(architecture: str = "arm64", minimum_macos: str = "11.0") -> bytes:
+def _macho_string_command(command: int, value: str, *, dylib: bool) -> bytes:
+    encoded = value.encode("utf-8") + b"\0"
+    prefix_size = 24 if dylib else 12
+    command_size = (prefix_size + len(encoded) + 7) // 8 * 8
+    if dylib:
+        prefix = struct.pack("<6I", command, command_size, prefix_size, 0, 0, 0)
+    else:
+        prefix = struct.pack("<3I", command, command_size, prefix_size)
+    return prefix + encoded + b"\0" * (command_size - prefix_size - len(encoded))
+
+
+def _thin_macho(
+    architecture: str = "arm64",
+    minimum_macos: str = "11.0",
+    *,
+    file_type: int = 2,
+    dylib_id: str | None = None,
+    dependencies: tuple[tuple[int, str], ...] = (),
+    rpaths: tuple[str, ...] = (),
+) -> bytes:
     cpu = {"arm64": 0x0100000C, "x86_64": 0x01000007}[architecture]
     minimum = _encoded_version(minimum_macos)
+    commands = [struct.pack("<6I", 0x32, 24, 1, minimum, minimum, 0)]
+    if dylib_id is not None:
+        commands.append(_macho_string_command(0x0D, dylib_id, dylib=True))
+    commands.extend(
+        _macho_string_command(command, value, dylib=True) for command, value in dependencies
+    )
+    commands.extend(_macho_string_command(0x8000001C, value, dylib=False) for value in rpaths)
     header = struct.pack(
         "<8I",
         0xFEEDFACF,
         cpu,
         0,
-        2,
-        1,
-        24,
+        file_type,
+        len(commands),
+        sum(len(command) for command in commands),
         0,
         0,
     )
-    build_version = struct.pack("<6I", 0x32, 24, 1, minimum, minimum, 0)
-    return header + build_version
+    return header + b"".join(commands)
 
 
 def _fat_universal2_macho() -> bytes:
@@ -250,6 +283,7 @@ def _fixture_archive(
     architecture: str = "arm64",
     minimum_macos: str = "11.0",
     web_payload: bytes = b"<!doctype html><title>TopoForge fixture</title>\n",
+    extra_macho_payloads: dict[str, bytes] | None = None,
 ) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     app = root / APP_ROOT
@@ -257,6 +291,8 @@ def _fixture_archive(
     _write_file(python, _thin_macho(architecture, minimum_macos), 0o755)
     _write_file(app / CLI_LAUNCHER_PATH, builder.CLI_LAUNCHER.encode(), 0o755)
     _write_file(app / WEB_LAUNCHER_PATH, builder.WEB_LAUNCHER.encode(), 0o755)
+    for relative, payload in sorted((extra_macho_payloads or {}).items()):
+        _write_file(app.joinpath(*PurePosixPath(relative).parts), payload, 0o755)
     plist = {
         "CFBundleExecutable": "TopoForge",
         "CFBundleIdentifier": "org.topoforge.app",
@@ -284,15 +320,38 @@ def _fixture_archive(
     config = _config()
     files = bundle_entries(app, bounds=config["bounds"])
     primary = macho_slices(python)[0]
-    macho = [
-        {
-            "path": PYTHON_PATH,
-            "architecture": primary["architecture"],
-            "minimum_macos": primary["minimum_macos"],
-            "bytes": python.stat().st_size,
-            "sha256": sha256_file(python),
-        }
-    ]
+    macho_payloads = {
+        PYTHON_PATH: python.read_bytes(),
+        **(extra_macho_payloads or {}),
+    }
+    if architecture == "arm64":
+        closure = macho_closure_records(macho_payloads, executable_path=PYTHON_PATH)
+    else:
+        # Preserve the deliberately invalid fixture until archive inspection exercises
+        # the architecture gate; closure verification itself is arm64-only by contract.
+        closure = [
+            {
+                "path": PYTHON_PATH,
+                "file_type": 2,
+                "dylib_id": None,
+                "rpaths": [],
+                "dependencies": [],
+            }
+        ]
+    macho = []
+    for closure_record in closure:
+        path = app.joinpath(*PurePosixPath(closure_record["path"]).parts)
+        identity = macho_slices(path)[0]
+        macho.append(
+            {
+                "path": closure_record["path"],
+                "architecture": identity["architecture"],
+                "minimum_macos": identity["minimum_macos"],
+                "bytes": path.stat().st_size,
+                "sha256": sha256_file(path),
+                **closure_record,
+            }
+        )
     digest = "1" * 64
     uv_lock_digest = "2" * 64
     runtime = deepcopy(config["python_runtime"])
@@ -301,7 +360,8 @@ def _fixture_archive(
             "macho_architectures": ["arm64"],
             "primary_macho_minimum_macos": primary["minimum_macos"],
             "macho_file_count": len(macho),
-            "macho_minimum_versions": [primary["minimum_macos"]],
+            "macho_minimum_versions": sorted({item["minimum_macos"] for item in macho}),
+            "macho_closure": macho_closure_summary(closure),
             "macho_files": macho,
         }
     )
@@ -319,6 +379,7 @@ def _fixture_archive(
             "verifier_sha256": {
                 "builder": "5" * 64,
                 "shared": "6" * 64,
+                "macho": "7" * 64,
                 "archive": "7" * 64,
                 "system": "8" * 64,
             },
@@ -420,6 +481,24 @@ def _valid_system_report(archive: Path) -> dict[str, Any]:
         expected_source_commit="a" * 40,
     )
     archive_report["native_execution"] = {
+        "loaded_non_system_macho": [
+            "/candidate/TopoForge.app/Contents/Frameworks/libcrypto.3.dylib",
+            "/candidate/TopoForge.app/Contents/Frameworks/libssl.3.dylib",
+            "/candidate/TopoForge.app/Contents/Frameworks/_hashlib.cpython-312-darwin.so",
+            "/candidate/TopoForge.app/Contents/Frameworks/_ssl.cpython-312-darwin.so",
+        ],
+        "loaded_non_system_macho_count": 4,
+        "apple_system_image_count": 1,
+        "host_external_macho_count": 0,
+        "tls_probe": {
+            "openssl_version": "OpenSSL fixture",
+            "sha256": "a" * 64,
+            "sha256_constructor": "b" * 64,
+            "ssl_context_type": "SSLContext",
+            "https_connection_type": "HTTPSConnection",
+            "https_handler_type": "HTTPSHandler",
+            "required_checks_passed": True,
+        },
         "status": "passed",
         "native_arm64": True,
         "required_checks_passed": True,
@@ -788,6 +867,57 @@ def test_reproducible_archive_and_static_closure_pass(tmp_path: Path) -> None:
         assert all(item.create_system == 3 for item in infos)
 
 
+def test_rewritten_internal_macho_closure_archive_is_deterministic(tmp_path: Path) -> None:
+    library = "Contents/Frameworks/Python.framework/Versions/3.12/lib"
+    dynamic = f"{library}/python3.12/lib-dynload"
+    libcrypto = f"{library}/libcrypto.3.dylib"
+    libssl = f"{library}/libssl.3.dylib"
+    extra = {
+        libcrypto: _thin_macho(
+            file_type=6,
+            dylib_id="@loader_path/libcrypto.3.dylib",
+        ),
+        libssl: _thin_macho(
+            file_type=6,
+            dylib_id="@loader_path/libssl.3.dylib",
+            dependencies=((0x0C, "@loader_path/libcrypto.3.dylib"),),
+        ),
+        f"{dynamic}/_ssl.cpython-312-darwin.so": _thin_macho(
+            file_type=8,
+            dependencies=(
+                (0x0C, "@loader_path/../../libssl.3.dylib"),
+                (0x0C, "@loader_path/../../libcrypto.3.dylib"),
+            ),
+        ),
+        f"{dynamic}/_hashlib.cpython-312-darwin.so": _thin_macho(
+            file_type=8,
+            dependencies=((0x0C, "@loader_path/../../libcrypto.3.dylib"),),
+        ),
+    }
+    archive = _fixture_archive(
+        tmp_path / "normalized",
+        extra_macho_payloads=extra,
+    )
+    repeat = archive.with_name("repeat-normalized.zip")
+    write_reproducible_zip(
+        archive.parent / APP_ROOT,
+        repeat,
+        source_date_epoch=_config()["source_date_epoch"],
+        bounds=_config()["bounds"],
+        overwrite=False,
+    )
+
+    assert archive.read_bytes() == repeat.read_bytes()
+    report = inspect_archive(archive, config=_config())
+    assert report["macho"]["file_count"] == 5
+    assert report["macho"]["dependency_count"] == 4
+    assert report["macho"]["bundled_dependency_count"] == 4
+    assert report["macho"]["apple_system_dependency_count"] == 0
+    assert report["macho"]["dylib_id_count"] == 2
+    assert report["macho"]["rpath_count"] == 0
+    assert report["macho"]["required_checks_passed"] is True
+
+
 def test_static_archive_rejects_noncanonical_member_order(tmp_path: Path) -> None:
     source = _fixture_archive(tmp_path / "primary")
     mutated = tmp_path / "reordered.zip"
@@ -913,13 +1043,24 @@ def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) ->
         (
             b"#!/bin/sh\n"
             b"{\n"
-            b"  printf '%s\\n' \"$DYLD_FRAMEWORK_PATH\"\n"
+            b"  printf '%s\\n' \"${DYLD_LIBRARY_PATH-unset}\"\n"
+            b"  printf '%s\\n' \"${DYLD_FRAMEWORK_PATH-unset}\"\n"
+            b"  printf '%s\\n' \"${DYLD_FALLBACK_LIBRARY_PATH-unset}\"\n"
+            b"  printf '%s\\n' \"${DYLD_FALLBACK_FRAMEWORK_PATH-unset}\"\n"
             b"  printf '%s\\n' \"$@\"\n"
             b'} > "$CAPTURE"\n'
         ),
         0o755,
     )
     environment = os.environ.copy()
+    environment.update(
+        {
+            "DYLD_LIBRARY_PATH": "/host/library",
+            "DYLD_FRAMEWORK_PATH": "/host/framework",
+            "DYLD_FALLBACK_LIBRARY_PATH": "/host/fallback-library",
+            "DYLD_FALLBACK_FRAMEWORK_PATH": "/host/fallback-framework",
+        }
+    )
     environment["CAPTURE"] = str(capture)
 
     subprocess.run(
@@ -929,8 +1070,8 @@ def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) ->
         env=environment,
     )
     cli_lines = capture.read_text(encoding="utf-8").splitlines()
-    assert cli_lines[0] == str(app / "Contents/Frameworks")
-    assert cli_lines[1:] == [
+    assert cli_lines[:4] == ["unset"] * 4
+    assert cli_lines[4:] == [
         "-I",
         "-X",
         "utf8",
@@ -946,8 +1087,8 @@ def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) ->
         env=environment,
     )
     web_lines = capture.read_text(encoding="utf-8").splitlines()
-    assert web_lines[0] == str(app / "Contents/Frameworks")
-    assert web_lines[1:8] == [
+    assert web_lines[:4] == ["unset"] * 4
+    assert web_lines[4:11] == [
         "-I",
         "-X",
         "utf8",
@@ -956,7 +1097,7 @@ def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) ->
         "web",
         "--host",
     ]
-    assert web_lines[8:] == ["127.0.0.1", "--check", "--no-open"]
+    assert web_lines[11:] == ["127.0.0.1", "--check", "--no-open"]
 
     rejected = subprocess.run(
         [str(app / WEB_LAUNCHER_PATH), "--host=0.0.0.0"],
@@ -1173,14 +1314,21 @@ def test_documentation_keeps_phase13a_unverified_and_phase13b_separate() -> None
     root = _repository_root()
     docs = (root / "docs/macos-support.md").read_text(encoding="utf-8")
     matrix = json.loads((root / "docs/macos-support-matrix.json").read_text(encoding="utf-8"))
+    compact_docs = re.sub(r"\s+", " ", docs)
 
     assert "does **not** currently claim macOS support" in docs
-    assert "No run of that workflow exists for this implementation" in docs
+    assert "7036ea340734d284b9b406b43dbb9547ba6e28186fe16aee4433a5e4ff0c6e78" in docs
+    assert "invalidates the archive for all uses" in docs
     assert "hosted-package" in docs
-    assert "cannot establish clean-system" in docs
+    assert "cannot establish clean-system" in compact_docs
     assert matrix["public_support_status"] == "unverified"
     package = matrix["phase13a_package_infrastructure"]
-    assert package["workflow_run_status"] == "not-run"
+    assert package["invalidated_candidates"][0]["usable_candidate"] is False
+    assert package["dynamic_library_closure"]["host_filesystem_resolution_allowed"] is False
+    assert package["dynamic_library_closure"]["native_loaded_image_inventory_required"] is True
+    assert package["workflow_run_status"] == (
+        "run-31670153746-passed-hosted-but-candidate-invalidated"
+    )
     assert package["signed"] is False
     assert package["notarized"] is False
     assert package["gatekeeper_evidence"] is False
@@ -1199,6 +1347,366 @@ def test_builder_contract_thins_and_unsigns_every_macho() -> None:
     assert '["/usr/bin/codesign", "--remove-signature", str(path)]' in source
     assert "embedded Mach-O is not arm64-only" in source
     assert "above app target" in source
-    assert "DYLD_FRAMEWORK_PATH" in builder.CLI_LAUNCHER
-    assert "DYLD_FRAMEWORK_PATH" in builder.WEB_LAUNCHER
-    assert VERIFICATION_SCHEMA_VERSION == "topoforge-macos-app-verification-v1"
+    assert "export DYLD_FRAMEWORK_PATH" not in builder.CLI_LAUNCHER
+    assert "export DYLD_FRAMEWORK_PATH" not in builder.WEB_LAUNCHER
+    assert "DYLD_FALLBACK_FRAMEWORK_PATH" in builder.CLI_LAUNCHER
+    assert "DYLD_FALLBACK_FRAMEWORK_PATH" in builder.WEB_LAUNCHER
+    assert VERIFICATION_SCHEMA_VERSION == "topoforge-macos-app-verification-v2"
+
+
+def _cpython_macho_payloads_with_absolute_dependencies() -> dict[str, bytes]:
+    framework = "Contents/Frameworks/Python.framework/Versions/3.12"
+    installed = "/Library/Frameworks/Python.framework/Versions/3.12"
+    library = f"{framework}/lib"
+    installed_library = f"{installed}/lib"
+    dynamic = f"{library}/python3.12/lib-dynload"
+    installed_names = {
+        name: f"{installed_library}/{name}"
+        for name in (
+            "libcrypto.3.dylib",
+            "libform.6.dylib",
+            "libmenu.6.dylib",
+            "libncurses.6.dylib",
+            "libpanel.6.dylib",
+            "libssl.3.dylib",
+            "libtcl8.6.dylib",
+            "libtk8.6.dylib",
+        )
+    }
+    framework_binary = f"{framework}/Python"
+    installed_framework_binary = f"{installed}/Python"
+    payloads = {
+        framework_binary: _thin_macho(
+            file_type=6,
+            dylib_id=installed_framework_binary,
+        ),
+        PYTHON_PATH: _thin_macho(
+            dependencies=((0x0C, installed_framework_binary),),
+        ),
+        f"{framework}/Resources/Python.app/Contents/MacOS/Python": _thin_macho(
+            dependencies=((0x0C, installed_framework_binary),),
+        ),
+    }
+    for name in installed_names:
+        dependencies: tuple[tuple[int, str], ...] = ()
+        if name in {
+            "libform.6.dylib",
+            "libmenu.6.dylib",
+            "libpanel.6.dylib",
+        }:
+            dependencies = ((0x0C, installed_names["libncurses.6.dylib"]),)
+        elif name == "libssl.3.dylib":
+            dependencies = ((0x0C, installed_names["libcrypto.3.dylib"]),)
+        payloads[f"{library}/{name}"] = _thin_macho(
+            file_type=6,
+            dylib_id=installed_names[name],
+            dependencies=dependencies,
+        )
+    payloads.update(
+        {
+            f"{dynamic}/_hashlib.cpython-312-darwin.so": _thin_macho(
+                file_type=8,
+                dependencies=((0x0C, installed_names["libcrypto.3.dylib"]),),
+            ),
+            f"{dynamic}/_ssl.cpython-312-darwin.so": _thin_macho(
+                file_type=8,
+                dependencies=(
+                    (0x0C, installed_names["libssl.3.dylib"]),
+                    (0x0C, installed_names["libcrypto.3.dylib"]),
+                ),
+                rpaths=("/Users/runner/work/python-build/lib", "@loader_path/../.."),
+            ),
+            f"{dynamic}/_curses.cpython-312-darwin.so": _thin_macho(
+                file_type=8,
+                dependencies=((0x0C, installed_names["libncurses.6.dylib"]),),
+            ),
+            f"{dynamic}/_curses_panel.cpython-312-darwin.so": _thin_macho(
+                file_type=8,
+                dependencies=(
+                    (0x0C, installed_names["libncurses.6.dylib"]),
+                    (0x0C, installed_names["libpanel.6.dylib"]),
+                ),
+            ),
+            f"{dynamic}/_tkinter.cpython-312-darwin.so": _thin_macho(
+                file_type=8,
+                dependencies=(
+                    (0x0C, installed_names["libtcl8.6.dylib"]),
+                    (0x0C, installed_names["libtk8.6.dylib"]),
+                ),
+            ),
+        }
+    )
+    return payloads
+
+
+def test_macho_rewrite_covers_all_observed_cpython_absolute_edges() -> None:
+    payloads = _cpython_macho_payloads_with_absolute_dependencies()
+
+    plans = macho_rewrite_plans(
+        payloads,
+        executable_path=PYTHON_PATH,
+        absolute_rewrites={
+            PYTHON_FRAMEWORK_INSTALL_PREFIX: PYTHON_FRAMEWORK_BUNDLE_PREFIX,
+        },
+    )
+
+    changes = [change for plan in plans for change in plan["changes"]]
+    assert len(changes) == 14
+    assert all(change["old"].startswith(PYTHON_FRAMEWORK_INSTALL_PREFIX) for change in changes)
+    assert all(change["new"].startswith("@loader_path/") for change in changes)
+    assert {Path(change["old"]).name for change in changes} == {
+        "Python",
+        "libcrypto.3.dylib",
+        "libncurses.6.dylib",
+        "libpanel.6.dylib",
+        "libssl.3.dylib",
+        "libtcl8.6.dylib",
+        "libtk8.6.dylib",
+    }
+    ssl_plan = next(plan for plan in plans if plan["path"].endswith("/_ssl.cpython-312-darwin.so"))
+    assert ssl_plan["delete_rpaths"] == [
+        "/Users/runner/work/python-build/lib",
+        "@loader_path/../..",
+    ]
+    dylib_plans = [plan for plan in plans if plan["dylib_id"] is not None]
+    assert dylib_plans
+    assert all(
+        plan["dylib_id"] == f"@loader_path/{Path(plan['path']).name}" for plan in dylib_plans
+    )
+
+
+def test_macho_closure_resolves_loader_executable_rpath_and_all_load_kinds() -> None:
+    executable = "Contents/MacOS/TopoForge"
+    library = "Contents/Frameworks/libfixture.dylib"
+    plugin = "Contents/PlugIns/fixture.so"
+    payloads = {
+        executable: _thin_macho(),
+        library: _thin_macho(file_type=6, dylib_id="@loader_path/libfixture.dylib"),
+        plugin: _thin_macho(
+            file_type=8,
+            dependencies=(
+                (0x0C, "@rpath/libfixture.dylib"),
+                (0x80000018, "@loader_path/../Frameworks/libfixture.dylib"),
+                (0x8000001F, "@executable_path/../Frameworks/libfixture.dylib"),
+                (0x20, "/usr/lib/libobjc.A.dylib"),
+                (
+                    0x80000023,
+                    "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+                ),
+            ),
+            rpaths=("@loader_path/../Frameworks",),
+        ),
+    }
+
+    records = macho_closure_records(payloads, executable_path=executable)
+    plugin_record = next(record for record in records if record["path"] == plugin)
+
+    assert [item["command"] for item in plugin_record["dependencies"]] == [
+        "LC_LOAD_DYLIB",
+        "LC_LOAD_WEAK_DYLIB",
+        "LC_REEXPORT_DYLIB",
+        "LC_LAZY_LOAD_DYLIB",
+        "LC_LOAD_UPWARD_DYLIB",
+    ]
+    assert [item["scope"] for item in plugin_record["dependencies"]] == [
+        "app-bundle",
+        "app-bundle",
+        "app-bundle",
+        "apple-system",
+        "apple-system",
+    ]
+    assert plugin_record["dependencies"][0]["resolved_path"] == library
+    assert plugin_record["dependencies"][3]["resolved_path"] == "/usr/lib/libobjc.A.dylib"
+    assert plugin_record["dependencies"][4]["resolved_path"].startswith("/System/Library/")
+    assert macho_dynamic_slices_bytes(payloads[plugin], label=plugin)[0]["rpaths"] == [
+        "@loader_path/../Frameworks"
+    ]
+
+
+def test_macho_rewrite_makes_apple_system_rpath_load_independent_of_rpath() -> None:
+    executable = "Contents/MacOS/TopoForge"
+    plugin = "Contents/PlugIns/fixture.so"
+    payloads = {
+        executable: _thin_macho(),
+        plugin: _thin_macho(
+            file_type=8,
+            dependencies=((0x0C, "@rpath/libSystem.B.dylib"),),
+            rpaths=("/usr/lib",),
+        ),
+    }
+
+    plans = macho_rewrite_plans(
+        payloads,
+        executable_path=executable,
+        absolute_rewrites={},
+    )
+    plugin_plan = next(plan for plan in plans if plan["path"] == plugin)
+
+    assert plugin_plan["changes"] == [
+        {"old": "@rpath/libSystem.B.dylib", "new": "/usr/lib/libSystem.B.dylib"}
+    ]
+    assert plugin_plan["delete_rpaths"] == ["/usr/lib"]
+
+
+@pytest.mark.parametrize(
+    "external",
+    [
+        "/Library/Frameworks/Python.framework/Versions/3.12/lib/libssl.3.dylib",
+        "/usr/local/lib/libssl.3.dylib",
+        "/opt/homebrew/lib/libssl.3.dylib",
+        "/Users/runner/build/libssl.3.dylib",
+        "/var/folders/build/libssl.3.dylib",
+    ],
+)
+def test_final_macho_closure_rejects_every_non_system_absolute_path(external: str) -> None:
+    plugin = "Contents/PlugIns/fixture.so"
+    with pytest.raises(ValueError, match="non-system absolute path"):
+        macho_closure_records(
+            {
+                "Contents/MacOS/TopoForge": _thin_macho(),
+                plugin: _thin_macho(file_type=8, dependencies=((0x0C, external),)),
+            },
+            executable_path="Contents/MacOS/TopoForge",
+        )
+
+
+@pytest.mark.parametrize(
+    ("dependency", "rpaths", "message"),
+    [
+        ("@rpath/missing.dylib", ("@loader_path/../Frameworks",), "unresolved"),
+        ("/usr/lib/libSystem.B.dylib", ("@loader_path/../../../../escape",), "escapes"),
+        ("/usr/lib/libSystem.B.dylib", ("/opt/homebrew/lib",), "external build path"),
+    ],
+)
+def test_macho_closure_rejects_unresolved_escaping_and_host_rpaths(
+    dependency: str,
+    rpaths: tuple[str, ...],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        macho_closure_records(
+            {
+                "Contents/MacOS/TopoForge": _thin_macho(),
+                "Contents/PlugIns/fixture.so": _thin_macho(
+                    file_type=8,
+                    dependencies=((0x0C, dependency),),
+                    rpaths=rpaths,
+                ),
+                "Contents/Frameworks/sentinel": _thin_macho(file_type=8),
+            },
+            executable_path="Contents/MacOS/TopoForge",
+        )
+
+
+def _archive_with_extra_macho(
+    source: Path,
+    destination: Path,
+    relative: str,
+    payload: bytes,
+) -> None:
+    with zipfile.ZipFile(source) as archive:
+        members = {
+            info.filename: {"payload": archive.read(info), "external_attr": info.external_attr}
+            for info in archive.infolist()
+        }
+        timestamp = archive.infolist()[0].date_time
+    manifest_name = f"{APP_ROOT}/{MANIFEST_PATH}"
+    manifest = json.loads(members[manifest_name]["payload"])
+    record = {
+        "path": relative,
+        "kind": "file",
+        "mode": 0o755,
+        "bytes": len(payload),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+    }
+    manifest["contents"]["files"].append(record)
+    manifest["contents"]["files"].sort(key=lambda item: item["path"])
+    manifest["contents"]["file_count"] = len(manifest["contents"]["files"])
+    manifest["contents"]["payload_sha256"] = payload_sha256(manifest["contents"]["files"])
+    manifest["python_runtime"]["macho_file_count"] += 1
+    members[manifest_name]["payload"] = canonical_json_bytes(manifest)
+    members[f"{APP_ROOT}/{relative}"] = {
+        "payload": payload,
+        "external_attr": (stat.S_IFREG | 0o755) << 16,
+    }
+    with zipfile.ZipFile(
+        destination,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=9,
+        strict_timestamps=True,
+    ) as archive:
+        for name in sorted(members):
+            info = zipfile.ZipInfo(name, date_time=timestamp)
+            info.create_system = 3
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.flag_bits |= 0x800
+            info.external_attr = members[name]["external_attr"]
+            archive.writestr(info, members[name]["payload"])
+
+
+def test_archive_rejects_real_ssl_framework_escape_even_if_host_path_exists(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _fixture_archive(tmp_path / "source")
+    mutated = tmp_path / "external-ssl.zip"
+    relative = (
+        "Contents/Frameworks/Python.framework/Versions/3.12/lib/python3.12/"
+        "lib-dynload/_ssl.cpython-312-darwin.so"
+    )
+    payload = _thin_macho(
+        file_type=8,
+        dependencies=(
+            (
+                0x0C,
+                "/Library/Frameworks/Python.framework/Versions/3.12/lib/libssl.3.dylib",
+            ),
+        ),
+    )
+    _archive_with_extra_macho(source, mutated, relative, payload)
+    monkeypatch.setattr(Path, "exists", lambda _path: True)
+
+    with pytest.raises(ValueError, match="non-system absolute path"):
+        inspect_archive(mutated, config=_config())
+
+
+def test_native_loaded_image_inventory_never_accepts_host_frameworks(tmp_path: Path) -> None:
+    app = tmp_path / "candidate" / APP_ROOT
+    app_image = app / "Contents/Frameworks/Python.framework/Versions/3.12/lib/libssl.3.dylib"
+    inventory = app_verifier._loaded_image_inventory(
+        [
+            str(app_image),
+            "/usr/lib/libSystem.B.dylib",
+            "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+            "/Library/Frameworks/Python.framework/Versions/3.12/lib/libssl.3.dylib",
+        ],
+        app,
+    )
+
+    assert inventory["app"] == [str(app_image)]
+    assert len(inventory["apple_system"]) == 2
+    assert inventory["external"] == [
+        "/Library/Frameworks/Python.framework/Versions/3.12/lib/libssl.3.dylib"
+    ]
+    for module in ("ssl", "_ssl", "hashlib", "_hashlib", "http.client", "urllib.request"):
+        assert f'"{module}"' in app_verifier.DEPENDENCY_PROBE
+    assert "_dyld_get_image_name" in app_verifier.DEPENDENCY_PROBE
+
+
+def test_malformed_macho_magic_is_not_skipped_by_bundle_discovery(tmp_path: Path) -> None:
+    malformed = tmp_path / "malformed.so"
+    malformed.write_bytes(b"\xcf\xfa\xed\xfe")
+
+    assert builder._is_macho(malformed)
+    with pytest.raises(ValueError, match="truncated"):
+        macho_dynamic_slices_bytes(malformed.read_bytes(), label=malformed.name)
+
+
+def test_final_closure_records_exact_apple_system_paths() -> None:
+    records = macho_closure_records(
+        {PYTHON_PATH: _thin_macho(dependencies=((0x0C, "/usr/lib/libSystem.B.dylib"),))},
+        executable_path=PYTHON_PATH,
+    )
+
+    assert records[0]["dependencies"][0]["resolved_path"] == "/usr/lib/libSystem.B.dylib"

@@ -73,7 +73,7 @@
       }
     },
     "embedded_application_runtime": {
-      "status": "pinned-builder-implemented-native-run-required",
+      "status": "prior-hosted-candidate-invalidated-macho-closure-gated",
       "release_gate": true,
       "provider": "Python Software Foundation",
       "version": "3.12.10",
@@ -81,7 +81,7 @@
       "minimum_macos": "11.0",
       "application_deployment_target": "15.0",
       "runtime_sha256": "8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4",
-      "claim_boundary": "The deterministic unsigned app builder and offline contracts exist locally. No native package workflow or clean-system run has been executed for this implementation."
+      "claim_boundary": "The first hosted package run completed, but its archive was invalidated by a real clean-user _ssl failure caused by an external /Library/Frameworks dependency. A replacement must pass host-independent static closure and native loaded-image gates; clean-system evidence remains open."
     }
   },
   "dependencies": {
@@ -130,7 +130,7 @@
     "runner_labels_are_public_support_contract": false,
     "nested_virtualization_available": false,
     "limitation": "Hosted CI can establish native arm64 core behavior but cannot replace clean-system, quarantine, Gatekeeper, signing, notarization, or first-launch evidence.",
-    "packaged_app_workflow_status": "local-implementation-not-run"
+    "packaged_app_workflow_status": "run-31670153746-passed-hosted-but-candidate-invalidated"
   },
   "hosted_ci_evidence": {
     "status": "historical-hosted-core-pass-rerun-required",
@@ -236,8 +236,8 @@
   ],
   "phase13a_package_infrastructure": {
     "implemented_at": "2026-08-13",
-    "status": "local-implementation-unverified",
-    "branch": "codex/phase13-macos-package",
+    "status": "prior-hosted-candidate-invalidated-replacement-gated",
+    "branch": "main",
     "candidate_role": "phase13a-macos-arm64-unsigned-candidate",
     "candidate_targets": [
       "macos-15-arm64",
@@ -246,7 +246,35 @@
     "builder_host_requirement": "native stable macOS 15 or 26 arm64 without Rosetta",
     "archive_determinism": "two builds of one source commit must be byte-identical",
     "hosted_evidence_scope": "hosted-package",
-    "workflow_run_status": "not-run",
+    "workflow_run_status": "run-31670153746-passed-hosted-but-candidate-invalidated",
+    "invalidated_candidates": [
+      {
+        "source_commit": "ce1b5dabc9f5a69dcf2c64536076fc88827112fb",
+        "workflow_run_id": 31670153746,
+        "workflow_run_url": "https://github.com/yidaaaaa/TopoForge/actions/runs/31670153746",
+        "archive_sha256": "7036ea340734d284b9b406b43dbb9547ba6e28186fe16aee4433a5e4ff0c6e78",
+        "app_payload_sha256": "580fd9c2911117958ca15658814db33769fb8577d329b1c413f23782bdb6fa13",
+        "invalidation": "A real user launch without /Library/Frameworks/Python.framework failed because embedded _ssl referenced the external framework libssl.3.dylib.",
+        "usable_candidate": false
+      }
+    ],
+    "dynamic_library_closure": {
+      "allowed_external_prefixes": [
+        "/System/Library/",
+        "/usr/lib/"
+      ],
+      "forbidden_external_prefix_examples": [
+        "/Library/",
+        "/usr/local/",
+        "/opt/",
+        "/Users/",
+        "/var/folders/"
+      ],
+      "manifest_records_every_macho_dependency": true,
+      "host_filesystem_resolution_allowed": false,
+      "native_loaded_image_inventory_required": true,
+      "dyld_fallback_environment_allowed": false
+    },
     "clean_system_evidence": false,
     "signed": false,
     "notarized": false,

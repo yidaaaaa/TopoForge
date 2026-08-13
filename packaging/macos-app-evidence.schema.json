@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://topoforge.local/schemas/macos-app-evidence-v1.json",
+  "$id": "https://topoforge.local/schemas/macos-app-evidence-v2.json",
   "title": "TopoForge Phase 13A unsigned macOS arm64 app evidence",
   "description": "A source-, runtime-, lock-, payload-, archive-, OS-, and architecture-bound packaged-app acceptance report. Hosted-package scope is never clean-system, signing, notarization, quarantine/Gatekeeper, public-support, or Bambu Studio evidence.",
   "type": "object",
@@ -29,7 +29,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "topoforge-macos-system-acceptance-v1"
+      "const": "topoforge-macos-system-acceptance-v2"
     },
     "package_role": {
       "const": "phase13a-macos-arm64-unsigned-candidate"
@@ -153,7 +153,7 @@
       ],
       "properties": {
         "schema_version": {
-          "const": "topoforge-macos-app-verification-v1"
+          "const": "topoforge-macos-app-verification-v2"
         },
         "archive": {
           "$ref": "#/properties/archive"
@@ -170,6 +170,7 @@
             "embedded_architecture",
             "macho_architectures",
             "macho_file_count",
+            "macho_closure",
             "macho_files"
           ],
           "properties": {
@@ -198,9 +199,13 @@
               "type": "integer",
               "minimum": 1
             },
+            "macho_closure": {
+              "$ref": "#/$defs/machoClosure"
+            },
             "macho_files": {
               "type": "array",
-              "minItems": 1
+              "minItems": 1,
+              "items": {"$ref": "#/$defs/machoFile"}
             }
           }
         },
@@ -233,6 +238,7 @@
               "required": [
                 "builder",
                 "shared",
+                "macho",
                 "archive",
                 "system"
               ],
@@ -241,6 +247,9 @@
                   "$ref": "#/$defs/sha256"
                 },
                 "shared": {
+                  "$ref": "#/$defs/sha256"
+                },
+                "macho": {
                   "$ref": "#/$defs/sha256"
                 },
                 "archive": {
@@ -302,6 +311,13 @@
             "file_count",
             "architecture",
             "minimum_versions",
+            "dependency_count",
+            "bundled_dependency_count",
+            "apple_system_dependency_count",
+            "dylib_id_count",
+            "rpath_count",
+            "closure_sha256",
+            "allowed_external_prefixes",
             "required_checks_passed"
           ],
           "properties": {
@@ -315,13 +331,28 @@
             "minimum_versions": {
               "type": "array",
               "minItems": 1,
-              "items": {
-                "type": "string"
-              }
+              "items": {"type": "string"}
             },
-            "required_checks_passed": {
-              "const": true
-            }
+            "dependency_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "bundled_dependency_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "apple_system_dependency_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "dylib_id_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "rpath_count": {"const": 0},
+            "closure_sha256": {"$ref": "#/$defs/sha256"},
+            "allowed_external_prefixes": {"$ref": "#/$defs/appleSystemPrefixes"},
+            "required_checks_passed": {"const": true}
           }
         },
         "static_checks_passed": {
@@ -333,18 +364,33 @@
           "required": [
             "status",
             "native_arm64",
+            "loaded_non_system_macho",
+            "loaded_non_system_macho_count",
+            "apple_system_image_count",
+            "host_external_macho_count",
+            "tls_probe",
             "required_checks_passed"
           ],
           "properties": {
-            "status": {
-              "const": "passed"
+            "status": {"const": "passed"},
+            "native_arm64": {"const": true},
+            "loaded_non_system_macho": {
+              "type": "array",
+              "minItems": 4,
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
             },
-            "native_arm64": {
-              "const": true
+            "loaded_non_system_macho_count": {
+              "type": "integer",
+              "minimum": 4
             },
-            "required_checks_passed": {
-              "const": true
-            }
+            "apple_system_image_count": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "host_external_macho_count": {"const": 0},
+            "tls_probe": {"$ref": "#/$defs/tlsProbe"},
+            "required_checks_passed": {"const": true}
           }
         },
         "required_checks_passed": {
@@ -571,6 +617,118 @@
     "commit": {
       "type": "string",
       "pattern": "^[0-9a-f]{40}$"
+    },
+    "appleSystemPrefixes": {
+      "type": "array",
+      "prefixItems": [
+        {"const": "/System/Library/"},
+        {"const": "/usr/lib/"}
+      ],
+      "items": false
+    },
+    "machoDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "install_name", "scope", "resolved_path"],
+      "properties": {
+        "command": {
+          "enum": [
+            "LC_LOAD_DYLIB",
+            "LC_LOAD_WEAK_DYLIB",
+            "LC_REEXPORT_DYLIB",
+            "LC_LAZY_LOAD_DYLIB",
+            "LC_LOAD_UPWARD_DYLIB"
+          ]
+        },
+        "install_name": {"type": "string", "minLength": 1},
+        "scope": {"enum": ["app-bundle", "apple-system"]},
+        "resolved_path": {
+          "oneOf": [
+            {"type": "string", "minLength": 1},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "machoFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "architecture",
+        "minimum_macos",
+        "bytes",
+        "sha256",
+        "file_type",
+        "dylib_id",
+        "rpaths",
+        "dependencies"
+      ],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "architecture": {"const": "arm64"},
+        "minimum_macos": {"type": "string", "minLength": 1},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "file_type": {"type": "integer", "minimum": 1},
+        "dylib_id": {
+          "oneOf": [
+            {"type": "string", "pattern": "^@loader_path/"},
+            {"type": "null"}
+          ]
+        },
+        "rpaths": {"type": "array", "maxItems": 0},
+        "dependencies": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/machoDependency"}
+        }
+      }
+    },
+    "machoClosure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dependency_count",
+        "bundled_dependency_count",
+        "apple_system_dependency_count",
+        "dylib_id_count",
+        "rpath_count",
+        "closure_sha256",
+        "allowed_external_prefixes",
+        "required_checks_passed"
+      ],
+      "properties": {
+        "dependency_count": {"type": "integer", "minimum": 0},
+        "bundled_dependency_count": {"type": "integer", "minimum": 0},
+        "apple_system_dependency_count": {"type": "integer", "minimum": 0},
+        "dylib_id_count": {"type": "integer", "minimum": 0},
+        "rpath_count": {"const": 0},
+        "closure_sha256": {"$ref": "#/$defs/sha256"},
+        "allowed_external_prefixes": {"$ref": "#/$defs/appleSystemPrefixes"},
+        "required_checks_passed": {"const": true}
+      }
+    },
+    "tlsProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "openssl_version",
+        "sha256",
+        "sha256_constructor",
+        "ssl_context_type",
+        "https_connection_type",
+        "https_handler_type",
+        "required_checks_passed"
+      ],
+      "properties": {
+        "openssl_version": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "sha256_constructor": {"$ref": "#/$defs/sha256"},
+        "ssl_context_type": {"const": "SSLContext"},
+        "https_connection_type": {"const": "HTTPSConnection"},
+        "https_handler_type": {"const": "HTTPSHandler"},
+        "required_checks_passed": {"const": true}
+      }
     }
   }
 }

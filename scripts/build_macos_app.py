@@ -71,11 +71,30 @@ else:
         write_reproducible_zip,
     )
 
+if __package__:
+    from scripts.macos_macho import (
+        PYTHON_FRAMEWORK_BUNDLE_PREFIX,
+        PYTHON_FRAMEWORK_INSTALL_PREFIX,
+        is_macho_bytes,
+        macho_closure_records,
+        macho_closure_summary,
+        macho_rewrite_plans,
+    )
+else:
+    from macos_macho import (  # type: ignore[import-not-found]
+        PYTHON_FRAMEWORK_BUNDLE_PREFIX,
+        PYTHON_FRAMEWORK_INSTALL_PREFIX,
+        is_macho_bytes,
+        macho_closure_records,
+        macho_closure_summary,
+        macho_rewrite_plans,
+    )
+
 CLI_LAUNCHER = """#!/bin/sh
 set -eu
 CONTENTS_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-unset PYTHONHOME PYTHONPATH PYTHONSTARTUP
-export DYLD_FRAMEWORK_PATH="$CONTENTS_DIR/Frameworks"
+unset PYTHONHOME PYTHONPATH PYTHONSTARTUP DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH
+unset DYLD_FALLBACK_LIBRARY_PATH DYLD_FALLBACK_FRAMEWORK_PATH
 export PYTHONUTF8=1
 export PYTHONNOUSERSITE=1
 exec "$CONTENTS_DIR/Frameworks/Python.framework/Versions/3.12/bin/python3.12" \
@@ -93,8 +112,8 @@ for argument in "$@"; do
   esac
 done
 CONTENTS_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
-unset PYTHONHOME PYTHONPATH PYTHONSTARTUP
-export DYLD_FRAMEWORK_PATH="$CONTENTS_DIR/Frameworks"
+unset PYTHONHOME PYTHONPATH PYTHONSTARTUP DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH
+unset DYLD_FALLBACK_LIBRARY_PATH DYLD_FALLBACK_FRAMEWORK_PATH
 export PYTHONUTF8=1
 export PYTHONNOUSERSITE=1
 exec "$CONTENTS_DIR/Frameworks/Python.framework/Versions/3.12/bin/python3.12" \
@@ -378,16 +397,7 @@ def _remove_source_only_runtime_entries(framework: Path, config: dict[str, Any])
 
 
 def _is_macho(path: Path) -> bool:
-    with path.open("rb") as handle:
-        magic = handle.read(4)
-    return magic in {
-        b"\xcf\xfa\xed\xfe",
-        b"\xfe\xed\xfa\xcf",
-        b"\xca\xfe\xba\xbe",
-        b"\xbe\xba\xfe\xca",
-        b"\xca\xfe\xba\xbf",
-        b"\xbf\xba\xfe\xca",
-    }
+    return is_macho_bytes(path.read_bytes())
 
 
 def _strip_signature(path: Path) -> None:
@@ -414,29 +424,83 @@ def _strip_signature(path: Path) -> None:
         raise RuntimeError(f"Mach-O file remains signed after normalization: {path}")
 
 
+def _apply_macho_rewrite(path: Path, plan: dict[str, Any]) -> None:
+    command = ["/usr/bin/install_name_tool"]
+    for change in plan["changes"]:
+        command.extend(["-change", change["old"], change["new"]])
+    if plan["dylib_id"] is not None:
+        command.extend(["-id", plan["dylib_id"]])
+    for rpath in dict.fromkeys(plan["delete_rpaths"]):
+        command.extend(["-delete_rpath", rpath])
+    if len(command) == 1:
+        return
+    command.append(str(path))
+    subprocess.run(command, check=True, capture_output=True, text=True)
+
+
 def _normalize_macho(root: Path, config: dict[str, Any]) -> list[dict[str, Any]]:
     target = config["target"]
-    records: list[dict[str, Any]] = []
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.is_symlink() or not _is_macho(path):
-            continue
+    paths = [
+        path
+        for path in sorted(root.rglob("*"))
+        if path.is_file() and not path.is_symlink() and _is_macho(path)
+    ]
+    if not paths:
+        raise ValueError("embedded app contains no Mach-O files")
+
+    for path in paths:
         slices = macho_slices(path)
         architectures = [item["architecture"] for item in slices]
         if "arm64" not in architectures:
             raise ValueError(f"Mach-O dependency has no arm64 slice: {path}")
-        if architectures != ["arm64"]:
-            temporary = path.with_name(f".{path.name}.arm64")
-            temporary.unlink(missing_ok=True)
-            mode = stat.S_IMODE(path.stat().st_mode)
-            subprocess.run(
-                ["/usr/bin/lipo", str(path), "-thin", "arm64", "-output", str(temporary)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            os.chmod(temporary, mode)
-            os.replace(temporary, path)
+        if architectures == ["arm64"]:
+            continue
+        temporary = path.with_name(f".{path.name}.arm64")
+        temporary.unlink(missing_ok=True)
+        mode = stat.S_IMODE(path.stat().st_mode)
+        subprocess.run(
+            ["/usr/bin/lipo", str(path), "-thin", "arm64", "-output", str(temporary)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        os.chmod(temporary, mode)
+        os.replace(temporary, path)
+
+    bundle_directories = {
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if not path.is_symlink() and path.is_dir()
+    }
+    payloads = {path.relative_to(root).as_posix(): path.read_bytes() for path in paths}
+    plans = macho_rewrite_plans(
+        payloads,
+        executable_path=PYTHON_PATH,
+        bundle_directories=bundle_directories,
+        absolute_rewrites={
+            PYTHON_FRAMEWORK_INSTALL_PREFIX: PYTHON_FRAMEWORK_BUNDLE_PREFIX,
+        },
+    )
+    for plan in plans:
+        path = root.joinpath(*PurePosixPath(plan["path"]).parts)
+        _apply_macho_rewrite(path, plan)
+
+    for path in paths:
         _strip_signature(path)
+
+    final_payloads = {path.relative_to(root).as_posix(): path.read_bytes() for path in paths}
+    closure_records = macho_closure_records(
+        final_payloads,
+        executable_path=PYTHON_PATH,
+        bundle_directories=bundle_directories,
+    )
+    closure_summary = macho_closure_summary(closure_records)
+    if closure_summary["rpath_count"] != 0:
+        raise ValueError("normalized embedded Mach-O files retain LC_RPATH commands")
+    closure_by_path = {record["path"]: record for record in closure_records}
+
+    records: list[dict[str, Any]] = []
+    for path in paths:
         final = macho_slices(path)
         if [item["architecture"] for item in final] != ["arm64"]:
             raise ValueError(f"embedded Mach-O is not arm64-only: {path}")
@@ -448,17 +512,17 @@ def _normalize_macho(root: Path, config: dict[str, Any]) -> list[dict[str, Any]]
                 f"embedded Mach-O requires macOS {minimum}, above app target "
                 f"{target['deployment_target']}: {path}"
             )
+        relative = path.relative_to(root).as_posix()
         records.append(
             {
-                "path": path.relative_to(root).as_posix(),
+                "path": relative,
                 "architecture": "arm64",
                 "minimum_macos": minimum,
                 "bytes": path.stat().st_size,
                 "sha256": sha256_file(path),
+                **closure_by_path[relative],
             }
         )
-    if not records:
-        raise ValueError("embedded app contains no Mach-O files")
     return records
 
 
@@ -690,6 +754,7 @@ def build_macos_app(
             config_file,
             Path(__file__).resolve(),
             repository / "scripts" / "macos_app.py",
+            repository / "scripts" / "macos_macho.py",
             repository / "scripts" / "verify_macos_app.py",
             repository / "scripts" / "verify_macos_system.py",
         ]
@@ -821,6 +886,7 @@ def build_macos_app(
             shutil.copyfile(source_path, provenance / source_path.name)
 
         macho = _normalize_macho(app, config)
+        macho_summary = macho_closure_summary(macho)
         primary = next(item for item in macho if item["path"] == PYTHON_PATH)
         if {
             "architecture": primary["architecture"],
@@ -834,6 +900,7 @@ def build_macos_app(
             for role, path in {
                 "builder": Path(__file__).resolve(),
                 "shared": repository / "scripts" / "macos_app.py",
+                "macho": repository / "scripts" / "macos_macho.py",
                 "archive": repository / "scripts" / "verify_macos_app.py",
                 "system": repository / "scripts" / "verify_macos_system.py",
             }.items()
@@ -861,6 +928,7 @@ def build_macos_app(
                 "primary_macho_minimum_macos": primary["minimum_macos"],
                 "macho_file_count": len(macho),
                 "macho_minimum_versions": sorted({item["minimum_macos"] for item in macho}),
+                "macho_closure": macho_summary,
                 "macho_files": macho,
             },
             "locked_dependencies": {
@@ -951,6 +1019,7 @@ def build_macos_app(
         "app_payload_sha256": verification["contents"]["payload_sha256"],
         "dependency_count": len(dependencies),
         "macho_file_count": len(macho),
+        "macho_closure": macho_summary,
         "verification": verification,
         "commands": commands,
         "unsigned": True,
