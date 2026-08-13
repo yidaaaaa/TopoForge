@@ -64,6 +64,7 @@ import http.client
 import importlib
 import importlib.metadata
 import json
+import os
 import pathlib
 import ssl
 import sys

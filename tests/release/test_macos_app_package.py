@@ -1062,6 +1062,7 @@ def test_native_probe_requires_real_verified_copernicus_https_and_packaged_ca() 
         "check_hostname",
         "Copernicus_DSM_COG_",
         "SSL_CERT_FILE",
+        "import os",
     ):
         assert fragment in app_verifier.DEPENDENCY_PROBE
     assert "_create_unverified_context" not in app_verifier.DEPENDENCY_PROBE
