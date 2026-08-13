@@ -1718,7 +1718,10 @@ def test_build_rejects_symlinked_source_manifest_before_execution(
         raise AssertionError("Bambu must not execute for a symlinked source manifest")
 
     monkeypatch.setattr(bambu_projects_module, "run_command", forbidden_runner)
-    with pytest.raises(RuntimeError, match="regular non-link file"):
+    with pytest.raises(
+        RuntimeError,
+        match=r"regular non-link file|symbolic link|reparse point",
+    ):
         generate_bambu_project_evidence(
             semantic_evidence.print_set,
             slice_set,
@@ -1791,36 +1794,24 @@ def test_source_manifest_swap_is_not_reopened_before_external_execution(
     shutil.copytree(semantic_evidence.slice_set, slice_set)
     manifest_path = slice_set / "tile-slice-manifest.json"
     detached_manifest = slice_set / "tile-slice-manifest.original.json"
-    parent_information = manifest_path.parent.stat()
-    real_open = bambu_projects_module.os.open
+    real_load = bambu_projects_module._load_canonical_model_snapshot
     swapped = False
     runner = _SemanticBambuRunner()
 
-    def racing_open(
-        path: Any,
-        flags: int,
-        mode: int = 0o777,
-        *,
-        dir_fd: int | None = None,
-    ) -> int:
+    def racing_load(path: Path, model: type[Any]) -> tuple[Any, Any]:
         nonlocal swapped
-        descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
-        if (
-            not swapped
-            and dir_fd is not None
-            and path == manifest_path.name
-            and (
-                bambu_projects_module.os.fstat(dir_fd).st_dev,
-                bambu_projects_module.os.fstat(dir_fd).st_ino,
-            )
-            == (parent_information.st_dev, parent_information.st_ino)
-        ):
+        result = real_load(path, model)
+        if not swapped and path == manifest_path:
             swapped = True
             manifest_path.rename(detached_manifest)
             manifest_path.write_text("attacker replacement", encoding="utf-8")
-        return descriptor
+        return result
 
-    monkeypatch.setattr(bambu_projects_module.os, "open", racing_open)
+    monkeypatch.setattr(
+        bambu_projects_module,
+        "_load_canonical_model_snapshot",
+        racing_load,
+    )
     monkeypatch.setattr(bambu_projects_module, "run_command", runner)
 
     with pytest.raises(RuntimeError, match="JSON is unreadable"):
