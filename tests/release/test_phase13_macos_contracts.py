@@ -15,13 +15,20 @@ def test_frozen_macos_matrix_matches_repository_identities() -> None:
     root = Path(__file__).parents[2]
     report = verify_macos_support_matrix(root)
 
-    assert report["required_checks_passed"] is True
+    assert report["required_checks_passed"] is True, report["problems"]
     assert report["public_support_status"] == "unverified"
     assert report["target_ids"] == ["macos-15-arm64", "macos-26-arm64"]
     assert report["hosted_ci_status"] == "historical-hosted-core-pass-rerun-required"
     assert report["hosted_ci_run_id"] == 31419016599
     assert report["hosted_ci_head_sha"] == ("5df03c40536363d63678f0b23b69b228ee008e6a")
     assert report["hosted_ci_rerun_required"] is True
+
+
+def test_frozen_macos_matrix_inputs_have_checkout_stable_bytes() -> None:
+    root = Path(__file__).parents[2]
+    attributes = (root / ".gitattributes").read_text(encoding="utf-8").splitlines()
+
+    assert "uv.lock text eol=lf" in attributes
 
 
 @pytest.mark.parametrize(

@@ -94,6 +94,32 @@ def _release_bash() -> str:
     pytest.skip("release workflow shell regression requires a working Bash executable")
 
 
+def _windows_search_path_for_bash(search_path: str) -> str:
+    entries: list[str] = []
+    for raw_entry in search_path.split(";"):
+        entry = raw_entry.strip('"').replace("\\", "/")
+        if len(entry) >= 2 and entry[0].isalpha() and entry[1] == ":":
+            entry = f"/{entry[0].lower()}{entry[2:]}"
+        entries.append(entry)
+    return ":".join(entries)
+
+
+def _release_bash_environment(environment: dict[str, str]) -> dict[str, str]:
+    if os.name != "nt" or "PATH" not in environment:
+        return environment
+    translated = dict(environment)
+    translated["PATH"] = _windows_search_path_for_bash(environment["PATH"])
+    return translated
+
+
+def test_windows_search_path_is_explicitly_translated_for_git_bash() -> None:
+    search_path = r"C:\Fixture Tools;D:\hostedtoolcache\Python;\\server\share\bin"
+
+    assert _windows_search_path_for_bash(search_path) == (
+        "/c/Fixture Tools:/d/hostedtoolcache/Python://server/share/bin"
+    )
+
+
 def _json_bytes(value: dict[str, Any]) -> bytes:
     return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
@@ -1967,7 +1993,7 @@ def test_main_release_selection_skips_tags_without_phase12_contract(tmp_path: Pa
     completed = subprocess.run(
         [_release_bash(), "-c", _release_target_step_script()],
         cwd=tmp_path,
-        env=environment,
+        env=_release_bash_environment(environment),
         check=False,
         capture_output=True,
         text=True,
@@ -1995,7 +2021,7 @@ def test_explicit_unsupported_release_tag_fails_before_checkout(tmp_path: Path) 
     completed = subprocess.run(
         [_release_bash(), "-c", _release_target_step_script()],
         cwd=tmp_path,
-        env=environment,
+        env=_release_bash_environment(environment),
         check=False,
         capture_output=True,
         text=True,
@@ -2047,7 +2073,7 @@ def test_explicit_tag_rejects_each_missing_release_contract_capability(
     completed = subprocess.run(
         [_release_bash(), "-c", _release_target_step_script()],
         cwd=tmp_path,
-        env=environment,
+        env=_release_bash_environment(environment),
         check=False,
         capture_output=True,
         text=True,
@@ -2459,7 +2485,7 @@ def test_release_staging_rejects_a_wheel_changed_after_archive_verification(
     completed = subprocess.run(
         [_release_bash(), "-c", script],
         cwd=tmp_path,
-        env=environment,
+        env=_release_bash_environment(environment),
         check=False,
         capture_output=True,
         text=True,
@@ -2515,7 +2541,7 @@ def test_windows_portable_staging_rejects_changed_archive(
     completed = subprocess.run(
         [_release_bash(), "-c", script],
         cwd=tmp_path,
-        env=environment,
+        env=_release_bash_environment(environment),
         check=False,
         capture_output=True,
         text=True,
@@ -2566,7 +2592,7 @@ def _stage_release_assets_for_publish(tmp_path: Path) -> dict[str, str]:
     completed = subprocess.run(
         [_release_bash(), "-c", script],
         cwd=tmp_path,
-        env=environment,
+        env=_release_bash_environment(environment),
         check=False,
         capture_output=True,
         text=True,
@@ -2690,7 +2716,7 @@ def test_release_publish_rejects_stage_to_publish_tamper_or_injection(
     completed = subprocess.run(
         [_release_bash(), "-c", _publish_step_script()],
         cwd=tmp_path,
-        env=environment,
+        env=_release_bash_environment(environment),
         check=False,
         capture_output=True,
         text=True,
@@ -2716,7 +2742,7 @@ def test_release_publish_invokes_gh_with_exact_verified_assets(
     completed = subprocess.run(
         [_release_bash(), "-c", _publish_step_script()],
         cwd=tmp_path,
-        env=environment,
+        env=_release_bash_environment(environment),
         check=False,
         capture_output=True,
         text=True,
@@ -2746,7 +2772,7 @@ def test_release_publish_rejects_tag_moved_after_prepare(tmp_path: Path) -> None
     completed = subprocess.run(
         [_release_bash(), "-c", _publish_step_script()],
         cwd=tmp_path,
-        env=environment,
+        env=_release_bash_environment(environment),
         check=False,
         capture_output=True,
         text=True,
@@ -2841,7 +2867,7 @@ def test_release_workflow_rejects_same_name_wrong_rest_identity(
     }
     passing = subprocess.run(
         [_release_bash(), "-c", script],
-        env=environment,
+        env=_release_bash_environment(environment),
         check=False,
         capture_output=True,
         text=True,
@@ -2855,7 +2881,7 @@ def test_release_workflow_rejects_same_name_wrong_rest_identity(
         environment["MOCK_ARTIFACT_JSON"] = json.dumps(artifact_payload)
     completed = subprocess.run(
         [_release_bash(), "-c", script],
-        env=environment,
+        env=_release_bash_environment(environment),
         check=False,
         capture_output=True,
         text=True,
@@ -2956,7 +2982,7 @@ def test_release_workflow_rejects_forged_previous_release_identity(
     }
     passing = subprocess.run(
         [_release_bash(), "-c", script],
-        env=environment,
+        env=_release_bash_environment(environment),
         check=False,
         capture_output=True,
         text=True,
@@ -2971,7 +2997,7 @@ def test_release_workflow_rejects_forged_previous_release_identity(
     environment["MOCK_PREVIOUS_RELEASE_JSON"] = json.dumps(release_payload)
     completed = subprocess.run(
         [_release_bash(), "-c", script],
-        env=environment,
+        env=_release_bash_environment(environment),
         check=False,
         capture_output=True,
         text=True,
