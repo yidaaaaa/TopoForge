@@ -387,6 +387,7 @@ def test_packaged_web_assets_are_checkout_byte_exact() -> None:
     root = Path(__file__).parents[2]
     attributes = (root / ".gitattributes").read_text(encoding="utf-8").splitlines()
 
+    assert "web/index.html text eol=lf" in attributes
     assert "src/topoforge/web/static/** -text" in attributes
 
 

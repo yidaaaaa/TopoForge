@@ -3,6 +3,8 @@ artifacts/patches/*.patch -whitespace
 uv.lock text eol=lf
 # Canonical rollback scripts are hash-bound release evidence.
 scripts/rollback-topoforge-*.sh text eol=lf
+# Vite preserves the source HTML newline style in the packaged index.
+web/index.html text eol=lf
 # The Web manifest binds generated asset bytes; checkout must never translate them.
 src/topoforge/web/static/** -text
 src/topoforge/web/static/assets/*.css -whitespace
