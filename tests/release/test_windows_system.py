@@ -102,7 +102,8 @@ def test_windows_server_command_wraps_candidate_launcher_in_kill_on_close_job(
     workspace = tmp_path / "workspace"
     inputs = tmp_path / "inputs"
     inputs.mkdir()
-    launcher = tmp_path / "TopoForge-Web.cmd"
+    launcher = tmp_path / "portable path with spaces" / "地形" / "TopoForge-Web.cmd"
+    launcher.parent.mkdir(parents=True)
     launcher.write_text("@echo off\r\n", encoding="utf-8")
     config = WebAppConfig(
         state_dir=state,
@@ -133,14 +134,16 @@ def test_windows_server_command_wraps_candidate_launcher_in_kill_on_close_job(
         "-c",
         system_verifier._WINDOWS_SERVER_CONTAINMENT_WRAPPER_CODE,
     ]
-    assert command[6:10] == [
+    assert command[6:11] == [
         system_verifier.os.environ.get("COMSPEC", "cmd.exe"),
         "/d",
         "/s",
         "/c",
+        "call",
     ]
-    assert str(launcher.resolve()) in command[10]
-    assert "--port 8123" in command[10]
+    assert command[11] == str(launcher.resolve())
+    assert command[12:16] == ["--host", "127.0.0.1", "--port", "8123"]
+    assert all('\\"' not in argument for argument in command)
     assert options == {
         "creationflags": getattr(system_verifier.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200)
     }

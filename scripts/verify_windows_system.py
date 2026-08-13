@@ -279,13 +279,14 @@ def _server_command(
             launcher = web_launcher.expanduser().resolve()
             if not launcher.is_file() or launcher.name.casefold() != "topoforge-web.cmd":
                 raise RuntimeError(f"candidate TopoForge-Web.cmd is missing: {launcher}")
-            command_line = subprocess.list2cmdline([str(launcher), *arguments])
             contained_command = [
                 os.environ.get("COMSPEC", "cmd.exe"),
                 "/d",
                 "/s",
                 "/c",
-                command_line,
+                "call",
+                str(launcher),
+                *arguments,
             ]
             launcher_record = {
                 "kind": "candidate-batch-launcher",
