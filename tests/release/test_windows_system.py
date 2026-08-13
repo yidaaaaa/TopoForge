@@ -151,11 +151,15 @@ def test_windows_server_command_wraps_candidate_launcher_in_kill_on_close_job(
 
 
 def test_native_system_acceptance_exercises_lifecycle_and_paths(tmp_path: Path) -> None:
-    report = verify_windows_system(tmp_path / "native system acceptance")
+    hosted_server = platform.system() == "Windows"
+    report = verify_windows_system(
+        tmp_path / "native system acceptance",
+        hosted_server=hosted_server,
+    )
 
     assert report["schema_version"] == "topoforge-windows-system-verification-v2"
     assert report["required_checks_passed"] is True
-    assert report["hosted_server"] is False
+    assert report["hosted_server"] is hosted_server
     assert report["platform"]["native_windows_verified"] is (platform.system() == "Windows")
     assert report["path_contract"]["contains_spaces"] is True
     assert report["path_contract"]["contains_non_ascii"] is True

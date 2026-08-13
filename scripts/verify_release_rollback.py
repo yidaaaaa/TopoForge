@@ -877,9 +877,11 @@ def _verify_installed_switch(
     previous_launcher: Path,
     previous_version: str,
 ) -> dict[str, Any]:
+    if current_launcher.suffix.casefold() != previous_launcher.suffix.casefold():
+        raise ValueError("installed rollback launchers use different executable suffixes")
     active_root = work_root / "active-installation"
     active_root.mkdir()
-    active_entrypoint = active_root / "topoforge"
+    active_entrypoint = active_root / f"topoforge{current_launcher.suffix}"
     active_entrypoint.symlink_to(current_launcher)
     if active_entrypoint.resolve() != current_launcher.resolve():
         raise ValueError("installed rollback active pointer did not start at the current release")

@@ -1953,7 +1953,9 @@ def _public_evidence_projection(
                     source,
                     replacement,
                 )
-            return projected_value
+            return (
+                projected_value.replace("\\", "/") if projected_value != value else projected_value
+            )
         return value
 
     projected_report = project(report)

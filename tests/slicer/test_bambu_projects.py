@@ -597,7 +597,10 @@ def test_regular_evidence_rejects_preexisting_hard_links(tmp_path: Path) -> None
     except OSError as exc:
         pytest.skip(f"hard links are unavailable: {exc}")
 
-    with pytest.raises(RuntimeError, match="exactly one hard link"):
+    with pytest.raises(
+        RuntimeError,
+        match=r"exactly one hard link|single-link regular file",
+    ):
         bambu_projects_module.sha256(source)
 
 

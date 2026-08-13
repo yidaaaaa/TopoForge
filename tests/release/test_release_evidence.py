@@ -3389,12 +3389,19 @@ def test_rollback_snapshot_cleanup_preserves_replacement(
     destination = tmp_path / "private" / "snapshot.whl"
     detached = tmp_path / "private" / "detached.whl"
     triggered = False
+    swap_blocked = False
 
     def replace_snapshot_then_fail(_descriptor: int) -> None:
-        nonlocal triggered
+        nonlocal swap_blocked, triggered
         assert not triggered
-        rollback_verifier.os.replace(destination, detached)
-        destination.write_bytes(b"replacement owned by another actor")
+        try:
+            rollback_verifier.os.replace(destination, detached)
+        except PermissionError:
+            if os.name != "nt":
+                raise
+            swap_blocked = True
+        else:
+            destination.write_bytes(b"replacement owned by another actor")
         triggered = True
         raise OSError("injected snapshot fsync failure")
 
@@ -3407,8 +3414,14 @@ def test_rollback_snapshot_cleanup_preserves_replacement(
         )
 
     assert triggered is True
-    assert destination.read_bytes() == b"replacement owned by another actor"
-    assert detached.read_bytes() == b"validated wheel bytes"
+    if os.name == "nt":
+        assert swap_blocked is True
+        assert not destination.exists()
+        assert not detached.exists()
+    else:
+        assert swap_blocked is False
+        assert destination.read_bytes() == b"replacement owned by another actor"
+        assert detached.read_bytes() == b"validated wheel bytes"
 
 
 def test_rollback_project_install_is_hash_bound_before_doctor(
@@ -3589,26 +3602,29 @@ def test_full_gate_rejects_forged_previous_github_identity(
 
 
 def test_installed_rollback_rejects_broken_console_launcher(tmp_path: Path) -> None:
-    current_launcher = tmp_path / "current-environment/bin/topoforge"
-    previous_launcher = tmp_path / "previous-environment/bin/topoforge"
+    launcher_relative = Path("Scripts/topoforge.cmd" if os.name == "nt" else "bin/topoforge")
+    current_launcher = tmp_path / "current-environment" / launcher_relative
+    previous_launcher = tmp_path / "previous-environment" / launcher_relative
     for launcher, version in (
         (current_launcher, "0.11.0"),
         (previous_launcher, "0.10.3"),
     ):
         launcher.parent.mkdir(parents=True)
-        (launcher.parent / "python").write_text(
-            f"#!/bin/sh\nprintf '%s\\n' '{{\"topoforge\":\"{version}\"}}'\n",
-            encoding="utf-8",
-        )
-        (launcher.parent / "python").chmod(0o755)
-        launcher.write_text(
+        succeeds = launcher == current_launcher
+        payload = (
             (
+                f'@echo off\r\necho {{"topoforge":"{version}"}}\r\n'
+                if succeeds
+                else "@echo off\r\nexit /b 9\r\n"
+            )
+            if os.name == "nt"
+            else (
                 f"#!/bin/sh\nprintf '%s\\n' '{{\"topoforge\":\"{version}\"}}'\n"
-                if launcher == current_launcher
+                if succeeds
                 else "#!/bin/sh\nexit 9\n"
-            ),
-            encoding="utf-8",
+            )
         )
+        launcher.write_text(payload, encoding="utf-8")
         launcher.chmod(0o755)
 
     with pytest.raises(RuntimeError, match="rollback evidence command failed"):
@@ -3619,7 +3635,8 @@ def test_installed_rollback_rejects_broken_console_launcher(tmp_path: Path) -> N
             previous_launcher=previous_launcher,
             previous_version="0.10.3",
         )
-    assert (tmp_path / "active-installation/topoforge").resolve() == previous_launcher.resolve()
+    active = tmp_path / "active-installation" / f"topoforge{previous_launcher.suffix}"
+    assert active.resolve() == previous_launcher.resolve()
 
 
 def test_phase12b_binds_exact_single_bambu_signer(tmp_path: Path) -> None:
