@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import stat
 import subprocess
@@ -94,30 +95,47 @@ def _release_bash() -> str:
     pytest.skip("release workflow shell regression requires a working Bash executable")
 
 
-def _windows_search_path_for_bash(search_path: str) -> str:
-    entries: list[str] = []
-    for raw_entry in search_path.split(";"):
-        entry = raw_entry.strip('"').replace("\\", "/")
-        if len(entry) >= 2 and entry[0].isalpha() and entry[1] == ":":
-            entry = f"/{entry[0].lower()}{entry[2:]}"
-        entries.append(entry)
-    return ":".join(entries)
+def _path_for_release_bash(path: str) -> str:
+    entry = path.replace("\\", "/")
+    if len(entry) >= 2 and entry[0].isalpha() and entry[1] == ":":
+        return f"/{entry[0].lower()}{entry[2:]}"
+    return entry
 
 
-def _release_bash_environment(environment: dict[str, str]) -> dict[str, str]:
-    if os.name != "nt" or "PATH" not in environment:
-        return environment
-    translated = dict(environment)
-    translated["PATH"] = _windows_search_path_for_bash(environment["PATH"])
-    return translated
+def _release_bash_script(script: str, environment: dict[str, str]) -> str:
+    tools = environment.get("TOPOFORGE_RELEASE_TEST_TOOLS")
+    if tools is None:
+        return script
+    prefix = shlex.quote(_path_for_release_bash(tools))
+    return f"export PATH={prefix}:$PATH\n{script}"
 
 
-def test_windows_search_path_is_explicitly_translated_for_git_bash() -> None:
-    search_path = r"C:\Fixture Tools;D:\hostedtoolcache\Python;\\server\share\bin"
+def test_windows_tool_path_is_explicitly_translated_for_git_bash() -> None:
+    assert _path_for_release_bash(r"C:\Fixture Tools") == "/c/Fixture Tools"
+    assert _path_for_release_bash(r"\\server\share\bin") == "//server/share/bin"
 
-    assert _windows_search_path_for_bash(search_path) == (
-        "/c/Fixture Tools:/d/hostedtoolcache/Python://server/share/bin"
+
+def test_release_bash_runs_a_fixture_tool_from_the_explicit_prefix(tmp_path: Path) -> None:
+    tools = tmp_path / "Fixture Tools"
+    tools.mkdir()
+    fixture = tools / "topoforge-release-fixture"
+    fixture.write_text("#!/usr/bin/env bash\nprintf 'fixture-ran\\n'\n", encoding="utf-8")
+    fixture.chmod(0o755)
+    environment = {
+        **os.environ,
+        "TOPOFORGE_RELEASE_TEST_TOOLS": str(tools),
+    }
+
+    completed = subprocess.run(
+        [_release_bash(), "-c", _release_bash_script(fixture.name, environment)],
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
     )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout == "fixture-ran\n"
 
 
 def _json_bytes(value: dict[str, Any]) -> bytes:
@@ -1987,13 +2005,18 @@ def test_main_release_selection_skips_tags_without_phase12_contract(tmp_path: Pa
         "GITHUB_OUTPUT": str(github_output),
         "GITHUB_REF_TYPE": "branch",
         "GITHUB_REF_NAME": "main",
+        "TOPOFORGE_RELEASE_TEST_TOOLS": str(tools),
         "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}",
     }
 
     completed = subprocess.run(
-        [_release_bash(), "-c", _release_target_step_script()],
+        [
+            _release_bash(),
+            "-c",
+            _release_bash_script(_release_target_step_script(), environment),
+        ],
         cwd=tmp_path,
-        env=_release_bash_environment(environment),
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
@@ -2015,13 +2038,18 @@ def test_explicit_unsupported_release_tag_fails_before_checkout(tmp_path: Path) 
         "GITHUB_OUTPUT": str(github_output),
         "GITHUB_REF_TYPE": "tag",
         "GITHUB_REF_NAME": "v0.10.5",
+        "TOPOFORGE_RELEASE_TEST_TOOLS": str(tools),
         "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}",
     }
 
     completed = subprocess.run(
-        [_release_bash(), "-c", _release_target_step_script()],
+        [
+            _release_bash(),
+            "-c",
+            _release_bash_script(_release_target_step_script(), environment),
+        ],
         cwd=tmp_path,
-        env=_release_bash_environment(environment),
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
@@ -2067,13 +2095,18 @@ def test_explicit_tag_rejects_each_missing_release_contract_capability(
         "GITHUB_OUTPUT": str(github_output),
         "GITHUB_REF_TYPE": "tag",
         "GITHUB_REF_NAME": "v0.10.6",
+        "TOPOFORGE_RELEASE_TEST_TOOLS": str(tools),
         "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}",
     }
 
     completed = subprocess.run(
-        [_release_bash(), "-c", _release_target_step_script()],
+        [
+            _release_bash(),
+            "-c",
+            _release_bash_script(_release_target_step_script(), environment),
+        ],
         cwd=tmp_path,
-        env=_release_bash_environment(environment),
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
@@ -2480,12 +2513,13 @@ def test_release_staging_rejects_a_wheel_changed_after_archive_verification(
             encoding="utf-8",
         )
         cp_wrapper.chmod(0o755)
+        environment["TOPOFORGE_RELEASE_TEST_TOOLS"] = str(tools_dir)
         environment["PATH"] = f"{tools_dir}{os.pathsep}{environment['PATH']}"
 
     completed = subprocess.run(
-        [_release_bash(), "-c", script],
+        [_release_bash(), "-c", _release_bash_script(script, environment)],
         cwd=tmp_path,
-        env=_release_bash_environment(environment),
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
@@ -2536,12 +2570,13 @@ def test_windows_portable_staging_rejects_changed_archive(
             encoding="utf-8",
         )
         cp_wrapper.chmod(0o755)
+        environment["TOPOFORGE_RELEASE_TEST_TOOLS"] = str(tools_dir)
         environment["PATH"] = f"{tools_dir}{os.pathsep}{environment['PATH']}"
 
     completed = subprocess.run(
-        [_release_bash(), "-c", script],
+        [_release_bash(), "-c", _release_bash_script(script, environment)],
         cwd=tmp_path,
-        env=_release_bash_environment(environment),
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
@@ -2590,9 +2625,9 @@ def _stage_release_assets_for_publish(tmp_path: Path) -> dict[str, str]:
         "PORTABLE_SHA256": "0" * 64,
     }
     completed = subprocess.run(
-        [_release_bash(), "-c", script],
+        [_release_bash(), "-c", _release_bash_script(script, environment)],
         cwd=tmp_path,
-        env=_release_bash_environment(environment),
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
@@ -2662,6 +2697,7 @@ def _mock_gh_environment(
     environment = {
         **os.environ,
         "MOCK_GH_LOG": str(gh_log),
+        "TOPOFORGE_RELEASE_TEST_TOOLS": str(tools_dir),
         "PATH": f"{tools_dir}{os.pathsep}{os.environ['PATH']}",
         "RUNNER_TEMP": str(runner_temp),
         "GITHUB_REPOSITORY": "topoforge/topoforge",
@@ -2714,9 +2750,13 @@ def test_release_publish_rejects_stage_to_publish_tamper_or_injection(
 
     environment, gh_log = _mock_gh_environment(tmp_path, values)
     completed = subprocess.run(
-        [_release_bash(), "-c", _publish_step_script()],
+        [
+            _release_bash(),
+            "-c",
+            _release_bash_script(_publish_step_script(), environment),
+        ],
         cwd=tmp_path,
-        env=_release_bash_environment(environment),
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
@@ -2740,9 +2780,13 @@ def test_release_publish_invokes_gh_with_exact_verified_assets(
     environment["MOCK_TAG_CHAIN"] = json.dumps(tag_chain)
 
     completed = subprocess.run(
-        [_release_bash(), "-c", _publish_step_script()],
+        [
+            _release_bash(),
+            "-c",
+            _release_bash_script(_publish_step_script(), environment),
+        ],
         cwd=tmp_path,
-        env=_release_bash_environment(environment),
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
@@ -2770,9 +2814,13 @@ def test_release_publish_rejects_tag_moved_after_prepare(tmp_path: Path) -> None
     environment["MOCK_TAG_COMMIT"] = "f" * 40
 
     completed = subprocess.run(
-        [_release_bash(), "-c", _publish_step_script()],
+        [
+            _release_bash(),
+            "-c",
+            _release_bash_script(_publish_step_script(), environment),
+        ],
         cwd=tmp_path,
-        env=_release_bash_environment(environment),
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
@@ -2838,6 +2886,7 @@ def test_release_workflow_rejects_same_name_wrong_rest_identity(
     }
     environment = {
         **os.environ,
+        "TOPOFORGE_RELEASE_TEST_TOOLS": str(fake_bin),
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
         "GITHUB_REPOSITORY": "topoforge/topoforge",
         "EVIDENCE_RUN_ID": "123456",
@@ -2866,8 +2915,8 @@ def test_release_workflow_rejects_same_name_wrong_rest_identity(
         ),
     }
     passing = subprocess.run(
-        [_release_bash(), "-c", script],
-        env=_release_bash_environment(environment),
+        [_release_bash(), "-c", _release_bash_script(script, environment)],
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
@@ -2880,8 +2929,8 @@ def test_release_workflow_rejects_same_name_wrong_rest_identity(
         artifact_payload["id"] = 999999
         environment["MOCK_ARTIFACT_JSON"] = json.dumps(artifact_payload)
     completed = subprocess.run(
-        [_release_bash(), "-c", script],
-        env=_release_bash_environment(environment),
+        [_release_bash(), "-c", _release_bash_script(script, environment)],
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
@@ -2960,6 +3009,7 @@ def test_release_workflow_rejects_forged_previous_release_identity(
     runner_temp.mkdir()
     environment = {
         **os.environ,
+        "TOPOFORGE_RELEASE_TEST_TOOLS": str(fake_bin),
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
         "GH_TOKEN": "fixture-token",
         "GITHUB_REPOSITORY": "topoforge/topoforge",
@@ -2981,8 +3031,8 @@ def test_release_workflow_rejects_forged_previous_release_identity(
         "MOCK_CHECKSUMS_SOURCE": str(checksums_source),
     }
     passing = subprocess.run(
-        [_release_bash(), "-c", script],
-        env=_release_bash_environment(environment),
+        [_release_bash(), "-c", _release_bash_script(script, environment)],
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
@@ -2996,8 +3046,8 @@ def test_release_workflow_rejects_forged_previous_release_identity(
         release_payload["assets"][0]["id"] = 999998
     environment["MOCK_PREVIOUS_RELEASE_JSON"] = json.dumps(release_payload)
     completed = subprocess.run(
-        [_release_bash(), "-c", script],
-        env=_release_bash_environment(environment),
+        [_release_bash(), "-c", _release_bash_script(script, environment)],
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
