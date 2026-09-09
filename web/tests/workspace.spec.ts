@@ -214,7 +214,8 @@ async function createCompletedLifecycleJob(
 test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(90_000);
+  // Preserve the default 90 s budget while allowing CLI timeout overrides on slow runners.
+  test.slow();
   test.skip(testInfo.project.name !== "desktop", "desktop-only visual contract");
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(`pageerror: ${error.message}`));

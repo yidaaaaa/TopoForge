@@ -878,7 +878,11 @@ def build_macos_app(
         }
     )
     commands: list[dict[str, Any]] = []
-    with tempfile.TemporaryDirectory(prefix="topoforge-macos-arm64-app-") as raw_temporary:
+    # Stage on the output filesystem so final atomic publication also works
+    # when the output is on an external volume unlike the system temporary root.
+    with tempfile.TemporaryDirectory(
+        prefix=".topoforge-macos-arm64-app-", dir=output
+    ) as raw_temporary:
         temporary = Path(raw_temporary).resolve()
         app = temporary / APP_ROOT
         framework = app / "Contents" / "Frameworks" / "Python.framework"

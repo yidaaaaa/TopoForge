@@ -30,6 +30,7 @@ from topoforge.overlays import (
 )
 from topoforge.platforms import path_is_link_like
 from topoforge.providers import ElevationProvider, ProviderDescriptor
+from topoforge.raster.dependencies import raster_dependency_records
 from topoforge.tiling import (
     TILE_LAYOUT_ALGORITHM_VERSION,
     ConnectorPlan,
@@ -76,6 +77,7 @@ from topoforge.workflow.acquisition import (
 _WORKFLOW_SCHEMA_VERSION = "topoforge-local-workflow-v1"
 _WORKFLOW_STATUS_SCHEMA_VERSION = "topoforge-local-workflow-status-v1"
 _SOURCE_SCHEMA_VERSION = "topoforge-local-source-v1"
+_BUILD_ALGORITHM_VERSION = "topoforge-metres-conforming-overlays-v2"
 _ACQUISITION_STAGE_SCHEMA_VERSION = "topoforge-global-acquisition-stage-v1"
 
 _LOGGER = logging.getLogger(__name__)
@@ -813,14 +815,25 @@ def _stage_directory(root: Path, order: int, stage: WorkflowStage, identity: str
     return root / "stages" / f"{order:02d}-{stage.value}" / identity
 
 
-def _build_identity_payload(config: BuildConfig, source_sha256: str) -> dict[str, Any]:
+def _build_identity_payload(
+    config: BuildConfig,
+    source_sha256: str,
+    *,
+    source_dependencies: dict[str, dict[str, int | str]] | None = None,
+    algorithm_version: str | None = _BUILD_ALGORITHM_VERSION,
+) -> dict[str, Any]:
     build_payload = config.model_dump(mode="json")
     build_payload.pop("output_dir", None)
-    return {
+    payload: dict[str, Any] = {
         "schema_version": _WORKFLOW_SCHEMA_VERSION,
         "source_dem_sha256": source_sha256,
         "build": build_payload,
     }
+    if source_dependencies:
+        payload["source_dependencies"] = source_dependencies
+    if algorithm_version is not None:
+        payload["algorithm_version"] = algorithm_version
+    return payload
 
 
 _GLOBAL_SOURCE_BUILD_FIELDS = {
@@ -966,6 +979,8 @@ def _request_payload(
     *,
     source_sha256: str | None,
     slicer_identity: dict[str, Any] | None,
+    source_dependencies: dict[str, dict[str, int | str]] | None = None,
+    algorithm_version: str | None = _BUILD_ALGORITHM_VERSION,
 ) -> dict[str, Any]:
     overlay_payload = None if config.overlay is None else overlay_identity_payload(config.overlay)
     common = {
@@ -982,7 +997,12 @@ def _request_payload(
             raise AssertionError("local workflow source SHA-256 disappeared")
         payload = {
             "schema_version": _WORKFLOW_SCHEMA_VERSION,
-            "build": _build_identity_payload(config.build, source_sha256),
+            "build": _build_identity_payload(
+                config.build,
+                source_sha256,
+                source_dependencies=source_dependencies,
+                algorithm_version=algorithm_version,
+            ),
             "maximum_tile_width_mm": config.maximum_tile_width_mm,
             "maximum_tile_depth_mm": config.maximum_tile_depth_mm,
             "overlap_cells": config.overlap_cells,
@@ -998,6 +1018,8 @@ def _request_payload(
         "global_source": config.global_source.identity_payload(),
         "build_template": _global_build_template_payload(config.build),
     }
+    if algorithm_version is not None:
+        payload["build_algorithm_version"] = algorithm_version
     if overlay_payload is not None:
         payload["overlay"] = overlay_payload
     return payload
@@ -1144,6 +1166,7 @@ def _publish_source(
     *,
     workspace: _WorkspaceLease,
     acquisition_manifest: Path | None = None,
+    source_dependencies: dict[str, dict[str, int | str]] | None = None,
 ) -> tuple[Path, bool]:
     from topoforge.web.security import owned_entry_identity, read_owned_regular_bytes
 
@@ -1153,6 +1176,10 @@ def _publish_source(
         "source_dem_sha256": source_sha256,
         "source_size_bytes": source.stat().st_size,
     }
+    if source_dependencies:
+        payload["source_dependencies"] = source_dependencies
+    if raster_dependency_records(source) != (source_dependencies or {}):
+        raise ConfigurationError("raster dependencies changed before source publication; rerun")
     if acquisition_manifest is not None:
         payload["source_acquisition_manifest"] = {
             "path": str(acquisition_manifest.resolve()),
@@ -1506,6 +1533,9 @@ def _verify_source_record(
         "source_dem_sha256": source_sha256,
         "source_size_bytes": resolved_source.stat().st_size,
     }
+    source_dependencies = raster_dependency_records(resolved_source)
+    if source_dependencies:
+        expected_payload["source_dependencies"] = source_dependencies
     if acquisition_manifest is not None:
         resolved_acquisition = acquisition_manifest.expanduser().resolve()
         if not resolved_acquisition.is_file():
@@ -1534,6 +1564,7 @@ def _verify_source_record(
             payload.get("schema_version") != _SOURCE_SCHEMA_VERSION
             or payload.get("source_dem_sha256") != source_sha256
             or payload.get("source_size_bytes") != resolved_source.stat().st_size
+            or payload.get("source_dependencies", {}) != source_dependencies
             or _identity(payload) != record.identity_sha256
         ):
             raise ConfigurationError(
@@ -2404,6 +2435,18 @@ def verify_completed_workflow(
         source_sha256 = sha256_file(source)
         effective_build = config.build
 
+    source_dependencies = raster_dependency_records(source)
+    recorded_build = request.get("build")
+    algorithm_version = (
+        request.get("build_algorithm_version")
+        if config.global_source is not None
+        else recorded_build.get("algorithm_version")
+        if isinstance(recorded_build, dict)
+        else None
+    )
+    if algorithm_version not in (None, _BUILD_ALGORITHM_VERSION):
+        raise ConfigurationError("unsupported workflow build algorithm; use its matching TopoForge")
+
     source_record = next(records)
     source = _verify_source_record(
         root,
@@ -2428,6 +2471,8 @@ def verify_completed_workflow(
                 config,
                 source_sha256=(None if config.global_source is not None else source_sha256),
                 slicer_identity=slicer_identity,
+                source_dependencies=source_dependencies,
+                algorithm_version=algorithm_version,
             )
         except Exception as exc:
             raise ConfigurationError(
@@ -2453,6 +2498,7 @@ def verify_completed_workflow(
                 "global_source" in request
                 or not isinstance(build_request, dict)
                 or build_request.get("source_dem_sha256") != source_sha256
+                or build_request.get("source_dependencies", {}) != source_dependencies
             ):
                 raise ConfigurationError("restored local workflow source request changed")
         elif request.get("global_source") != config.global_source.identity_payload():
@@ -2513,7 +2559,12 @@ def verify_completed_workflow(
         artifact_build = BuildConfig.model_validate(resolved_build_payload)
     except (OSError, ValueError, yaml.YAMLError) as exc:
         raise ConfigurationError("workflow resolved build configuration is unreadable") from exc
-    artifact_build_identity = _build_identity_payload(artifact_build, source_sha256)
+    artifact_build_identity = _build_identity_payload(
+        artifact_build,
+        source_sha256,
+        source_dependencies=source_dependencies,
+        algorithm_version=algorithm_version,
+    )
     if str(artifact_build.dem_path) != workflow.source_dem_path:
         raise ConfigurationError("workflow BUILD source path changed from the source manifest")
     if (
@@ -2541,7 +2592,14 @@ def verify_completed_workflow(
         if request.get("build_template") != _global_build_template_payload(config.build):
             raise ConfigurationError("restored global workflow build template changed")
     build_identity = (
-        _identity(_build_identity_payload(effective_build, source_sha256))
+        _identity(
+            _build_identity_payload(
+                effective_build,
+                source_sha256,
+                source_dependencies=source_dependencies,
+                algorithm_version=algorithm_version,
+            )
+        )
         if verify_request_identity
         else _identity(artifact_build_identity)
     )
@@ -2826,6 +2884,7 @@ def run_local_workflow(
     )
     source: Path | None = None
     source_sha256: str | None = None
+    source_dependencies: dict[str, dict[str, int | str]] = {}
     effective_build: BuildConfig | None = None
     acquisition_manifest: Path | None = None
     if config.global_source is None:
@@ -2837,6 +2896,7 @@ def run_local_workflow(
         if not source.is_file():
             raise ConfigurationError(f"source DEM does not exist: {source}")
         source_sha256 = sha256_file(source)
+        source_dependencies = raster_dependency_records(source)
         effective_build = config.build
     slicer_value = _slicer_identity(
         adapter,
@@ -2862,6 +2922,7 @@ def run_local_workflow(
         config,
         source_sha256=source_sha256,
         slicer_identity=slicer_value,
+        source_dependencies=source_dependencies,
     )
     request_sha256 = _identity(request)
     prefix = "global" if config.global_source is not None else "local"
@@ -3060,6 +3121,7 @@ def run_local_workflow(
             source_sha256,
             workspace=workspace,
             acquisition_manifest=acquisition_manifest,
+            source_dependencies=source_dependencies,
         )
         source_identity = source_manifest.parent.name
         source_verification = {"required_checks_passed": True}
@@ -3085,7 +3147,13 @@ def run_local_workflow(
             current_stage=current,
             records=records,
         )
-        build_identity = _identity(_build_identity_payload(effective_build, source_sha256))
+        build_identity = _identity(
+            _build_identity_payload(
+                effective_build,
+                source_sha256,
+                source_dependencies=source_dependencies,
+            )
+        )
         build_dir = _stage_directory(root, 10, current, build_identity)
         resolved_build = effective_build.model_copy(
             update={"dem_path": source, "output_dir": build_dir}

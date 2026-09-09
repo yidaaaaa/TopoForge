@@ -6,8 +6,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 import rasterio
+import trimesh
 from pyproj import Transformer
 from rasterio.transform import from_origin
+from shapely.geometry import box
 from typer.testing import CliRunner
 
 from topoforge.cli.app import app
@@ -487,3 +489,73 @@ def test_overlay_projection_edges_preserve_east_order(
     first, second = plan["features"][0]["geometry"]["coordinates"]
     assert 0.0 <= first[0] < second[0] <= 60.0
     assert result.validation.required_checks_passed is True
+
+
+@pytest.mark.parametrize(
+    "terrain", [SyntheticTerrain.GAUSSIAN_HILL, SyntheticTerrain.GAUSSIAN_VALLEY]
+)
+def test_overlay_bundle_measures_reopened_faces_across_curved_terrain(
+    tmp_path: Path, terrain: SyntheticTerrain
+) -> None:
+    from topoforge.models import ScalingResult
+    from topoforge.overlays.draping import surface_mapping_error_mm
+    from topoforge.overlays.geometry import build_terrain_surface
+    from topoforge.util import sha256_file
+
+    build = _build_bundle(tmp_path, terrain)
+    path = tmp_path / "ridge-road.geojson"
+    path.write_text(
+        json.dumps(
+            {
+                "type": "LineString",
+                "coordinates": [[500030, 3299850], [500370, 3299850]],
+            }
+        )
+    )
+    source = _source("road", OverlayKind.ROAD, path, color="#e9c46a")
+    result = generate_overlay_bundle(
+        build, OverlayConfig(sources=(source,), preview_width_px=320), tmp_path / "overlay"
+    )
+    scaling = ScalingResult.model_validate(
+        json.loads((build / "provenance.json").read_text())["scaling"]
+    )
+    surface = build_terrain_surface(
+        build / "processed_dem.tif", build / "original_nodata_mask.tif", scaling
+    )
+    mesh = trimesh.load_mesh(result.output_dir / "layers/road.stl", process=True)
+    measured = surface_mapping_error_mm(mesh, surface, raised_height_mm=0.4, embed_depth_mm=0.2)
+    assert measured > 0  # Float32 reopen contributes actual, non-tautological error.
+    assert result.validation.layers[0].maximum_surface_mapping_error_mm == pytest.approx(measured)
+    assert measured < 1e-4
+    assert result.validation.required_checks_passed
+    assert result.validation.terrain_artifacts_unchanged
+    assert verify_overlay_bundle(result.output_dir, build)["required_checks_passed"]
+
+    # Reproduce the old vertex-only extrusion, including its falsely passing report
+    # and updated checksums. Reopen must independently reject its face interiors.
+    broken = trimesh.creation.extrude_polygon(
+        box(0, 19, 60, 21),
+        height=0.6,
+        engine="earcut",
+    )
+    z = surface.surface_z_mm(broken.vertices[:, :2])
+    broken.vertices[:, 2] = z + np.where(broken.vertices[:, 2] > 0.3, 0.4, -0.2)
+    layer_path = result.output_dir / "layers/road.stl"
+    layer_path.write_bytes(broken.export(file_type="stl"))
+    reopened_broken = trimesh.load_mesh(layer_path, process=True)
+    validation = json.loads(result.validation_path.read_text())
+    validation["layers"][0].update(
+        {
+            "vertex_count": len(reopened_broken.vertices),
+            "triangle_count": len(reopened_broken.faces),
+            "maximum_surface_mapping_error_mm": 0,
+            "stl_sha256": sha256_file(layer_path),
+        }
+    )
+    result.validation_path.write_text(json.dumps(validation))
+    manifest = json.loads(result.manifest_path.read_text())
+    manifest["sha256"]["layer_road_stl"] = sha256_file(layer_path)
+    manifest["sha256"]["validation_json"] = sha256_file(result.validation_path)
+    result.manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(ConfigurationError, match="surface mapping failed"):
+        verify_overlay_bundle(result.output_dir, build)

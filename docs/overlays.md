@@ -72,7 +72,7 @@ All vector coordinates transform explicitly into the processed metric CRS. Model
 - `+Z = Up`
 - source raster row 0 maps to `y=model_depth_mm`
 
-Every overlay point is evaluated against the same fixed diagonal used by the terrain mesh. The maximum surface mapping error is measured per layer. Raised solids extend above the surface; embed depth intersects the terrain to prevent floating parts. The source terrain mesh and elevations are never rewritten.
+Overlay footprints are split along the terrain grid and its fixed diagonals, so each top and bottom triangle follows one terrain plane. Shared seam subdivisions are preserved. The per-layer maximum surface mapping error samples vertices, centroids and three barycentric interior points, including float32 STL reopen error. Strict bundle verification repeats this measurement and rejects errors above 0.0001 mm; it does not trust a previously recorded zero error. Raised solids extend above the surface; embed depth intersects the terrain to prevent floating parts. The source terrain mesh and elevations are never rewritten.
 
 Original NoData overlap is rejected by default. Explicit opt-in records the overlap area; it does not invent elevation values.
 

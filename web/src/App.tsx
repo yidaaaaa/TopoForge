@@ -145,6 +145,10 @@ export default function App() {
     null,
   );
   const jobsLoadGeneration = useRef(0);
+  const jobsLoadInFlight = useRef<{
+    generation: number;
+    promise: Promise<void>;
+  } | null>(null);
   const lifecycleMutationInProgress = useRef(false);
   const selectionClearedByUser = useRef(false);
   const selectedJobIdRef = useRef<string | null>(null);
@@ -153,37 +157,50 @@ export default function App() {
     [language],
   );
 
-  const loadJobs = useCallback(async (force = false) => {
+  const loadJobs = useCallback((force = false): Promise<void> => {
     if (lifecycleMutationInProgress.current && !force) {
-      return;
+      return Promise.resolve();
+    }
+    const pending = jobsLoadInFlight.current;
+    if (!force && pending?.generation === jobsLoadGeneration.current) {
+      // Slow responses must survive subsequent polling ticks. Starting another
+      // generation every second would discard every completed slow response.
+      return pending.promise;
     }
     const generation = ++jobsLoadGeneration.current;
     setJobsLoading(true);
-    try {
-      const [records, trashRecords] = await Promise.all([listJobs(), listJobTrash()]);
-      if (generation !== jobsLoadGeneration.current) {
-        return;
-      }
-      setJobs(records);
-      setJobTrash(trashRecords);
-      setSelectedJobId((current) => {
-        if (current && records.some((job) => job.job_id === current)) {
-          return current;
+    const promise = (async () => {
+      try {
+        const [records, trashRecords] = await Promise.all([listJobs(), listJobTrash()]);
+        if (generation !== jobsLoadGeneration.current) {
+          return;
         }
-        if (selectionClearedByUser.current) {
-          return null;
+        setJobs(records);
+        setJobTrash(trashRecords);
+        setSelectedJobId((current) => {
+          if (current && records.some((job) => job.job_id === current)) {
+            return current;
+          }
+          if (selectionClearedByUser.current) {
+            return null;
+          }
+          return records[0]?.job_id ?? null;
+        });
+      } catch (reason) {
+        if (generation === jobsLoadGeneration.current) {
+          setNotice({ tone: "error", text: errorMessage(reason, language) });
         }
-        return records[0]?.job_id ?? null;
-      });
-    } catch (reason) {
-      if (generation === jobsLoadGeneration.current) {
-        setNotice({ tone: "error", text: errorMessage(reason, language) });
+      } finally {
+        if (generation === jobsLoadGeneration.current) {
+          setJobsLoading(false);
+        }
+        if (jobsLoadInFlight.current?.generation === generation) {
+          jobsLoadInFlight.current = null;
+        }
       }
-    } finally {
-      if (generation === jobsLoadGeneration.current) {
-        setJobsLoading(false);
-      }
-    }
+    })();
+    jobsLoadInFlight.current = { generation, promise };
+    return promise;
   }, [language]);
 
   useEffect(() => {
@@ -192,7 +209,7 @@ export default function App() {
       .catch((reason) =>
         setNotice({ tone: "error", text: errorMessage(reason, language) }),
       );
-    void loadJobs();
+    void loadJobs(true);
   }, [language, loadJobs]);
 
   useEffect(() => {
@@ -409,7 +426,7 @@ export default function App() {
       selectionClearedByUser.current = false;
       setSelectedJobId(record.job_id);
       setNotice({ tone: "success", text: t("jobQueued") });
-      await loadJobs();
+      await loadJobs(true);
     } catch (reason) {
       setNotice({ tone: "error", text: errorMessage(reason, language) });
     } finally {
@@ -420,7 +437,7 @@ export default function App() {
   const handleCancel = async (jobId: string) => {
     try {
       await cancelJob(jobId);
-      await loadJobs();
+      await loadJobs(true);
     } catch (reason) {
       setNotice({ tone: "error", text: errorMessage(reason, language) });
     }
@@ -460,7 +477,7 @@ export default function App() {
     setMaintenanceBusy("restore");
     try {
       const restored = await restoreBackup(backupId);
-      await loadJobs();
+      await loadJobs(true);
       selectionClearedByUser.current = false;
       setSelectedJobId(restored.job_id);
       setNotice({ tone: "success", text: t("restoreCompleted") });
@@ -529,7 +546,7 @@ export default function App() {
     setBatchBusy("restore");
     try {
       await restoreJobTrash(batchId);
-      await loadJobs();
+      await loadJobs(true);
       setNotice({ tone: "success", text: t("trashRestored") });
     } catch (reason) {
       setNotice({ tone: "error", text: errorMessage(reason, language) });
@@ -549,7 +566,7 @@ export default function App() {
     setBatchBusy("purge");
     try {
       await purgeJobTrash(batchId);
-      await loadJobs();
+      await loadJobs(true);
       setNotice({ tone: "success", text: t("trashPurged") });
     } catch (reason) {
       setNotice({ tone: "error", text: errorMessage(reason, language) });
@@ -726,7 +743,7 @@ export default function App() {
           batchBusy={batchBusy}
           onRefresh={() => void loadJobs()}
           onSelect={handleJobSelect}
-          onCancel={(jobId) => void handleCancel(jobId)}
+          onCancel={handleCancel}
           onBackup={(jobId) => void handleBackup(jobId)}
           onCleanup={(jobId, workflowId, planId) =>
             void handleCleanup(jobId, workflowId, planId)

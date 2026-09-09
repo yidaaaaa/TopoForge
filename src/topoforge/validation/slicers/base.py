@@ -16,6 +16,8 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from topoforge.process_containment import run_contained_command
+
 
 class SlicerAvailability(StrEnum):
     """Result of probing one slicer executable."""
@@ -196,16 +198,8 @@ def run_command(
     """Run a slicer command without a shell and normalize failures."""
     started = time.monotonic()
     try:
-        completed = subprocess.run(
-            list(command),
-            cwd=cwd,
-            env=None if env is None else dict(env),
-            capture_output=True,
-            check=False,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout_seconds,
+        completed = run_contained_command(
+            command, cwd=cwd, env=env, timeout_seconds=timeout_seconds
         )
     except subprocess.TimeoutExpired as exc:
         return CommandExecution(
