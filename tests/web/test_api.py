@@ -156,7 +156,10 @@ def test_health_capabilities_static_app_and_security_headers(
         assert ipv6_health.json()["loopback_only"] is True
         content_security_policy = health.headers["content-security-policy"]
         assert "default-src 'self'" in content_security_policy
-        assert "connect-src 'self' https://tile.openstreetmap.org" in content_security_policy
+        assert "connect-src 'self';" in content_security_policy
+
+        assert health.headers["referrer-policy"] == "no-referrer"
+        assert "tile.openstreetmap.org" not in content_security_policy
 
         capabilities = client.get("/api/v1/capabilities")
         assert capabilities.status_code == 200

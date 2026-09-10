@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sqlite3
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import asynccontextmanager
 from importlib.resources import files
@@ -53,6 +54,11 @@ from topoforge.web.models import (
     WorkflowBackupRecord,
     WorkflowCleanupRequest,
     WorkflowRestoreRequest,
+)
+from topoforge.web.reference_tiles import (
+    ReferenceTileCache,
+    ReferenceTileUnavailable,
+    fetch_reference_tile,
 )
 from topoforge.web.security import request_host_is_allowed, request_mutation_is_allowed
 from topoforge.workflow import WorkflowCleanupResult
@@ -167,6 +173,9 @@ def create_app(
     verify_static_assets(assets)
 
     visualization = WebVisualizationService(jobs)
+    reference_cache = ReferenceTileCache(
+        resolved.state_dir / "reference-map" / "shortbread-v1.sqlite3"
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -227,10 +236,10 @@ def create_app(
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "img-src 'self' data: blob: https://tile.openstreetmap.org; "
+            "img-src 'self' data: blob:; "
             "style-src 'self' 'unsafe-inline'; "
             "worker-src 'self' blob:; "
-            "connect-src 'self' https://tile.openstreetmap.org; "
+            "connect-src 'self'; "
             "script-src 'self'; "
             "font-src 'self'; "
             "object-src 'none'; "
@@ -247,6 +256,36 @@ def create_app(
                     "code": "configuration-error",
                     "message": str(exc),
                 }
+            },
+        )
+
+    @app.get("/api/v1/reference/tiles/{z}/{x}/{y}.mvt")
+    def reference_tile(z: int, x: int, y: int, cache_only: bool = False) -> Response:
+        if not 0 <= z <= 14 or not 0 <= x < 2**z or not 0 <= y < 2**z:
+            raise HTTPException(status_code=404, detail="Reference tile is out of range")
+        try:
+            payload, cache_state, max_age = reference_cache.get(
+                z, x, y, cache_only=cache_only, fetch=fetch_reference_tile
+            )
+        except ReferenceTileUnavailable as exc:
+            # MapLibre treats 404 as an empty tile; 409 preserves the cache-miss UI signal.
+            raise HTTPException(
+                status_code=409, detail=str(exc), headers={"Cache-Control": "no-store"}
+            ) from exc
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Reference map unavailable; check cache storage and "
+                    "local runtime network or proxy settings"
+                ),
+            ) from exc
+        return Response(
+            payload,
+            media_type="application/vnd.mapbox-vector-tile",
+            headers={
+                "Cache-Control": "no-store" if cache_only else f"public, max-age={max_age}",
+                "X-TopoForge-Cache": cache_state,
             },
         )
 

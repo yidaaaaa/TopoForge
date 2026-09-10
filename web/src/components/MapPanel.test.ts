@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { JobMapManifest } from "../types";
 import { mapStyle, rasterSourceBounds } from "./MapPanel";
+import { savedReferenceCamera } from "./referenceMap";
 
 const manifest: JobMapManifest = {
   schema_version: "topoforge-web-map-v1",
@@ -63,7 +64,7 @@ describe("MapLibre local terrain style", () => {
 
   it("keeps the optional OSM source separate from local terrain", () => {
     const style = mapStyle(true, manifest, "elevation");
-    expect(style.sources.osm).toMatchObject({ type: "raster" });
+    expect(style.sources.osm).toMatchObject({ type: "vector", tiles: [`${window.location.origin}/api/v1/reference/tiles/{z}/{x}/{y}.mvt`], maxzoom: 14 });
     expect(style.sources["job-terrain"]).toMatchObject({
       tiles: [
         "/api/v1/jobs/job-phase10/map/tiles/elevation/{z}/{x}/{y}.png",
@@ -79,4 +80,49 @@ describe("MapLibre local terrain style", () => {
       -15.5,
     ]);
   });
+});
+
+
+describe("reference map contents", () => {
+  it.each([false, true])("never adds political boundary or label sources (online=%s)", (online) => {
+    const style = mapStyle(online);
+    const layers = style.layers.filter((layer) => "source-layer" in layer);
+    expect(layers.every((layer) => !["boundaries", "boundary_labels"].includes(("source-layer" in layer ? layer["source-layer"] : "") ?? ""))).toBe(true);
+    expect(style.sources).not.toHaveProperty("countries");
+    expect(style.layers.some((layer) => layer.id === "country-borders")).toBe(false);
+    expect(style.glyphs).toBeUndefined();
+    if (online) {
+      expect(layers.map((layer) => "source-layer" in layer ? layer["source-layer"] : undefined)).toEqual(expect.arrayContaining(["streets", "street_labels", "place_labels"]));
+    } else {
+      expect(style.sources).not.toHaveProperty("osm");
+    }
+  });
+  it("selects Chinese or English place names without changing the AOI layers", () => {
+    const zh = mapStyle(true, null, "terrain", "zh-CN");
+    const en = mapStyle(true, null, "terrain", "en");
+    expect(JSON.stringify(zh.layers.find((layer) => layer.id === "osm-places"))).toContain("name_zh");
+    expect(JSON.stringify(en.layers.find((layer) => layer.id === "osm-places"))).toContain("name_en");
+    expect(zh.layers.filter((layer) => layer.id.startsWith("aoi-"))).toEqual(en.layers.filter((layer) => layer.id.startsWith("aoi-")));
+  });
+});
+
+
+it("routes cache-only maps through a separate absolute URL without changing layers", () => {
+  const online = mapStyle(true);
+  const cached = mapStyle(true, null, "terrain", "zh-CN", true);
+  expect(cached.sources.osm).toMatchObject({
+    tiles: [`${window.location.origin}/api/v1/reference/tiles/{z}/{x}/{y}.mvt?cache_only=true`],
+  });
+  expect(cached.layers).toEqual(online.layers);
+});
+
+
+it("restores the last camera and rejects broken or out-of-range saved coordinates", () => {
+  localStorage.setItem("topoforge-reference-camera", JSON.stringify({ center: [120.155, 30.25], zoom: 13 }));
+  expect(savedReferenceCamera()).toEqual({ center: [120.155, 30.25], zoom: 13 });
+  for (const value of ["broken", "null", JSON.stringify({ center: [120, 95], zoom: 13 }), JSON.stringify({ center: [120, 30], zoom: 99 })]) {
+    localStorage.setItem("topoforge-reference-camera", value);
+    expect(savedReferenceCamera()).toBeNull();
+  }
+  localStorage.removeItem("topoforge-reference-camera");
 });

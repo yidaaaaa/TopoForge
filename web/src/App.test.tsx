@@ -4,15 +4,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("./components/MapPanel", () => ({
   MapPanel: ({
     manifest,
+    basemapEnabled,
+    basemapCacheOnly,
     selectedTileId,
     onSelectedTileChange,
   }: {
     manifest: { job_id: string } | null;
+    basemapEnabled: boolean;
+    basemapCacheOnly: boolean;
     selectedTileId: string | null;
     onSelectedTileChange: (tileId: string) => void;
   }) => (
     <div
       data-testid="map-panel"
+      data-basemap-enabled={basemapEnabled}
+      data-cache-only={basemapCacheOnly}
       data-job-id={manifest?.job_id ?? ""}
       data-selected-tile={selectedTileId ?? ""}
     >
@@ -301,6 +307,18 @@ describe("TopoForge bilingual workspace", () => {
         return response({});
       }),
     );
+  });
+
+  it("restores cache-only mode without starting in online mode", async () => {
+    window.localStorage.setItem("topoforge-basemap-mode", "cached");
+    render(<App />);
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-cache-only", "true");
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-basemap-enabled", "true");
+    fireEvent.click(screen.getByRole("checkbox", { name: "仅使用本地缓存" }));
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-cache-only", "false");
+    expect(window.localStorage.getItem("topoforge-basemap-mode")).toBe("online");
+    fireEvent.click(screen.getByRole("checkbox", { name: "仅使用本地缓存" }));
+    expect(window.localStorage.getItem("topoforge-basemap-mode")).toBe("cached");
   });
 
   it("renders the actual Chinese work surface and switches every primary command to English", async () => {

@@ -1960,3 +1960,23 @@ input:checked + .toggle::after {
     padding: 12px;
   }
 }
+
+
+.basemap-options {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.cache-only-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.cache-only-toggle input {
+  accent-color: var(--accent);
+}

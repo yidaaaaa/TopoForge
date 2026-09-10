@@ -41,10 +41,10 @@ The language switch in the header changes the complete interface between `zh-CN`
 English. Both versions expose the same controls and results:
 
 - local GeoTIFF, bbox, or center-radius sources;
-- MapLibre AOI drawing and normalization, with bundled Natural Earth country outlines and a graticule by default;
+- MapLibre AOI drawing and normalization, with bundled Natural Earth land outlines and a graticule by default;
 - deterministic local terrain, elevation, and hillshade XYZ tiles derived from the completed processed DEM;
 - geographic manufacturing tile footprints with map selection synchronized to assembly;
-- optional OpenStreetMap raster tiles when the operator enables the online basemap;
+- optional OpenStreetMap Shortbread vector tiles when the operator enables the online basemap;
 - model dimensions, sampling mode, mesh spacing, and adapt/strict resource budgets;
 - deterministic tile size, user-selected connector total clearance, overlap, overlay YAML, slicing, and Bambu project settings;
 - persistent jobs, progress events, cancellation, explicit job deselection, bilingual workspace/id search, status filters, newest/oldest/name/status sorting, terminal-job selection, measured batch preflight, structured failures, and corrective text;
@@ -84,7 +84,8 @@ child process.
   Partial latitude clipping is reported; rasters fully outside Web Mercator are rejected.
 - Static assets are served only after the package manifest passes SHA-256 and size checks.
 - The content security policy permits same-origin application traffic and the explicit
-  OpenStreetMap tile origin. OpenStreetMap is the sole external browser origin.
+  local reference-tile endpoint. The browser uses only same-origin requests; the
+  runtime fetches fixed-host OSM vector tiles using its configured network/proxy.
 
 This is a loopback application for the local operator. It has no authentication, public
 deployment, database service, or remote multi-user contract.
@@ -149,3 +150,33 @@ ln -sfn ~/.venvs/topoforge-0.10.2/bin/topoforge ~/.local/bin/topoforge
 ```
 
 For a source checkout exactly at the 0.10.3 release tag, run `scripts/rollback-topoforge-0.10.3.sh --confirm-rollback`; it creates a separate detached 0.10.2 worktree and leaves retained state untouched.
+
+
+### Local reference-map trial
+
+The online reference uses OSM Shortbread vector tiles with an explicit selection of
+water, buildings, roads, local place names and selected POIs. Administrative boundary
+and administrative label layers are not drawn; capital cities use ordinary place labels.
+The offline reference uses physical land polygons, not country polygons. This is a
+rendering choice, not a claim of official map approval. Address search is not added by
+this change. Model generation and processed-DEM coordinates are unchanged.
+
+Text uses local system fonts (Chinese coverage depends on installed fonts). Online tiles
+are requested only when enabled, through the same-origin local tile relay. The
+runtime uses its existing proxy/TLS settings, with a fixed upstream host, bounded
+coordinates, a 20-second socket timeout and an 8 MiB response limit. Browser
+responses honor seven-day freshness; failed responses are not cached. Viewed tiles
+are also stored under `state_dir/reference-map/shortbread-v1.sqlite3`, bounded to
+128 MiB of payloads and 4096 tiles with least-recently-used eviction (database metadata
+and transient SQLite journals add small storage overhead). Only visible requested tiles
+are saved; no prefetch or bulk download is performed. The `Use local cache only` switch
+reads this persistent cache without upstream requests, including expired entries. Areas
+and zoom levels not already cached show a missing-cache message. The selected mode is
+remembered across reloads together with the last map position and zoom; cache-only responses bypass browser caching so disk misses
+remain visible. Online mode refreshes entries after seven days. Cache storage errors
+are reported instead of silently losing offline coverage. This switch controls reference
+map requests; model acquisition still needs a local DEM or separately cached elevation data.
+The cache resides on the machine running TopoForge, including the remote host when using
+a forwarded preview. Do not bulk-download
+OSMF tiles or use this service for offline packs. Keep the displayed OSM attribution.
+Service availability is best-effort; see https://operations.osmfoundation.org/policies/vector/.

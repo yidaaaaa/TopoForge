@@ -110,13 +110,25 @@ function errorMessage(reason: unknown, language: Language): string {
   return String(reason);
 }
 
+type BasemapMode = "off" | "online" | "cached";
+
+function initialBasemapMode(): BasemapMode {
+  const saved = window.localStorage.getItem("topoforge-basemap-mode");
+  return saved === "online" || saved === "cached" ? saved : "off";
+}
+
 export default function App() {
   const [language, setLanguage] = useState<Language>(initialLanguage);
   const [health, setHealth] = useState<Health | null>(null);
   const [form, setForm] = useState<FormState>(defaultFormState);
   const [normalizedAoi, setNormalizedAoi] = useState<NormalizedAoi | null>(null);
   const [drawMode, setDrawMode] = useState<"bbox" | "center" | null>(null);
-  const [basemapEnabled, setBasemapEnabled] = useState(false);
+  const [basemapMode, setBasemapMode] = useState<BasemapMode>(initialBasemapMode);
+  const basemapEnabled = basemapMode !== "off";
+  const basemapCacheOnly = basemapMode === "cached";
+  useEffect(() => {
+    window.localStorage.setItem("topoforge-basemap-mode", basemapMode);
+  }, [basemapMode]);
   const [tab, setTab] = useState<WorkspaceTab>("map");
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -666,15 +678,27 @@ export default function App() {
               </button>
             </div>
             {tab === "map" && (
-              <label className="toolbar-toggle">
-                <input
-                  type="checkbox"
-                  checked={basemapEnabled}
-                  onChange={(event) => setBasemapEnabled(event.target.checked)}
-                />
-                <span className="toggle" aria-hidden="true" />
-                <span>{basemapEnabled ? t("basemap") : t("offlineMap")}</span>
-              </label>
+              <div className="basemap-options">
+                <label className="toolbar-toggle">
+                  <input
+                    type="checkbox"
+                    checked={basemapEnabled}
+                    onChange={(event) => setBasemapMode(event.target.checked ? "online" : "off")}
+                  />
+                  <span className="toggle" aria-hidden="true" />
+                  <span>{basemapCacheOnly ? t("cachedBasemap") : basemapEnabled ? t("basemap") : t("offlineMap")}</span>
+                </label>
+                {basemapEnabled && (
+                  <label className="cache-only-toggle" title={t("basemapCacheHelp")}>
+                    <input
+                      type="checkbox"
+                      checked={basemapCacheOnly}
+                      onChange={(event) => setBasemapMode(event.target.checked ? "cached" : "online")}
+                    />
+                    <span>{t("basemapCacheOnly")}</span>
+                  </label>
+                )}
+              </div>
             )}
             {tab === "preview" && selectedJob?.state === "running" && (
               <span className="toolbar-progress">
@@ -690,6 +714,7 @@ export default function App() {
                 sourceMode={form.sourceMode}
                 normalizedAoi={normalizedAoi}
                 basemapEnabled={basemapEnabled}
+                basemapCacheOnly={basemapCacheOnly}
                 drawMode={drawMode}
                 manifest={visibleJobMap}
                 selectedTileId={selectedTileId}
