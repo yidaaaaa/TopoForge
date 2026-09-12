@@ -84,11 +84,14 @@ describe("MapLibre local terrain style", () => {
 
 
 describe("reference map contents", () => {
-  it.each([false, true])("never adds political boundary or label sources (online=%s)", (online) => {
+  it.each([false, true])("never adds unfiltered political line tiles (online=%s)", (online) => {
     const style = mapStyle(online);
     const layers = style.layers.filter((layer) => "source-layer" in layer);
-    expect(layers.every((layer) => !["boundaries", "boundary_labels"].includes(("source-layer" in layer ? layer["source-layer"] : "") ?? ""))).toBe(true);
+    expect(layers.every((layer) => !["boundaries"].includes(("source-layer" in layer ? layer["source-layer"] : "") ?? ""))).toBe(true);
     expect(style.sources).not.toHaveProperty("countries");
+    expect(style.sources["reference-boundaries"]).toMatchObject({
+      type: "geojson", data: expect.stringContaining(window.location.origin),
+    });
     expect(style.layers.some((layer) => layer.id === "country-borders")).toBe(false);
     expect(style.glyphs).toBeUndefined();
     if (online) {

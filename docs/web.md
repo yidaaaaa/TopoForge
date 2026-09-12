@@ -154,12 +154,33 @@ For a source checkout exactly at the 0.10.3 release tag, run `scripts/rollback-t
 
 ### Local reference-map trial
 
-The online reference uses OSM Shortbread vector tiles with an explicit selection of
-water, buildings, roads, local place names and selected POIs. Administrative boundary
-and administrative label layers are not drawn; capital cities use ordinary place labels.
-The offline reference uses physical land polygons, not country polygons. This is a
-rendering choice, not a claim of official map approval. Address search is not added by
-this change. Model generation and processed-DEM coordinates are unchanged.
+The online reference uses OSM Shortbread vector tiles for natural features, roads,
+local names, country names and selected POIs. Taiwan, Hong Kong and Macao labels
+use the regional-name style rather than the country-name style. Raw Shortbread
+boundary lines remain disabled because they omit the countries involved in a dispute.
+
+Boundary lines come from a bundled Natural Earth v5.1.2 layer (1:10 million
+reference scale). China-related lines use its `FCLASS_CN` worldview: replacement
+claim geometries become visible, and superseded lines are removed. Other regions
+retain their original boundary classifications. Hong Kong/Macao map-unit lines use
+a lighter internal-boundary style, and Taiwan uses a regional label (台湾省 in Chinese).
+
+The maritime context uses the nine individual strokes in the publisher's China
+supplement. Each is rendered as a continuous stroke; the gaps come from the source
+geometry. The legacy Taiwan-east arc has no CN override and is omitted: it is not
+used as a substitute for an additional claim stroke. This pinned source is the
+nine-stroke version; no tenth stroke has been added.
+A Doklam segment tagged with Bhutan on both sides is also explicitly associated with
+China, following the matching release's CN worldview polygon. Unclassified claim-only
+lines and historical reference/overlay/lease limits are omitted.
+
+Source URLs, hashes, per-feature classifications and review IDs are recorded in
+`web/src/data/reference-boundaries.provenance.json`. Download the four pinned source
+files into one directory and run
+`node web/scripts/build-reference-boundaries.mjs <directory>` to reproduce the layer.
+Original coordinates are unchanged. This small-scale reference layer works offline;
+country/regional names require the corresponding viewed tiles in cache. DEM acquisition
+and manufacturing coordinates are independent of this display layer.
 
 Text uses local system fonts (Chinese coverage depends on installed fonts). Online tiles
 are requested only when enabled, through the same-origin local tile relay. The

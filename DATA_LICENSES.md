@@ -20,7 +20,15 @@ Third-party terrain data is not bundled. Slicer executables are external AGPL-3.
 
 The bundled offline land geometry is redistributed by `world-atlas` from Natural
 Earth physical land data (public domain). It is used as a geographic reference,
-not as country or administrative geometry.
+not as country or administrative geometry. A separate public-domain Natural Earth
+v5.1.2 boundary layer is bundled from pinned land, claim, maritime and China maritime
+supplement GeoJSON sources. Source URLs, SHA-256 hashes, scale, original and selected
+classifications, and reviewed feature IDs are recorded in
+`web/src/data/reference-boundaries.provenance.json`. Original coordinates are retained.
+China-related lines use the source's CN worldview; the excluded Taiwan-east arc
+and Doklam association are recorded explicitly. Maritime strokes use the source's
+nine-stroke China supplement without adding inferred geometry. Other regions keep their default
+classifications. This presentation layer does not supply manufacturing geometry.
 
 The optional online basemap uses OpenStreetMap Shortbread vector tiles. OSM data
 is licensed under ODbL; visible attribution links to
@@ -31,4 +39,3 @@ the browser and a bounded persistent local cache, and never prefetched into offl
 packages. Cache-only mode reuses previously viewed tiles without contacting the service. The relay forwards only bounded Shortbread tile
 coordinates to the fixed OSMF host using the runtime network/proxy settings. Public
 service availability is not guaranteed. Local fonts are used for reference labels.
-Hiding political layers is not a claim of governmental approval of the map.

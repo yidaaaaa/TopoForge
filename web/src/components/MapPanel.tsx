@@ -10,7 +10,8 @@ import { feature } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import landTopologyJson from "world-atlas/land-110m.json";
 
-import { referenceLayers as vectorReferenceLayers, savedReferenceCamera, VECTOR_TILE_URL } from "./referenceMap";
+import referenceBoundaryUrl from "../data/reference-boundaries.json?url";
+import { referenceBoundaryLayers, referenceLayers as vectorReferenceLayers, savedReferenceCamera, VECTOR_TILE_URL } from "./referenceMap";
 
 import { translate } from "../i18n";
 import type {
@@ -89,6 +90,11 @@ export function mapStyle(
   const sources: StyleSpecification["sources"] = {
     land: { type: "geojson", data: offlineLand },
     graticule: { type: "geojson", data: offlineGraticule },
+    "reference-boundaries": {
+      type: "geojson",
+      data: new URL(referenceBoundaryUrl, window.location.href).href,
+      attribution: '<a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener noreferrer">Natural Earth</a>',
+    },
     aoi: { type: "geojson", data: emptyCollection() },
   };
   if (basemapEnabled) {
@@ -167,6 +173,7 @@ export function mapStyle(
         paint: { "background-color": "#c9dde1" },
       },
       ...referenceLayers,
+      ...referenceBoundaryLayers(),
       ...terrainLayers,
       {
         id: "aoi-fill",

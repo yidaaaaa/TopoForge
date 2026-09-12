@@ -1,0 +1,102 @@
+{
+  "policy": "china-viewpoint-reference-lines-v2",
+  "license": "Public domain",
+  "release": "Natural Earth v5.1.2",
+  "scale": "1:10,000,000",
+  "sources": [
+    {
+      "name": "ne_10m_admin_0_boundary_lines_land.geojson",
+      "source": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_admin_0_boundary_lines_land.geojson",
+      "sha256": "74d9c16229c095fde65943a9919e337682f044bcebccb120764f38edf3b70f4a",
+      "bytes": 2284669,
+      "features": 515,
+      "kind": "land"
+    },
+    {
+      "name": "ne_10m_admin_0_boundary_lines_disputed_areas.geojson",
+      "source": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_admin_0_boundary_lines_disputed_areas.geojson",
+      "sha256": "69f19da764e6982b43aebae4b1a356ffe74c33f2a3cdb462637c0ba8e969c30b",
+      "bytes": 183831,
+      "features": 75,
+      "kind": "claims"
+    },
+    {
+      "name": "ne_10m_admin_0_boundary_lines_maritime_indicator.geojson",
+      "source": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_admin_0_boundary_lines_maritime_indicator.geojson",
+      "sha256": "9cfe9cb1e06431abb14ddb41412991cc9933402622e32a3e5739b6fa9cf1ef1a",
+      "bytes": 284392,
+      "features": 221,
+      "kind": "maritime"
+    },
+    {
+      "name": "ne_10m_admin_0_boundary_lines_maritime_indicator_chn.geojson",
+      "source": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_admin_0_boundary_lines_maritime_indicator_chn.geojson",
+      "sha256": "6d8649e20b41a944937cbca983052c99c74662e681e7551c3936aff40cbfc17b",
+      "bytes": 14655,
+      "features": 9,
+      "kind": "china-maritime"
+    }
+  ],
+  "manual_maritime_ids": [
+    1746707341,
+    1746707349,
+    1746707357,
+    1746707365,
+    1746707375
+  ],
+  "additional_china_ids": [
+    1746708771
+  ],
+  "hidden_feature_ids": [
+    1746705337,
+    1746708449,
+    1746708457,
+    1746708463,
+    1746708469,
+    1746708751,
+    1746708771,
+    1746708779,
+    1746705415,
+    1746705439,
+    1746705607,
+    1746707341,
+    1746707349,
+    1746707357,
+    1746707365,
+    1746707375
+  ],
+  "replacement_feature_ids": [
+    1746705319,
+    1746706305,
+    1746708661,
+    1746705373,
+    1746705401,
+    1746705405,
+    1746705409,
+    1746705431,
+    1746705535,
+    1746705543,
+    1746705561,
+    1746705569,
+    1746705579,
+    1746705585,
+    1746705593,
+    1746705603,
+    1746705611,
+    1746705619,
+    1746705631
+  ],
+  "maritime_indicator_ids": [
+    1746705561,
+    1746705569,
+    1746705579,
+    1746705585,
+    1746705593,
+    1746705603,
+    1746705611,
+    1746705619,
+    1746705631
+  ],
+  "feature_count": 820,
+  "limitations": "China-related features use the source CN classification; other regions retain the default classification. Original coordinates are unchanged. The nine maritime strokes come from the China supplement. The legacy Taiwan-east arc has no CN override and is omitted; it is not repurposed as an additional claim stroke. Unclassified claim-only and historical lines are omitted. Small-scale visual reference, independent of DEM and manufacturing coordinates."
+}
