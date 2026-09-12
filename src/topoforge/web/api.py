@@ -55,6 +55,11 @@ from topoforge.web.models import (
     WorkflowCleanupRequest,
     WorkflowRestoreRequest,
 )
+from topoforge.web.reference_maps import (
+    read_local_standard_map,
+    read_standard_map_pyramid,
+    read_standard_map_tile,
+)
 from topoforge.web.reference_tiles import (
     ReferenceTileCache,
     ReferenceTileUnavailable,
@@ -257,6 +262,52 @@ def create_app(
                     "message": str(exc),
                 }
             },
+        )
+
+    @app.get("/api/v1/reference/standard-map")
+    def standard_map_metadata() -> JSONResponse:
+        result = read_local_standard_map(resolved.state_dir)
+        content = None
+        if result is not None:
+            metadata, _ = result
+            pyramid = read_standard_map_pyramid(resolved.state_dir, metadata)
+            content = metadata.model_dump(mode="json")
+            content["tile_size_px"] = pyramid.tile_size_px
+            content["max_level"] = pyramid.max_level
+            content["tile_url_template"] = (
+                "/api/v1/reference/standard-map/tiles/{level}/{x}/{y}.png?sha256="
+                + metadata.source_sha256
+            )
+            content["image_url"] = (
+                "/api/v1/reference/standard-map/image?sha256=" + metadata.source_sha256
+            )
+        return JSONResponse(content=content, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/v1/reference/standard-map/tiles/{level}/{x}/{y}.png")
+    def standard_map_tile(level: int, x: int, y: int, sha256: str) -> Response:
+        if not 0 <= level <= 6 or not 0 <= x < 64 or not 0 <= y < 64:
+            raise HTTPException(status_code=404, detail="Original map tile is out of range")
+        payload = read_standard_map_tile(resolved.state_dir, sha256, level, x, y)
+        return Response(
+            content=payload,
+            media_type="image/png",
+            headers={"Cache-Control": "private, max-age=86400"},
+        )
+
+    @app.get("/api/v1/reference/standard-map/image")
+    def standard_map_image(sha256: str = "") -> Response:
+        result = read_local_standard_map(resolved.state_dir)
+        if result is None:
+            raise HTTPException(status_code=404, detail="No local standard map is installed")
+        metadata, image_bytes = result
+        if sha256 != metadata.source_sha256:
+            raise HTTPException(
+                status_code=409, detail="Refresh the reference view to load the current map"
+            )
+        return Response(
+            content=image_bytes,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "private, max-age=86400"},
         )
 
     @app.get("/api/v1/reference/tiles/{z}/{x}/{y}.mvt")
@@ -629,6 +680,14 @@ def create_app(
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
         return FileResponse(assets / "index.html", media_type="text/html")
+
+    @app.get("/standard-map.html", include_in_schema=False)
+    def standard_map_viewer() -> FileResponse:
+        return FileResponse(assets / "standard-map.html", media_type="text/html")
+
+    @app.get("/standard-map-viewer.js", include_in_schema=False)
+    def standard_map_viewer_script() -> FileResponse:
+        return FileResponse(assets / "standard-map-viewer.js", media_type="text/javascript")
 
     @app.get("/{path:path}", include_in_schema=False)
     def spa_fallback(path: str) -> FileResponse:

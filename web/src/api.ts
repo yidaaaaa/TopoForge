@@ -1,5 +1,6 @@
 import type {
   AoiInput,
+  StandardMapInfo,
   FileListing,
   Health,
   JobAssemblyOverview,
@@ -55,6 +56,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(response.status, message, detail);
   }
   return (await response.json()) as T;
+}
+
+export function fetchStandardMap(signal: AbortSignal): Promise<StandardMapInfo | null> {
+  return request<StandardMapInfo | null>("/api/v1/reference/standard-map", { signal });
 }
 
 export function fetchHealth(): Promise<Health> {

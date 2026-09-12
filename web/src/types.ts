@@ -362,3 +362,17 @@ export type JsonObject = Record<string, unknown>;
 export interface JobCreateRequest {
   launch: JsonObject;
 }
+
+export interface StandardMapInfo {
+  schema_version: "topoforge-local-standard-map-v1";
+  title: string;
+  source_url: string | null;
+  source_sha256: string;
+  width_px: number;
+  height_px: number;
+  image_url: string;
+  tile_size_px: number;
+  max_level: number;
+  tile_url_template: string;
+  provenance: JsonObject;
+}

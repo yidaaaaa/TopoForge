@@ -37,3 +37,5 @@ artifacts/logs/*
 /artifacts/verification/topoforge-main-*.json
 
 /artifacts/manual-web-review-*/
+
+/artifacts/standard-map-preview-*/

@@ -39,3 +39,12 @@ the browser and a bounded persistent local cache, and never prefetched into offl
 packages. Cache-only mode reuses previously viewed tiles without contacting the service. The relay forwards only bounded Shortbread tile
 coordinates to the fixed OSMF host using the runtime network/proxy settings. Public
 service availability is not guaranteed. Local fonts are used for reference labels.
+
+An optional local standard-map original is supplied by the user as a JPEG and
+source metadata in runtime state. The download serves verified original bytes; the viewer uses locally prepared
+pixel tiles without geographic registration. The local display pyramid stays with
+the user data and records the source and tile digests;
+it does not redistribute that image with TopoForge or change its dataset terms
+to Apache-2.0. Source title, URL, digest, pixel dimensions and any supplied licence
+or attribution information remain in the local metadata. The viewer itself does
+not register or replace any geographic boundary geometry.

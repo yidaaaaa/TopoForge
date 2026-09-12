@@ -201,3 +201,45 @@ The cache resides on the machine running TopoForge, including the remote host wh
 a forwarded preview. Do not bulk-download
 OSMF tiles or use this service for offline packs. Keep the displayed OSM attribution.
 Service availability is best-effort; see https://operations.osmfoundation.org/policies/vector/.
+
+### Local standard-map original
+
+When `state_dir/reference-map/local-standard-map.json` and
+`local-standard-map.jpg` are present, the map panel offers **标准地图原图 /
+Standard map original**. This opens a separate local image viewer with pan,
+zoom, fit-to-window, native-size viewing, and original-file download. Display uses only the locally cached pixel tiles visible
+in the viewport, avoiding whole-image decoding in the browser. Its interface
+follows the application's saved language. No remote images, fonts, or tiles are
+needed for this view.
+
+The JPEG remains unchanged. The metadata uses schema
+`topoforge-local-standard-map-v1` and records `title`, `source_sha256`,
+`width_px`, `height_px`, optional HTTP(S) `source_url`, and `provenance`.
+Prepare the local display pyramid after installing the pair:
+
+```bash
+uv run python scripts/prepare_standard_map.py --state-dir /path/to/web-state
+```
+
+The source digest identifies a separate `standard-map-tiles` directory. Every PNG
+tile has a recorded digest; highest-resolution tiles preserve the source's decoded
+RGB pixels (using the embedded colour profile when present). Smaller display levels
+are sampled only for viewing. The original JPEG download remains byte-for-byte
+unchanged. Tile requests never decode the full JPEG. Both fixed source files and
+their display cache must remain inside the reference-map directory. The runtime
+validates the digest, JPEG format, and dimensions; limits are 24 MiB for the image,
+64 KiB for metadata, and 80 million pixels. A missing pair disables the entry;
+a partial, invalid, or changed pair produces an explicit error. Refresh the app
+after installing or replacing a pair.
+
+`GET /api/v1/reference/standard-map` returns the verified source metadata and a
+local image URL, or JSON `null` when no source is installed. The image URL includes
+the source digest so browser caching cannot mix different originals. The source
+files belong to runtime state and are excluded from code and release assets.
+
+This is an image reference, with no conversion from page pixels to geographic
+coordinates. Select print areas on the existing interactive map. Its Natural Earth
+boundary catalog and OSM layers remain unchanged. The trial conversion of the
+user-supplied GS(2022)4309 EPS was not activated: the file lacks CRS metadata and
+independent registration checks showed material positional errors, especially in
+the separately scaled South China Sea inset.

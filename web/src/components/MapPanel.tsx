@@ -14,12 +14,14 @@ import referenceBoundaryUrl from "../data/reference-boundaries.json?url";
 import { referenceBoundaryLayers, referenceLayers as vectorReferenceLayers, savedReferenceCamera, VECTOR_TILE_URL } from "./referenceMap";
 
 import { translate } from "../i18n";
+import { fetchStandardMap } from "../api";
 import type {
   JobMapManifest,
   Language,
   MapTileStyle,
   NormalizedAoi,
   SourceMode,
+  StandardMapInfo,
 } from "../types";
 
 interface MapPanelProps {
@@ -214,6 +216,18 @@ export function MapPanel({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const styleIdentityRef = useRef("");
   const [basemapError, setBasemapError] = useState(false);
+  const [standardMap, setStandardMap] = useState<StandardMapInfo | null>(null);
+  const [standardMapError, setStandardMapError] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchStandardMap(controller.signal).then(data => {
+      if (!controller.signal.aborted) setStandardMap(data);
+    }).catch(() => {
+      if (!controller.signal.aborted) setStandardMapError(true);
+    });
+    return () => controller.abort();
+  }, []);
   const [cursor, setCursor] = useState<[number, number] | null>(null);
   const [draft, setDraft] = useState<Geometry | null>(null);
   const [terrainStyle, setTerrainStyle] = useState<MapTileStyle>(
@@ -512,6 +526,11 @@ export function MapPanel({
           </>
         )}
       </div>
+      {standardMap && (
+        <a className="map-original-link" href="/standard-map.html" target="_blank" rel="noopener noreferrer" title={standardMap.title}>
+          {translate(language, "standardMapOriginal")}
+        </a>
+      )}
       {manifest && (
         <div className="map-layer-control" aria-label={translate(language, "mapLayers")}>
           <span>
@@ -542,9 +561,9 @@ export function MapPanel({
           </small>
         </div>
       )}
-      {(visualizationLoading || visualizationError || (basemapEnabled && (basemapError || basemapCacheOnly))) && (
-        <div className={`map-data-status${visualizationError ? " error" : ""}`}>
-          {visualizationError ?? (basemapEnabled && basemapError ? translate(language, basemapCacheOnly ? "basemapCacheMiss" : "basemapUnavailable") : translate(language, visualizationLoading ? "visualizationLoading" : "basemapCacheHelp"))}
+      {(visualizationLoading || visualizationError || standardMapError || (basemapEnabled && (basemapError || basemapCacheOnly))) && (
+        <div className={`map-data-status${visualizationError || standardMapError ? " error" : ""}`}>
+          {visualizationError ?? (standardMapError ? translate(language, "standardMapUnavailable") : basemapEnabled && basemapError ? translate(language, basemapCacheOnly ? "basemapCacheMiss" : "basemapUnavailable") : translate(language, visualizationLoading ? "visualizationLoading" : "basemapCacheHelp"))}
         </div>
       )}
       {manifest && selectedTileId && (

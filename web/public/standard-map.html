@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TopoForge · 标准地图原图</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Noto Sans CJK SC",sans-serif;color:#263e38;background:#e8ece6}*{box-sizing:border-box}body{margin:0;height:100dvh;display:flex;flex-direction:column}header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 24px;background:#fffef9;border-bottom:1px solid #d7ded5;flex-wrap:wrap}h1{font-size:19px;margin:0 0 5px;font-weight:650}p{font-size:13px;margin:0;color:#596d63}.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}button,a{font:inherit;font-size:14px;border:1px solid #c8d2c7;border-radius:8px;background:#fffef9;color:#285949;padding:9px 13px;cursor:pointer;text-decoration:none}button:hover,a:hover{background:#eaf1e7}button:focus-visible,a:focus-visible{outline:3px solid #367e66;outline-offset:2px}output{min-width:58px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums}main{position:relative;flex:1;min-height:180px;overflow:hidden;touch-action:none;cursor:grab;background:#dce3d9}main.dragging{cursor:grabbing}#map{position:absolute;inset:0;pointer-events:none;user-select:none}#map img{position:absolute;max-width:none;display:block}#status{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;color:#53685c}footer{padding:10px 24px;background:#fffef9;font-size:12px;color:#596d63;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}footer a{padding:0;border:0;font-size:12px;text-decoration:underline}@media(max-width:640px){header{padding:12px;gap:12px}h1{font-size:17px}.tools{gap:5px}button,a{padding:8px 10px}footer{padding:9px 12px}}
+</style>
+</head>
+<body>
+<header><div><h1 id="heading">标准地图原图</h1><p id="subtitle">本地原图参考</p></div><nav class="tools" aria-label="地图查看工具"><button id="fit">适应窗口</button><button id="actual">原始尺寸</button><button id="minus" aria-label="缩小">−</button><output id="scale" aria-live="polite">—</output><button id="plus" aria-label="放大">＋</button><a id="download" hidden download="standard-map.jpg">保存原图</a></nav></header>
+<main id="viewport" aria-label="可缩放和拖动的标准地图原图" tabindex="0"><div id="map" role="img" aria-label="本地标准地图原图"></div><div id="status">正在读取本地原图…</div></main>
+<footer><span id="gestures">滚轮缩放 · 拖动平移 · 双击适应窗口 · 方向键平移</span><span><span id="usage">原图参考；打印范围请在地形选区页面框选。</span> <a id="source" hidden target="_blank" rel="noopener noreferrer">地图来源</a></span></footer>
+<script type="module" src="/standard-map-viewer.js"></script>
+</body></html>
