@@ -1,18 +1,30 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./components/MapPanel", () => ({
   MapPanel: ({
     manifest,
+    basemapEnabled,
+    basemapCacheOnly,
+    basemapStyle,
     selectedTileId,
+    locatedPlace,
     onSelectedTileChange,
   }: {
     manifest: { job_id: string } | null;
+    basemapEnabled: boolean;
+    basemapCacheOnly: boolean;
+    basemapStyle: string;
+    locatedPlace?: { longitude: number; latitude: number } | null;
     selectedTileId: string | null;
     onSelectedTileChange: (tileId: string) => void;
   }) => (
     <div
       data-testid="map-panel"
+      data-basemap-enabled={basemapEnabled}
+      data-basemap-style={basemapStyle}
+      data-cache-only={basemapCacheOnly}
+      data-place-center={locatedPlace ? `${locatedPlace.longitude},${locatedPlace.latitude}` : ""}
       data-job-id={manifest?.job_id ?? ""}
       data-selected-tile={selectedTileId ?? ""}
     >
@@ -303,6 +315,48 @@ describe("TopoForge bilingual workspace", () => {
     );
   });
 
+  it("locates coordinates without altering the print area until explicitly applied", async () => {
+    render(<App />);
+    await screen.findByText("v0.10.2");
+    expect(screen.getByRole("button", { name: "本地 DEM" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.change(screen.getByRole("textbox", { name: "查找地点" }), { target: { value: "101.9, 31.1" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜索" }));
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-place-center", "101.9,31.1");
+    expect(screen.getByRole("button", { name: "本地 DEM" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "以此为打印中心" }));
+    expect(screen.getByRole("button", { name: "中心与半径" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("spinbutton", { name: "经度" })).toHaveValue(101.9);
+    expect(screen.getByRole("spinbutton", { name: "纬度" })).toHaveValue(31.1);
+    expect(screen.getByRole("spinbutton", { name: "半径（米）" })).toHaveValue(10000);
+  });
+
+  it("restores terrain mode offline and switches styles without changing the print input", async () => {
+    localStorage.setItem("topoforge-basemap-style", "terrain");
+    localStorage.setItem("topoforge-basemap-mode", "cached");
+    render(<App />);
+    await screen.findByText("v0.10.2");
+    expect(screen.getByRole("combobox", { name: "底图样式" })).toHaveValue("terrain");
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-cache-only", "true");
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-basemap-style", "terrain");
+    fireEvent.change(screen.getByRole("combobox", { name: "底图样式" }), { target: { value: "standard" } });
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-basemap-style", "standard");
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-cache-only", "true");
+    expect(localStorage.getItem("topoforge-basemap-style")).toBe("standard");
+    expect(screen.getByRole("button", { name: "本地 DEM" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("restores cache-only mode without starting in online mode", async () => {
+    window.localStorage.setItem("topoforge-basemap-mode", "cached");
+    render(<App />);
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-cache-only", "true");
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-basemap-enabled", "true");
+    fireEvent.click(screen.getByRole("checkbox", { name: "仅使用本地缓存" }));
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-cache-only", "false");
+    expect(window.localStorage.getItem("topoforge-basemap-mode")).toBe("online");
+    fireEvent.click(screen.getByRole("checkbox", { name: "仅使用本地缓存" }));
+    expect(window.localStorage.getItem("topoforge-basemap-mode")).toBe("cached");
+  });
+
   it("renders the actual Chinese work surface and switches every primary command to English", async () => {
     render(<App />);
     expect(screen.getByText("本地地形制造工作台")).toBeInTheDocument();
@@ -370,6 +424,105 @@ describe("TopoForge bilingual workspace", () => {
     ).toHaveValue("0.4");
   });
 
+  it("shows a slow job snapshot after multiple polling intervals and then keeps refreshing", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      let finishJobs!: (response: Response) => void;
+      let finishTrash!: (response: Response) => void;
+      const delayedJobs = new Promise<Response>((resolve) => { finishJobs = resolve; });
+      const delayedTrash = new Promise<Response>((resolve) => { finishTrash = resolve; });
+      let jobRequests = 0;
+      let trashRequests = 0;
+      vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.endsWith("/api/v1/health")) return response(health);
+        if (path.endsWith("/api/v1/jobs")) {
+          jobRequests += 1;
+          return jobRequests === 1 ? delayedJobs : response([failedJob]);
+        }
+        if (path.endsWith("/api/v1/lifecycle/trash")) {
+          trashRequests += 1;
+          return trashRequests === 1 ? delayedTrash : response([]);
+        }
+        return response({});
+      }));
+      render(<App />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(3500); });
+      expect(jobRequests).toBe(1);
+      expect(trashRequests).toBe(1);
+
+      await act(async () => { finishJobs(response([cancelledJob])); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+      expect(jobRequests).toBe(1);
+      expect(trashRequests).toBe(1);
+      expect(screen.queryByRole("heading", { name: "cancelled-project" })).toBeNull();
+      await act(async () => { finishTrash(response([])); });
+      expect(screen.getByRole("heading", { name: "cancelled-project" })).toBeInTheDocument();
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+      expect(jobRequests).toBe(2);
+      expect(trashRequests).toBe(2);
+      expect(screen.getByRole("heading", { name: "failed-project" })).toBeInTheDocument();
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries failed cancellation and disables duplicate requests while pending", async () => {
+    const retryableJob = {
+      ...cancelledJob,
+      state: "cancelling",
+      error: {
+        code: "worker-termination-failed",
+        message: "Temporary operating-system inspection failure",
+        corrective_action: "Retry cancellation.",
+        exception_type: "OSError",
+      },
+    };
+    let cancellationAccepted = false;
+    let finishCancellation!: (response: Response) => void;
+    const pendingCancellation = new Promise<Response>((resolve) => {
+      finishCancellation = resolve;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.endsWith("/api/v1/health")) return response(health);
+      if (path.endsWith("/api/v1/jobs")) {
+        return response([
+          {
+            ...retryableJob,
+            error: cancellationAccepted ? null : retryableJob.error,
+          },
+        ]);
+      }
+      if (path.endsWith(`/api/v1/jobs/${retryableJob.job_id}/cancel`)) {
+        return pendingCancellation;
+      }
+      if (path.endsWith("/api/v1/lifecycle/trash")) return response([]);
+      return response({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+    const cancel = await screen.findByRole("button", { name: "取消" });
+    expect(cancel).toBeEnabled();
+    expect(screen.getByText(/Retry cancellation\./)).toBeInTheDocument();
+
+    fireEvent.click(cancel);
+    expect(cancel).toBeDisabled();
+    fireEvent.click(cancel);
+    expect(
+      fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/cancel")),
+    ).toHaveLength(1);
+
+    cancellationAccepted = true;
+    finishCancellation(response({ ...retryableJob, error: null }));
+    await waitFor(() =>
+      expect(screen.queryByText(/Retry cancellation\./)).not.toBeInTheDocument(),
+    );
+    expect(cancel).toBeDisabled();
+  });
+
   it("synchronizes selected manufacturing tiles between map and assembly", async () => {
     vi.stubGlobal(
       "fetch",
@@ -411,6 +564,9 @@ describe("TopoForge bilingual workspace", () => {
       "tile-r0000-c0001",
     );
 
+    // This test checks tile synchronization, not the lazy module's load time.
+    // Resolve the real module before starting Testing Library's DOM wait.
+    await import("./components/AssemblyPanel");
     fireEvent.click(screen.getByRole("tab", { name: "拼装" }));
     await waitFor(() =>
       expect(screen.getByTestId("assembly-panel")).toHaveAttribute(
@@ -418,7 +574,7 @@ describe("TopoForge bilingual workspace", () => {
         "tile-r0000-c0001",
       ),
     );
-    fireEvent.click(screen.getByText("R1 C1"));
+    fireEvent.click(await screen.findByText("R1 C1"));
 
     fireEvent.click(screen.getByRole("tab", { name: "地图" }));
     expect(screen.getByTestId("map-panel")).toHaveAttribute(
@@ -725,6 +881,8 @@ describe("TopoForge bilingual workspace", () => {
     let trash: unknown[] = [];
     const planBodies: unknown[] = [];
     const applyBodies: unknown[] = [];
+    let delayNextJobList = false;
+    let releaseStaleJobList!: (response: Response) => void;
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const path = String(input);
@@ -768,6 +926,10 @@ describe("TopoForge bilingual workspace", () => {
           return response(trash[0], 201);
         }
         if (path.endsWith("/api/v1/jobs")) {
+          if (delayNextJobList) {
+            delayNextJobList = false;
+            return new Promise<Response>((resolve) => { releaseStaleJobList = resolve; });
+          }
           return response(jobs);
         }
         if (path.endsWith("/api/v1/lifecycle/trash")) {
@@ -783,6 +945,9 @@ describe("TopoForge bilingual workspace", () => {
     const removeRecord = await screen.findByRole("button", {
       name: "移除任务记录",
     });
+    delayNextJobList = true;
+    fireEvent.click(screen.getByRole("button", { name: "刷新" }));
+    expect(delayNextJobList).toBe(false);
     fireEvent.click(removeRecord);
     expect(await screen.findByLabelText("批量操作预检")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "执行已核对操作" }));
@@ -795,6 +960,10 @@ describe("TopoForge bilingual workspace", () => {
     expect(
       await screen.findByRole("heading", { name: "failed-project" }),
     ).toBeInTheDocument();
+
+    await act(async () => { releaseStaleJobList(response([cancelledJob, failedJob])); });
+    expect(screen.queryByText("cancelled-project")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "failed-project" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "将项目移入回收站" }));
     expect(await screen.findByLabelText("批量操作预检")).toBeInTheDocument();

@@ -28,6 +28,7 @@ from topoforge.exporters.three_mf import (
     inspect_3mf,
 )
 from topoforge.models import BuildConfig, ScalingResult
+from topoforge.overlays.draping import surface_mapping_error_mm
 from topoforge.overlays.geometry import (
     ModelOverlayFeature,
     build_layer_mesh,
@@ -396,6 +397,7 @@ def generate_overlay_bundle(
                 transformed.features,
                 minimum_feature_mm=build_config.printer_profile.minimum_feature_mm,
                 allow_original_nodata=config.allow_original_nodata,
+                max_triangles=config.max_triangles - total_triangles,
             )
             total_triangles += len(mesh.faces)
             if total_triangles > config.max_triangles:
@@ -408,6 +410,27 @@ def generate_overlay_bundle(
             reopened = trimesh.load_mesh(layer_path, process=True)
             if not isinstance(reopened, trimesh.Trimesh):
                 raise ConfigurationError(f"overlay STL did not reopen as a mesh: {layer_path}")
+            surface_error = max(
+                surface_error,
+                surface_mapping_error_mm(
+                    reopened,
+                    surface,
+                    raised_height_mm=source.style.raised_height_mm,
+                    embed_depth_mm=source.style.embed_depth_mm,
+                ),
+            )
+            if surface_error > 1e-4:
+                raise ConfigurationError(
+                    f"overlay {source.source_id} surface error is {surface_error:g} mm after STL "
+                    "reopen; reduce terrain slope or model dimensions"
+                )
+            if not bool(np.all(reopened.nondegenerate_faces())) or not bool(
+                np.all(reopened.unique_faces())
+            ):
+                raise ConfigurationError(
+                    f"overlay {source.source_id} STL has degenerate/duplicate faces; "
+                    "simplify the source"
+                )
             components = reopened.split(only_watertight=False)
             layer_record = OverlayLayerRecord(
                 source_id=source.source_id,
@@ -546,7 +569,10 @@ def generate_overlay_bundle(
         if not isinstance(reopened_scene, trimesh.Scene):
             raise ConfigurationError("overlay preview GLB did not reopen as a scene")
         layer_checks = all(
-            layer.watertight and layer.winding_consistent and layer.positive_volume
+            layer.watertight
+            and layer.winding_consistent
+            and layer.positive_volume
+            and layer.maximum_surface_mapping_error_mm <= 1e-4
             for layer in layer_records
         )
         bounds_passed = all(
@@ -645,7 +671,13 @@ def generate_overlay_bundle(
                 "source_terrain_sha256": source_hashes_before,
                 "coordinate_system": validation.coordinate_system,
                 "orientation_transform": validation.orientation_transform,
-                "surface_mapping": "exact fixed-diagonal terrain triangle interpolation",
+                "surface_mapping": (
+                    "footprint intersection with each fixed-diagonal terrain triangle"
+                ),
+                "surface_mapping_error_measurement": (
+                    "maximum sampled top/bottom error over vertices, face centroids and "
+                    "three (0.6, 0.2, 0.2) barycentric permutations, including STL reopen"
+                ),
                 "contour_algorithm": "threshold-cell-boundary without fabricated elevation",
                 "terrain_surface_modified": False,
                 "three_mf_assembly": {
@@ -755,6 +787,19 @@ def verify_overlay_bundle(
         path = Path(str(path_value)).expanduser().resolve()
         if not path.is_file() or sha256_file(path) != digest:
             raise ConfigurationError(f"overlay input source changed or is missing: {path}")
+    resolved_payload = yaml.safe_load(
+        _safe_artifact_path(root, manifest.artifacts["resolved_config"]).read_text(encoding="utf-8")
+    )
+    overlay_config = OverlayConfig.model_validate(resolved_payload["overlay"])
+    source_styles = {source.source_id: source.style for source in overlay_config.sources}
+    if set(source_styles) != {layer.source_id for layer in validation.layers}:
+        raise ConfigurationError("overlay layer identities differ from the resolved configuration")
+    scaling = ScalingResult.model_validate(
+        json.loads((source_bundle / "provenance.json").read_text(encoding="utf-8"))["scaling"]
+    )
+    surface = build_terrain_surface(
+        source_bundle / "processed_dem.tif", source_bundle / "original_nodata_mask.tif", scaling
+    )
     for layer in validation.layers:
         layer_path = _safe_artifact_path(root, layer.stl_path)
         reopened = trimesh.load_mesh(layer_path, process=True)
@@ -766,8 +811,22 @@ def verify_overlay_bundle(
             or not bool(reopened.is_watertight)
             or not bool(reopened.is_winding_consistent)
             or float(reopened.volume) <= 0
+            or not bool(np.all(reopened.nondegenerate_faces()))
+            or not bool(np.all(reopened.unique_faces()))
         ):
             raise ConfigurationError(f"overlay layer geometry changed: {layer.source_id}")
+        style = source_styles[layer.source_id]
+        measured_error = surface_mapping_error_mm(
+            reopened,
+            surface,
+            raised_height_mm=style.raised_height_mm,
+            embed_depth_mm=style.embed_depth_mm,
+        )
+        if measured_error > 1e-4 or layer.maximum_surface_mapping_error_mm > 1e-4:
+            raise ConfigurationError(
+                f"overlay layer surface mapping failed: {layer.source_id} "
+                f"({measured_error:g} mm); rebuild this overlay with the current terrain"
+            )
     inspection = inspect_3mf(_safe_artifact_path(root, manifest.artifacts["model_3mf"]))
     if (
         inspection.object_count != validation.combined_3mf_object_count

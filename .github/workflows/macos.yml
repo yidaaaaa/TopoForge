@@ -393,7 +393,7 @@ jobs:
           test "$(find downloaded/macos-candidate -type f | wc -l | tr -d ' ')" -le 9
           test "$(find downloaded/macos-candidate -type l | wc -l | tr -d ' ')" = 0
       - id: packaged-system
-        name: Execute native packaged Web, recovery, and manufacturing acceptance
+        name: Execute native packaged HTTPS, Copernicus Web, recovery, and manufacturing acceptance
         shell: bash
         run: |
           set -euo pipefail

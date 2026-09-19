@@ -41,10 +41,10 @@ The language switch in the header changes the complete interface between `zh-CN`
 English. Both versions expose the same controls and results:
 
 - local GeoTIFF, bbox, or center-radius sources;
-- MapLibre AOI drawing and normalization, with bundled Natural Earth country outlines and a graticule by default;
+- MapLibre AOI drawing and normalization, with bundled Natural Earth land outlines and a graticule by default;
 - deterministic local terrain, elevation, and hillshade XYZ tiles derived from the completed processed DEM;
 - geographic manufacturing tile footprints with map selection synchronized to assembly;
-- optional OpenStreetMap raster tiles when the operator enables the online basemap;
+- optional OpenStreetMap Shortbread vector tiles when the operator enables the online basemap;
 - model dimensions, sampling mode, mesh spacing, and adapt/strict resource budgets;
 - deterministic tile size, user-selected connector total clearance, overlap, overlay YAML, slicing, and Bambu project settings;
 - persistent jobs, progress events, cancellation, explicit job deselection, bilingual workspace/id search, status filters, newest/oldest/name/status sorting, terminal-job selection, measured batch preflight, structured failures, and corrective text;
@@ -84,7 +84,8 @@ child process.
   Partial latitude clipping is reported; rasters fully outside Web Mercator are rejected.
 - Static assets are served only after the package manifest passes SHA-256 and size checks.
 - The content security policy permits same-origin application traffic and the explicit
-  OpenStreetMap tile origin. OpenStreetMap is the sole external browser origin.
+  local reference-tile endpoint. The browser uses only same-origin requests; the
+  runtime fetches fixed-host OSM vector tiles using its configured network/proxy.
 
 This is a loopback application for the local operator. It has no authentication, public
 deployment, database service, or remote multi-user contract.
@@ -113,6 +114,102 @@ replay, job state, previews, and artifacts work without browser network access. 
 AOI still requires either provider network access or a complete retained provider cache.
 Enabling the OpenStreetMap switch explicitly requests public map tiles and does not alter
 the terrain source or manufacturing result.
+
+## Terrain basemap before building
+
+Enable the basemap, then choose **普通地图 / Standard map** or **地形地图 /
+Terrain map** in the map toolbar. Terrain mode shades mountains and valleys under
+the existing roads, water and labels, without requiring a completed job. It keeps
+the current camera and selection. The chosen style is remembered in this browser.
+The **地形 / 高程 / 阴影** controls on a completed job still display that job's
+processed DEM; they are separate from this browsing background.
+
+Terrain reference tiles come from the public
+[AWS Terrain Tiles collection](https://registry.opendata.aws/terrain-tiles/), using
+Mapzen's [Terrarium RGB encoding](https://github.com/tilezen/joerd/blob/master/docs/formats.md).
+There is no API key. These are mixed, publisher-processed elevation sources with
+varying age and resolution, not a uniform-resolution terrain product. This view
+only shades relief; it does not add contour lines, satellite imagery or a 3D mesh.
+No additional detail is created when zooming beyond the available source tiles.
+Printing continues to use the selected local DEM or existing acquisition provider.
+
+Only visible terrain tiles and renderer-required edge neighbours are requested.
+The loopback runtime fetches a fixed S3 path with bounded zoom/coordinates,
+four concurrent downloads, a twenty-second socket timeout and a 512 KiB limit per
+tile. Each response must be a verified 256 x 256 RGB PNG. Encoded bytes are preserved
+without resizing or colour correction, because RGB values encode elevation.
+The browser receives a same-origin URL; runtime proxy/TLS settings apply.
+
+Viewed terrain is cached separately in
+`--state-dir/reference-map/mapzen-terrarium-v1.sqlite3`. It has the same independent
+128 MiB payload / 4096 tile LRU limits and seven-day online freshness as the road
+cache. Both caches together retain at most 256 MiB of payloads; SQLite metadata,
+provider records and transient journals add overhead. The terrain cache records
+digests, retrieval time, source URL, available ETag/version/Last-Modified/source-file
+headers, encoding, CRS and licensing links. Native resolution, acquisition period,
+vertical datum and NoData/interpolation fractions stay unknown when not established;
+publication time and pixel spacing do not establish acquisition date or source resolution.
+
+**仅使用本地缓存 / Use local cache only** also covers terrain requests. It reads
+previously verified tiles, including stale ones, and never downloads a missing
+replacement. Visit the desired area and zoom levels in terrain mode online before
+going offline. Missing terrain produces a specific message while the other map
+layers remain usable. Switching the basemap off removes both remote sources. No
+bulk terrain download or offline world pack is offered by this UI. Source credits
+remain visible in the map attribution; see `DATA_LICENSES.md` for dataset terms.
+
+## Find a place
+
+Use **查找地点 / Find a place** above the map. Enter a city, landmark or address,
+then press Search or Enter. For Chinese names, try separating the landmark and city
+with a comma (for example `西湖, 杭州`) and check the returned full address. The candidate list retains full names and WGS84
+coordinates to distinguish places with the same name. Selecting a result moves the
+map and adds a pin; it leaves the print area unchanged. Draw a bounding box, or
+choose **以此为打印中心 / Use as print center** and adjust the radius in metres.
+When the basemap is off, **显示道路与地名（联网） / Show streets and labels
+(online)** offers an explicit shortcut to enable it. Location search provides
+geographic context; elevation acquisition remains separate.
+
+**联网搜索 / Search online** is off initially. Enable it explicitly to use the
+configured service; that choice is remembered only for that endpoint. The default
+is the OSMF public Nominatim service, subject to its
+[usage policy](https://operations.osmfoundation.org/policies/nominatim/): manual
+submitted searches only, no autocomplete, one shared rate limiter (at least 1.1
+seconds between requests per local Web process), identifying User-Agent and OSM
+attribution. Multiple browser tabs share the same limiter; a concurrent request is
+rejected with a retry message. Queries are sent to the service; do not send private
+or confidential information. This local trial is not a service-capacity commitment
+for public distribution; select a suitable provider before scaling it up. Coverage,
+address detail and mainland network availability depend on the service.
+
+Successful responses persist under `--state-dir/place-search`, keyed by endpoint,
+query and language, with checksums verified on reuse. Each response is limited to
+256 KiB and ten candidates, with one attempt and a ten-second socket timeout.
+There is no automatic expiry or total disk quota for these small query records.
+Stop the app before removing this dedicated directory to clear the search cache;
+it is separate from DEM and basemap caches. A corrupt or missing offline entry
+reports a cache miss and makes no upstream request.
+
+With Search online off, or **仅使用本地缓存 / Use local cache only** enabled,
+searches only consult that local query cache. Previously selected locations and
+favorites are stored separately in this browser (20 recent and 50 favorites), and
+can be removed from the list. Browser/site storage cleanup removes them; different
+browser origins, including changed forwarded ports, have separate lists. The
+query cache resides on the machine running TopoForge.
+
+Enter a numeric **longitude, latitude** pair (for example `101.9, 31.1`) for offline
+WGS84 positioning, without a search request. Latitude is limited to the map's Web
+Mercator range (±85.051129°). Do not paste GCJ-02/BD-09 coordinates as WGS84.
+Saved locations and coordinate input remain usable if the service is unavailable.
+An uncached place name cannot be resolved offline. Full offline terrain building
+also needs the relevant local elevation data.
+
+To use another OSM/Nominatim-compatible endpoint, set `TOPOFORGE_GEOCODER_URL`
+to its HTTP(S) base URL before starting TopoForge. The adapter appends `/search`;
+do not include credentials, query parameters or fragments. Restart after changing
+it. The UI shows the configured host and requires a new online choice when it
+changes. The browser cannot submit an arbitrary endpoint URL. The existing core
+geocoder performs the query; Web does not duplicate its coordinate logic.
 
 ## Frontend development and checks
 
@@ -149,3 +246,96 @@ ln -sfn ~/.venvs/topoforge-0.10.2/bin/topoforge ~/.local/bin/topoforge
 ```
 
 For a source checkout exactly at the 0.10.3 release tag, run `scripts/rollback-topoforge-0.10.3.sh --confirm-rollback`; it creates a separate detached 0.10.2 worktree and leaves retained state untouched.
+
+
+### Local reference-map trial
+
+The online reference uses OSM Shortbread vector tiles for natural features, roads,
+local names, country names and selected POIs. Taiwan, Hong Kong and Macao labels
+use the regional-name style rather than the country-name style. Raw Shortbread
+boundary lines remain disabled because they omit the countries involved in a dispute.
+
+Boundary lines come from a bundled Natural Earth v5.1.2 layer (1:10 million
+reference scale). China-related lines use its `FCLASS_CN` worldview: replacement
+claim geometries become visible, and superseded lines are removed. Other regions
+retain their original boundary classifications. Hong Kong/Macao map-unit lines use
+a lighter internal-boundary style, and Taiwan uses a regional label (台湾省 in Chinese).
+
+The maritime context uses the nine individual strokes in the publisher's China
+supplement. Each is rendered as a continuous stroke; the gaps come from the source
+geometry. The legacy Taiwan-east arc has no CN override and is omitted: it is not
+used as a substitute for an additional claim stroke. This pinned source is the
+nine-stroke version; no tenth stroke has been added.
+A Doklam segment tagged with Bhutan on both sides is also explicitly associated with
+China, following the matching release's CN worldview polygon. Unclassified claim-only
+lines and historical reference/overlay/lease limits are omitted.
+
+Source URLs, hashes, per-feature classifications and review IDs are recorded in
+`web/src/data/reference-boundaries.provenance.json`. Download the four pinned source
+files into one directory and run
+`node web/scripts/build-reference-boundaries.mjs <directory>` to reproduce the layer.
+Original coordinates are unchanged. This small-scale reference layer works offline;
+country/regional names require the corresponding viewed tiles in cache. DEM acquisition
+and manufacturing coordinates are independent of this display layer.
+
+Text uses local system fonts (Chinese coverage depends on installed fonts). Online tiles
+are requested only when enabled, through the same-origin local tile relay. The
+runtime uses its existing proxy/TLS settings, with a fixed upstream host, bounded
+coordinates, a 20-second socket timeout and an 8 MiB response limit. Browser
+responses honor seven-day freshness; failed responses are not cached. Viewed tiles
+are also stored under `state_dir/reference-map/shortbread-v1.sqlite3`, bounded to
+128 MiB of payloads and 4096 tiles with least-recently-used eviction (database metadata
+and transient SQLite journals add small storage overhead). Only visible requested tiles
+are saved; no prefetch or bulk download is performed. The `Use local cache only` switch
+reads this persistent cache without upstream requests, including expired entries. Areas
+and zoom levels not already cached show a missing-cache message. The selected mode is
+remembered across reloads together with the last map position and zoom; cache-only responses bypass browser caching so disk misses
+remain visible. Online mode refreshes entries after seven days. Cache storage errors
+are reported instead of silently losing offline coverage. This switch controls reference
+map requests and place-search requests; model acquisition still needs a local DEM or separately cached elevation data.
+The cache resides on the machine running TopoForge, including the remote host when using
+a forwarded preview. Do not bulk-download
+OSMF tiles or use this service for offline packs. Keep the displayed OSM attribution.
+Service availability is best-effort; see https://operations.osmfoundation.org/policies/vector/.
+
+### Local standard-map original
+
+When `state_dir/reference-map/local-standard-map.json` and
+`local-standard-map.jpg` are present, the map panel offers **标准地图原图 /
+Standard map original**. This opens a separate local image viewer with pan,
+zoom, fit-to-window, native-size viewing, and original-file download. Display uses only the locally cached pixel tiles visible
+in the viewport, avoiding whole-image decoding in the browser. Its interface
+follows the application's saved language. No remote images, fonts, or tiles are
+needed for this view.
+
+The JPEG remains unchanged. The metadata uses schema
+`topoforge-local-standard-map-v1` and records `title`, `source_sha256`,
+`width_px`, `height_px`, optional HTTP(S) `source_url`, and `provenance`.
+Prepare the local display pyramid after installing the pair:
+
+```bash
+uv run python scripts/prepare_standard_map.py --state-dir /path/to/web-state
+```
+
+The source digest identifies a separate `standard-map-tiles` directory. Every PNG
+tile has a recorded digest; highest-resolution tiles preserve the source's decoded
+RGB pixels (using the embedded colour profile when present). Smaller display levels
+are sampled only for viewing. The original JPEG download remains byte-for-byte
+unchanged. Tile requests never decode the full JPEG. Both fixed source files and
+their display cache must remain inside the reference-map directory. The runtime
+validates the digest, JPEG format, and dimensions; limits are 24 MiB for the image,
+64 KiB for metadata, and 80 million pixels. A missing pair disables the entry;
+a partial, invalid, or changed pair produces an explicit error. Refresh the app
+after installing or replacing a pair.
+
+`GET /api/v1/reference/standard-map` returns the verified source metadata and a
+local image URL, or JSON `null` when no source is installed. The image URL includes
+the source digest so browser caching cannot mix different originals. The source
+files belong to runtime state and are excluded from code and release assets.
+
+This is an image reference, with no conversion from page pixels to geographic
+coordinates. Select print areas on the existing interactive map. Its Natural Earth
+boundary catalog and OSM layers remain unchanged. The trial conversion of the
+user-supplied GS(2022)4309 EPS was not activated: the file lacks CRS metadata and
+independent registration checks showed material positional errors, especially in
+the separately scaled South China Sea inset.

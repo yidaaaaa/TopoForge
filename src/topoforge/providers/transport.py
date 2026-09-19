@@ -15,7 +15,7 @@ from urllib.request import Request, urlopen
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from topoforge.exceptions import ProviderFetchError
+from topoforge.exceptions import ProviderCacheMissError, ProviderFetchError
 from topoforge.providers.cache import (
     CacheEntry,
     CacheIdentity,
@@ -135,7 +135,8 @@ class CachingHttpClient:
             return error.code in _RETRYABLE_HTTP_STATUS
         return isinstance(error, (URLError, TimeoutError, socket.timeout, OSError))
 
-    def download(self, identity: CacheIdentity) -> DownloadResult:
+    def download(self, identity: CacheIdentity, *, cache_only: bool = False) -> DownloadResult:
+        """Read verified cache bytes or fetch; cache-only misses never contact the network."""
         lookup = self.cache.lookup(identity)
         if lookup.status is CacheStatus.HIT:
             assert lookup.entry is not None and lookup.path is not None
@@ -146,6 +147,8 @@ class CachingHttpClient:
                 cache_lookup_reason=lookup.reason,
                 attempts=[],
             )
+        if cache_only:
+            raise ProviderCacheMissError("No verified cached result; search online first")
         initial_status = lookup.status
         initial_reason = lookup.reason
         if lookup.status is CacheStatus.CORRUPT:

@@ -35,3 +35,7 @@ artifacts/logs/*
 !examples/synthetic/*.tif
 /result.json
 /artifacts/verification/topoforge-main-*.json
+
+/artifacts/manual-web-review-*/
+
+/artifacts/standard-map-preview-*/

@@ -10,36 +10,45 @@
     "Three.js"
   ],
   "assets": [
-    "assets/AssemblyPanel-CfdH3KPH.js",
-    "assets/TerrainPreview-Bx9BbYzS.js",
-    "assets/index-BZFzreOV.css",
-    "assets/index-CsCsR0Z0.js",
+    "assets/AssemblyPanel-DWV_eXrc.js",
+    "assets/TerrainPreview-BFL6Qovi.js",
+    "assets/index-Bs4_JDLQ.css",
+    "assets/index-DEwXUklA.js",
     "assets/maplibre-CIJcTNu8.js",
     "assets/maplibre-DNVN2dqC.css",
     "assets/react-a9urCwlR.js",
+    "assets/reference-boundaries-CH49JEmN.json",
     "assets/three-BiQEg9UT.js",
-    "index.html"
+    "index.html",
+    "standard-map-viewer.js",
+    "standard-map.html"
   ],
   "sha256": {
-    "assets/AssemblyPanel-CfdH3KPH.js": "513053bb799b487c9bfa43b95397dfd0240f472d96fdb0bee701df36eb92c92b",
-    "assets/TerrainPreview-Bx9BbYzS.js": "bc338a055f325a14d2ac09afeba02898a63e2beff4940d9af186130b577496f8",
-    "assets/index-BZFzreOV.css": "f64ab16b38a48241b50b2eb186fd1e40749aa992afc7cb0e36fb7a5719ae13f0",
-    "assets/index-CsCsR0Z0.js": "2c6adbc99aabf908fe298b01bf744c8255b618afec8f7a131e74131682cb7ba2",
+    "assets/AssemblyPanel-DWV_eXrc.js": "3e59d33b897fa7567de51198eec0c33dc2e5c9c4ecdb6f87eeb784b8723e7227",
+    "assets/TerrainPreview-BFL6Qovi.js": "1c637cde3ff0023ab331e048d6c4aead1425907d699f1ece6c6928aba7ad59e6",
+    "assets/index-Bs4_JDLQ.css": "ebf762905e138edcbad9f66fb2f0c13bcda3e2ff60f5bd22c5fce7467466595d",
+    "assets/index-DEwXUklA.js": "f5441c17d4a1cb43f6176432589e724c8001a63d094cc596e21ae1690c3ff1ea",
     "assets/maplibre-CIJcTNu8.js": "872eb16b4f54fbbc07a4e1eda9670bad675d25e8bd90375e8facb236ee30911c",
     "assets/maplibre-DNVN2dqC.css": "768b9ff0c135536afbbee9f20232ac261e8b2b89ce60a29f838024be9dd172e3",
     "assets/react-a9urCwlR.js": "6dddba3e7a8f8ef0627f8cb4d147697f443d68adb9fb502f4f7c6fba90047f8a",
+    "assets/reference-boundaries-CH49JEmN.json": "0a03823cfa1c007dcc919a2ec83dc5f945ed58d4c1e01a27f58da55127d6f98f",
     "assets/three-BiQEg9UT.js": "4f4aab1a86efe8b9e1a63776e33a84cba434e21dbaacfc125edd0409fd06e0e5",
-    "index.html": "2c980ba03ffae235695584bb0f2dcc19eab182ed0405a15a50876f8bf0aa62dc"
+    "index.html": "cfa0bb5b368cc290c113c90af72f092ea7ef55df9ad0231b09b84b439d6eaecd",
+    "standard-map-viewer.js": "7aac6d57993a904e6b131e2f6176dae1a252631e9793778d94c4d24298d04c71",
+    "standard-map.html": "6f7359ee666b93a97a91455713767f1db03270a0efd2b57f9797deff6a2760f8"
   },
   "sizes": {
-    "assets/AssemblyPanel-CfdH3KPH.js": 11181,
-    "assets/TerrainPreview-Bx9BbYzS.js": 6685,
-    "assets/index-BZFzreOV.css": 24906,
-    "assets/index-CsCsR0Z0.js": 179869,
+    "assets/AssemblyPanel-DWV_eXrc.js": 11181,
+    "assets/TerrainPreview-BFL6Qovi.js": 6685,
+    "assets/index-Bs4_JDLQ.css": 28998,
+    "assets/index-DEwXUklA.js": 150394,
     "assets/maplibre-CIJcTNu8.js": 1052931,
     "assets/maplibre-DNVN2dqC.css": 69918,
     "assets/react-a9urCwlR.js": 192456,
+    "assets/reference-boundaries-CH49JEmN.json": 2200562,
     "assets/three-BiQEg9UT.js": 597882,
-    "index.html": 785
+    "index.html": 785,
+    "standard-map-viewer.js": 8083,
+    "standard-map.html": 2853
   }
 }

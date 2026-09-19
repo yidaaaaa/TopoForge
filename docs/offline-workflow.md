@@ -40,6 +40,10 @@ uv run topoforge browse outputs/local-terrain --no-open
 
 The saved `workflow-launch.yaml` is the only command reconstruction needed. `resume` strictly reopens every current stage manifest and checksum before reuse. `browse` regenerates a dependency-free `workflow-report.html` with workspace-contained relative links.
 
+Local GeoTIFF dependencies reported by GDAL, such as `.msk`, `.aux.xml` and `.ovr` siblings, participate in source/cache identities and source checksums. Keep the complete dataset together. Editing or removing a sidecar selects a new build; backups preserve their original basenames and adjacency. Nonlocal or non-GeoTIFF dependency graphs require export to a self-contained GeoTIFF.
+
+The elevation/overlay algorithm update causes new runs to rebuild old cached geometry. Compatible completed projects can still be browsed and restored; overlays that fail the new surface measurement must be rebuilt.
+
 ## Reuse a global job offline
 
 A completed global workspace contains its acquired metric raster, acquisition manifest, provider trace, aligned quality masks, and every manufacturing stage. Reopening or browsing it does not require the network.

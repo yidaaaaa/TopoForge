@@ -51,7 +51,7 @@ interface ResultsPanelProps {
   batchBusy: "plan" | "apply" | "restore" | "purge" | null;
   onRefresh: () => void;
   onSelect: (jobId: string | null) => void;
-  onCancel: (jobId: string) => void;
+  onCancel: (jobId: string) => Promise<void>;
   onPlanBatch: (jobIds: string[], mode: JobBatchDeleteMode) => void;
   onApplyBatch: () => void;
   onRestoreTrash: (batchId: string) => void;
@@ -152,6 +152,21 @@ export function ResultsPanel({
     dateStyle: "medium",
     timeStyle: "short",
   });
+  const [cancellingJobIds, setCancellingJobIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const handleCancel = async (jobId: string) => {
+    setCancellingJobIds((current) => new Set(current).add(jobId));
+    try {
+      await onCancel(jobId);
+    } finally {
+      setCancellingJobIds((current) => {
+        const next = new Set(current);
+        next.delete(jobId);
+        return next;
+      });
+    }
+  };
   const [jobQuery, setJobQuery] = useState("");
   const [jobStatusFilter, setJobStatusFilter] = useState<JobStatusFilter>("all");
   const [jobSort, setJobSort] = useState<JobSort>("newest");
@@ -513,8 +528,11 @@ export function ResultsPanel({
                 <button
                   type="button"
                   className="danger-button"
-                  onClick={() => onCancel(selectedJob.job_id)}
-                  disabled={selectedJob.state === "cancelling"}
+                  onClick={() => void handleCancel(selectedJob.job_id)}
+                  disabled={
+                    cancellingJobIds.has(selectedJob.job_id) ||
+                    (selectedJob.state === "cancelling" && selectedJob.error === null)
+                  }
                 >
                   <Square size={15} fill="currentColor" />
                   {t("cancel")}

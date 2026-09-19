@@ -177,7 +177,13 @@ class OverlayLayerRecord(BaseModel):
     watertight: bool
     winding_consistent: bool
     positive_volume: bool
-    maximum_surface_mapping_error_mm: float = Field(ge=0)
+    maximum_surface_mapping_error_mm: float = Field(
+        ge=0,
+        description=(
+            "Maximum sampled top/bottom terrain-height error at vertices, centroids and "
+            "three interior barycentric points per face, including STL reopen"
+        ),
+    )
     original_nodata_overlap_mm2: float = Field(ge=0)
     color: str
 

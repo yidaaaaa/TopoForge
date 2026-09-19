@@ -21,5 +21,9 @@ class ProviderFetchError(TopoForgeError):
     """Raised when a provider asset cannot be fetched and verified within bounds."""
 
 
+class ProviderCacheMissError(ProviderFetchError):
+    """Raised when an explicit cache-only read has no verified provider response."""
+
+
 class SlicerError(TopoForgeError):
     """Raised when an external slicer invocation fails."""

@@ -214,7 +214,8 @@ async function createCompletedLifecycleJob(
 test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(90_000);
+  // Preserve the default 90 s budget while allowing CLI timeout overrides on slow runners.
+  test.slow();
   test.skip(testInfo.project.name !== "desktop", "desktop-only visual contract");
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(`pageerror: ${error.message}`));
@@ -230,16 +231,14 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
     }
   });
   let osmTileRequests = 0;
-  await page.route("https://tile.openstreetmap.org/**", async (route) => {
+  await page.route("**/api/v1/reference/tiles/**", async (route) => {
     osmTileRequests += 1;
-    await route.fulfill({
-      status: 200,
-      contentType: "image/png",
-      body: Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-        "base64",
-      ),
-    });
+    if (route.request().url().endsWith("tilejson.json")) {
+      await route.fulfill({ json: { tilejson: "3.0.0", minzoom: 0, maxzoom: 14,
+        tiles: ["https://vector.openstreetmap.org/shortbread_v1/{z}/{x}/{y}.mvt"] } });
+    } else {
+      await route.fulfill({ status: 200, contentType: "application/vnd.mapbox-vector-tile", body: Buffer.alloc(0) });
+    }
   });
   const completedJob = await createCompletedLifecycleJob(page);
   expect(completedJob.summary).not.toBeNull();
@@ -391,7 +390,7 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   expect(mapPixels.nonZero).toBeGreaterThan(0);
   await expect(page.getByTestId("map-panel")).toHaveAttribute(
     "data-offline-reference",
-    "natural-earth-countries-and-graticule",
+    "natural-earth-land-and-graticule",
   );
   await expect(page.getByTestId("map-panel")).toHaveAttribute(
     "data-has-terrain",

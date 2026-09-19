@@ -7,16 +7,21 @@ import argparse
 import json
 import os
 import platform
+import stat
 import subprocess
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 if __package__:
     from scripts.macos_app import (
+        CA_BUNDLE_PATH,
         CLI_LAUNCHER_PATH,
         DEFAULT_CONFIG,
         MANIFEST_PATH,
         PYTHON_PATH,
+        TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE,
+        TLS_CA_FILE_ENVIRONMENT_VARIABLES,
+        TLS_PROBE_URL,
         VERIFICATION_SCHEMA_VERSION,
         WEB_LAUNCHER_PATH,
         canonical_json_bytes,
@@ -30,10 +35,14 @@ if __package__:
     from scripts.verify_platform_core import verify_platform_core
 else:
     from macos_app import (  # type: ignore[import-not-found]
+        CA_BUNDLE_PATH,
         CLI_LAUNCHER_PATH,
         DEFAULT_CONFIG,
         MANIFEST_PATH,
         PYTHON_PATH,
+        TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE,
+        TLS_CA_FILE_ENVIRONMENT_VARIABLES,
+        TLS_PROBE_URL,
         VERIFICATION_SCHEMA_VERSION,
         WEB_LAUNCHER_PATH,
         canonical_json_bytes,
@@ -55,6 +64,7 @@ import http.client
 import importlib
 import importlib.metadata
 import json
+import os
 import pathlib
 import ssl
 import sys
@@ -69,6 +79,25 @@ for name in modules:
     imports[name] = str(pathlib.Path(module.__file__).resolve())
 
 context = ssl.create_default_context()
+default_paths = ssl.get_default_verify_paths()
+tls_url = "__TOPOFORGE_TLS_PROBE_URL__"
+request = urllib.request.Request(
+    tls_url,
+    headers={"User-Agent": "TopoForge-macOS-HTTPS-Probe/1"},
+)
+with urllib.request.urlopen(request, timeout=30, context=context) as response:
+    tls_payload = response.read(4096)
+    tls_status = response.status
+    tls_response_url = response.geturl()
+if tls_response_url != tls_url:
+    raise RuntimeError("packaged HTTPS probe was redirected")
+if b"Copernicus_DSM_COG_" not in tls_payload:
+    raise RuntimeError("packaged HTTPS probe returned an unexpected catalog prefix")
+ca_bundle = pathlib.Path(os.environ["SSL_CERT_FILE"]).resolve()
+tls_environment_names = (
+    "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE",
+    "GDAL_HTTP_CA_BUNDLE", "AWS_CA_BUNDLE", "SSL_CERT_DIR",
+)
 tls_probe = {
     "openssl_version": ssl.OPENSSL_VERSION,
     "sha256": hashlib.sha256(b"TopoForge Mach-O closure probe").hexdigest(),
@@ -76,6 +105,19 @@ tls_probe = {
     "ssl_context_type": type(context).__name__,
     "https_connection_type": http.client.HTTPSConnection.__name__,
     "https_handler_type": urllib.request.HTTPSHandler.__name__,
+    "url": tls_url,
+    "response_url": tls_response_url,
+    "status": tls_status,
+    "response_prefix_sha256": hashlib.sha256(tls_payload).hexdigest(),
+    "response_prefix_bytes": len(tls_payload),
+    "ca_bundle_path": str(ca_bundle),
+    "ca_bundle_sha256": hashlib.sha256(ca_bundle.read_bytes()).hexdigest(),
+    "default_cafile": default_paths.cafile,
+    "default_capath": default_paths.capath,
+    "ca_cert_count": context.cert_store_stats()["x509_ca"],
+    "verify_mode": context.verify_mode.name,
+    "check_hostname": context.check_hostname,
+    "environment": {name: os.environ.get(name) for name in tls_environment_names},
     "required_checks_passed": True,
 }
 
@@ -107,6 +149,7 @@ print(json.dumps({
     "loaded_images": sorted(set(loaded_images)),
 }, sort_keys=True))
 """
+DEPENDENCY_PROBE = DEPENDENCY_PROBE.replace("__TOPOFORGE_TLS_PROBE_URL__", TLS_PROBE_URL)
 
 _APPLE_SYSTEM_IMAGE_PREFIXES = ("/System/Library/", "/usr/lib/")
 
@@ -256,6 +299,38 @@ def _loaded_image_inventory(images: Any, app: Path) -> dict[str, list[str]]:
     }
 
 
+def _require_packaged_ca(app: Path, manifest: dict[str, Any]) -> tuple[Path, dict[str, Any]]:
+    trust = manifest.get("tls_trust")
+    if not isinstance(trust, dict) or not isinstance(trust.get("ca_bundle"), dict):
+        raise RuntimeError("packaged TLS trust identity is missing")
+    identity = trust["ca_bundle"]
+    if identity.get("path") != CA_BUNDLE_PATH:
+        raise RuntimeError("packaged CA bundle path changed")
+    path = app.joinpath(*PurePosixPath(CA_BUNDLE_PATH).parts)
+    try:
+        metadata = path.lstat()
+    except OSError as exc:
+        raise RuntimeError("packaged CA bundle is missing") from exc
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+        raise RuntimeError("packaged CA bundle is not one ordinary file")
+    if metadata.st_size != identity.get("bytes") or sha256_file(path) != identity.get("sha256"):
+        raise RuntimeError("extracted CA bundle identity changed")
+    return path, trust
+
+
+def _poison_host_tls_environment(environment: dict[str, str], root: Path) -> None:
+    poison = root / "host TLS overrides outside app"
+    for name in TLS_CA_FILE_ENVIRONMENT_VARIABLES:
+        environment[name] = str(poison / f"{name}.pem")
+    environment[TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE] = str(poison / "cert-directory")
+
+
+def _apply_packaged_tls_environment(environment: dict[str, str], ca_bundle: Path) -> None:
+    for name in TLS_CA_FILE_ENVIRONMENT_VARIABLES:
+        environment[name] = str(ca_bundle)
+    environment[TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE] = str(ca_bundle.parent)
+
+
 def execute_archive(
     archive: Path,
     *,
@@ -277,6 +352,7 @@ def execute_archive(
     if " " not in str(app) or not any(ord(character) > 127 for character in str(app)):
         raise RuntimeError("packaged app path probe must contain spaces and non-ASCII characters")
     manifest = json.loads((app / MANIFEST_PATH).read_text(encoding="utf-8"))
+    ca_bundle, tls_trust = _require_packaged_ca(app, manifest)
     python = app / PYTHON_PATH
     cli_launcher = app / CLI_LAUNCHER_PATH
     web_launcher = app / WEB_LAUNCHER_PATH
@@ -311,7 +387,7 @@ def execute_archive(
     if codesign.returncode == 0:
         raise RuntimeError("Phase 13A candidate unexpectedly carries a valid code signature")
 
-    environment = os.environ.copy()
+    launcher_environment = os.environ.copy()
     fake_home = root / "用户 home with spaces"
     fake_home.mkdir()
     for variable in (
@@ -320,8 +396,8 @@ def execute_archive(
         "DYLD_FALLBACK_LIBRARY_PATH",
         "DYLD_FALLBACK_FRAMEWORK_PATH",
     ):
-        environment.pop(variable, None)
-    environment.update(
+        launcher_environment.pop(variable, None)
+    launcher_environment.update(
         {
             "HOME": str(fake_home),
             "CFFIXED_USER_HOME": str(fake_home),
@@ -329,11 +405,14 @@ def execute_archive(
             "PYTHONNOUSERSITE": "1",
         }
     )
+    _poison_host_tls_environment(launcher_environment, root)
+    probe_environment = launcher_environment.copy()
+    _apply_packaged_tls_environment(probe_environment, ca_bundle)
     commands: list[dict[str, Any]] = []
     dependency_probe, command = _run_json(
         [str(python), "-I", "-X", "utf8", "-c", DEPENDENCY_PROBE],
         cwd=root,
-        environment=environment,
+        environment=probe_environment,
     )
     commands.append(command)
     outside_sys_path = [
@@ -373,6 +452,30 @@ def execute_archive(
             "packaged TLS probe did not load required embedded Mach-O images: "
             f"{missing_loaded_images}"
         )
+    tls_probe = dependency_probe.get("tls_probe")
+    expected_tls_environment = {
+        **{name: str(ca_bundle) for name in TLS_CA_FILE_ENVIRONMENT_VARIABLES},
+        TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE: str(ca_bundle.parent),
+    }
+    if (
+        not isinstance(tls_probe, dict)
+        or tls_probe.get("url") != TLS_PROBE_URL
+        or tls_probe.get("response_url") != TLS_PROBE_URL
+        or tls_probe.get("status") != 200
+        or not isinstance(tls_probe.get("response_prefix_bytes"), int)
+        or not 1 <= tls_probe["response_prefix_bytes"] <= 4096
+        or tls_probe.get("ca_bundle_path") != str(ca_bundle)
+        or tls_probe.get("ca_bundle_sha256") != tls_trust["ca_bundle"]["sha256"]
+        or tls_probe.get("default_cafile") != str(ca_bundle)
+        or tls_probe.get("default_capath") != str(ca_bundle.parent)
+        or not isinstance(tls_probe.get("ca_cert_count"), int)
+        or tls_probe["ca_cert_count"] < 100
+        or tls_probe.get("verify_mode") != "CERT_REQUIRED"
+        or tls_probe.get("check_hostname") is not True
+        or tls_probe.get("environment") != expected_tls_environment
+        or tls_probe.get("required_checks_passed") is not True
+    ):
+        raise RuntimeError("packaged HTTPS trust probe did not satisfy the pinned CA contract")
     expected_dependencies = {
         (_canonical_name(item["name"]), item["version"])
         for item in manifest["locked_dependencies"]["packages"]
@@ -393,7 +496,7 @@ def execute_archive(
     doctor, command = _run_json(
         [str(cli_launcher), "doctor"],
         cwd=root,
-        environment=environment,
+        environment=launcher_environment,
     )
     commands.append(command)
     if doctor.get("python") != manifest["python_runtime"]["version"]:
@@ -401,13 +504,13 @@ def execute_archive(
     web_check, command = _run_json(
         [str(web_launcher), "--check", "--no-open"],
         cwd=root,
-        environment=environment,
+        environment=launcher_environment,
     )
     commands.append(command)
     host_rejection = _require_rejected(
         [str(web_launcher), "--host=0.0.0.0", "--check", "--no-open"],
         cwd=root,
-        environment=environment,
+        environment=launcher_environment,
         expected_exit_code=64,
         expected_message="fixes Web binding to 127.0.0.1",
     )

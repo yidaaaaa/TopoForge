@@ -12,6 +12,7 @@ export type ResourceBudgetMode = "adapt" | "strict";
 export type TerrainMode = "best-available" | "dtm" | "dsm" | "bathymetry";
 export type ConnectorToleranceMm = 0.1 | 0.15 | 0.2 | 0.25 | 0.3 | 0.4;
 export type WorkspaceTab = "map" | "preview" | "assembly";
+export type ReferenceMapStyle = "standard" | "terrain";
 export type MapTileStyle = "terrain" | "elevation" | "hillshade";
 export type AssemblyMode = "2d" | "3d";
 export type JobState =
@@ -361,4 +362,45 @@ export type JsonObject = Record<string, unknown>;
 
 export interface JobCreateRequest {
   launch: JsonObject;
+}
+
+export interface StandardMapInfo {
+  schema_version: "topoforge-local-standard-map-v1";
+  title: string;
+  source_url: string | null;
+  source_sha256: string;
+  width_px: number;
+  height_px: number;
+  image_url: string;
+  tile_size_px: number;
+  max_level: number;
+  tile_url_template: string;
+  provenance: JsonObject;
+}
+
+
+export interface PlaceCandidate {
+  candidate_id: string;
+  display_name: string;
+  latitude: number;
+  longitude: number;
+  bounding_box_wgs84: [number, number, number, number];
+}
+export interface PlaceSearchConfig {
+  endpoint: string;
+  is_public: boolean;
+  policy_url: string | null;
+  maximum_candidates: number;
+}
+export interface PlaceSearchResponse {
+  query: string;
+  candidates: PlaceCandidate[];
+  cache_status: string;
+  attribution: string;
+  endpoint: string;
+}
+export interface SavedPlace {
+  place: PlaceCandidate;
+  endpoint: string;
+  favorite: boolean;
 }

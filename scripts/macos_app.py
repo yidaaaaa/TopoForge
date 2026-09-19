@@ -25,10 +25,10 @@ else:
     )
 
 CONFIG_SCHEMA_VERSION = "topoforge-macos-arm64-runtime-v1"
-MANIFEST_SCHEMA_VERSION = "topoforge-macos-app-manifest-v2"
-BUILD_SCHEMA_VERSION = "topoforge-macos-app-build-v2"
-VERIFICATION_SCHEMA_VERSION = "topoforge-macos-app-verification-v2"
-SYSTEM_SCHEMA_VERSION = "topoforge-macos-system-acceptance-v2"
+MANIFEST_SCHEMA_VERSION = "topoforge-macos-app-manifest-v3"
+BUILD_SCHEMA_VERSION = "topoforge-macos-app-build-v3"
+VERIFICATION_SCHEMA_VERSION = "topoforge-macos-app-verification-v3"
+SYSTEM_SCHEMA_VERSION = "topoforge-macos-system-acceptance-v3"
 DEFAULT_CONFIG = Path("packaging/macos-arm64-runtime.json")
 APP_ROOT = "TopoForge.app"
 MANIFEST_PATH = "Contents/Resources/manifest.json"
@@ -36,6 +36,21 @@ INFO_PLIST_PATH = "Contents/Info.plist"
 CLI_LAUNCHER_PATH = "Contents/Resources/bin/topoforge"
 WEB_LAUNCHER_PATH = "Contents/MacOS/TopoForge"
 PYTHON_PATH = "Contents/Frameworks/Python.framework/Versions/3.12/bin/python3.12"
+CERTIFI_CA_SOURCE_PATH = (
+    "Contents/Frameworks/Python.framework/Versions/3.12/lib/python3.12/"
+    "site-packages/certifi/cacert.pem"
+)
+CA_BUNDLE_PATH = "Contents/Resources/certificates/certifi-cacert.pem"
+CA_DIRECTORY_PATH = "Contents/Resources/certificates"
+TLS_PROBE_URL = "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/tileList.txt"
+TLS_CA_FILE_ENVIRONMENT_VARIABLES = (
+    "SSL_CERT_FILE",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+    "GDAL_HTTP_CA_BUNDLE",
+    "AWS_CA_BUNDLE",
+)
+TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE = "SSL_CERT_DIR"
 
 _CPU_ARCHITECTURES = {
     0x01000007: "x86_64",
@@ -588,15 +603,54 @@ def inspect_archive(
         packages = locked_dependencies.get("packages")
         if not isinstance(packages, list) or locked_dependencies.get("count") != len(packages):
             raise ValueError("locked dependency package inventory count changed")
-        package_names: set[str] = set()
+        package_versions: dict[str, str] = {}
         for index, package_value in enumerate(packages):
             package = _json_object(package_value, f"locked dependency package {index}")
             name = _string(package.get("canonical_name"), "locked dependency canonical name")
             _string(package.get("name"), "locked dependency name")
-            _string(package.get("version"), "locked dependency version")
-            if name in package_names:
+            version = _string(package.get("version"), "locked dependency version")
+            if name in package_versions:
                 raise ValueError(f"locked dependency package is duplicated: {name}")
-            package_names.add(name)
+            package_versions[name] = version
+        tls_trust = _json_object(manifest.get("tls_trust"), "manifest.tls_trust")
+        source_ca = _json_object(
+            tls_trust.get("source_package"), "manifest.tls_trust.source_package"
+        )
+        packaged_ca = _json_object(tls_trust.get("ca_bundle"), "manifest.tls_trust.ca_bundle")
+        tls_environment = _json_object(
+            tls_trust.get("environment"), "manifest.tls_trust.environment"
+        )
+        if (
+            source_ca.get("canonical_name") != "certifi"
+            or source_ca.get("version") != package_versions.get("certifi")
+            or source_ca.get("path") != CERTIFI_CA_SOURCE_PATH
+        ):
+            raise ValueError("packaged CA source is not bound to the locked certifi dependency")
+        if packaged_ca.get("path") != CA_BUNDLE_PATH:
+            raise ValueError("packaged CA bundle path changed")
+        for label, value in (("source", source_ca), ("bundle", packaged_ca)):
+            _positive_int(value.get("bytes"), f"manifest TLS {label} bytes")
+            _sha256_value(value.get("sha256"), f"manifest TLS {label} SHA-256")
+        if (
+            not isinstance(packaged_ca.get("certificate_count"), int)
+            or isinstance(packaged_ca.get("certificate_count"), bool)
+            or packaged_ca["certificate_count"] < 100
+        ):
+            raise ValueError("packaged CA bundle certificate count is invalid")
+        if (
+            tls_environment.get("file_variables") != list(TLS_CA_FILE_ENVIRONMENT_VARIABLES)
+            or tls_environment.get("directory_variable") != TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE
+            or tls_environment.get("directory_path") != CA_DIRECTORY_PATH
+            or tls_environment.get("external_overrides_allowed") is not False
+            or tls_trust.get("required_checks_passed") is not True
+        ):
+            raise ValueError("packaged TLS environment contract changed")
+        launchers = _json_object(manifest.get("launchers"), "manifest.launchers")
+        if (
+            launchers.get("ca_bundle_path") != CA_BUNDLE_PATH
+            or launchers.get("tls_environment") != tls_environment
+        ):
+            raise ValueError("launcher TLS trust binding changed")
         for field in ("version", "url", "sha256", "bytes", "embedded_architecture"):
             if runtime.get(field) != configured_runtime[field]:
                 raise ValueError(f"app runtime binding changed: {field}")
@@ -612,6 +666,8 @@ def inspect_archive(
         symlink_targets: dict[str, str] = {}
         observed_macho_base: dict[str, dict[str, Any]] = {}
         macho_payloads: dict[str, bytes] = {}
+        tls_payloads: dict[str, bytes] = {}
+        launcher_payloads: dict[str, bytes] = {}
         for index, value in enumerate(raw_records):
             record = _json_object(value, f"manifest.contents.files[{index}]")
             relative = _string(record.get("path"), "manifest file path")
@@ -637,6 +693,10 @@ def inspect_archive(
                 archived_mode = stat.S_IMODE(info.external_attr >> 16)
                 if record.get("mode") != archived_mode:
                     raise ValueError(f"app manifest member mode changed: {relative}")
+                if relative in {CERTIFI_CA_SOURCE_PATH, CA_BUNDLE_PATH}:
+                    tls_payloads[relative] = payload
+                if relative in {CLI_LAUNCHER_PATH, WEB_LAUNCHER_PATH}:
+                    launcher_payloads[relative] = payload
                 if payload[:4] in _MACHO_MAGICS:
                     slices = macho_slices_bytes(payload, label=relative)
                     if len(slices) != 1 or slices[0]["architecture"] != "arm64":
@@ -670,6 +730,44 @@ def inspect_archive(
             raise ValueError("app manifest file count changed")
         if contents.get("payload_sha256") != payload_sha256(expected_records):
             raise ValueError("app payload projection SHA-256 changed")
+
+        try:
+            source_ca_payload = tls_payloads[CERTIFI_CA_SOURCE_PATH]
+            packaged_ca_payload = tls_payloads[CA_BUNDLE_PATH]
+        except KeyError as exc:
+            raise ValueError("locked certifi source or packaged CA bundle is missing") from exc
+        if source_ca_payload != packaged_ca_payload:
+            raise ValueError("packaged CA bundle differs from the locked certifi source")
+        ca_sha256 = hashlib.sha256(packaged_ca_payload).hexdigest()
+        begin_count = packaged_ca_payload.count(b"-----BEGIN CERTIFICATE-----")
+        end_count = packaged_ca_payload.count(b"-----END CERTIFICATE-----")
+        if (
+            source_ca.get("bytes") != len(source_ca_payload)
+            or packaged_ca.get("bytes") != len(packaged_ca_payload)
+            or source_ca.get("sha256") != ca_sha256
+            or packaged_ca.get("sha256") != ca_sha256
+            or packaged_ca.get("certificate_count") != begin_count
+            or begin_count < 100
+            or begin_count != end_count
+        ):
+            raise ValueError("packaged CA bundle identity differs from the manifest")
+        unset_line = "unset " + " ".join(
+            (*TLS_CA_FILE_ENVIRONMENT_VARIABLES, TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE)
+        )
+        launcher_fragments = (
+            f'CA_BUNDLE="$CONTENTS_DIR/{PurePosixPath(CA_BUNDLE_PATH).relative_to("Contents")}"',
+            f'CA_DIRECTORY="$CONTENTS_DIR/{PurePosixPath(CA_DIRECTORY_PATH).relative_to("Contents")}"',
+            unset_line,
+            *(f'export {name}="$CA_BUNDLE"' for name in TLS_CA_FILE_ENVIRONMENT_VARIABLES),
+            f'export {TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE}="$CA_DIRECTORY"',
+        )
+        for relative in (CLI_LAUNCHER_PATH, WEB_LAUNCHER_PATH):
+            try:
+                launcher_text = launcher_payloads[relative].decode("utf-8")
+            except (KeyError, UnicodeDecodeError) as exc:
+                raise ValueError(f"app launcher is missing or not UTF-8: {relative}") from exc
+            if any(fragment not in launcher_text for fragment in launcher_fragments):
+                raise ValueError(f"app launcher does not enforce packaged TLS trust: {relative}")
 
         for relative, target in symlink_targets.items():
             _resolved_bundle_destination(
@@ -740,6 +838,7 @@ def inspect_archive(
         "build_identity": build_identity,
         "python_runtime": runtime,
         "locked_dependencies": locked_dependencies,
+        "tls_trust": tls_trust,
         "contents": {
             "file_count": len(expected_records),
             "payload_sha256": contents["payload_sha256"],

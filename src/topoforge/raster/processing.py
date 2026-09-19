@@ -6,7 +6,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -27,7 +27,9 @@ from shapely.geometry import box, shape
 
 from topoforge.exceptions import RasterProcessingError
 from topoforge.models import AreaOfInterest, BuildConfig, DatasetMetadata, RasterResult
+from topoforge.models.domain import ElevationConversion
 from topoforge.raster.aoi import aoi_provenance, normalize_area_of_interest
+from topoforge.raster.dependencies import raster_dependency_records
 from topoforge.raster.sampling import SamplingDecision, resolve_sampling_decision
 from topoforge.util.hashing import sha256_file
 
@@ -59,6 +61,7 @@ class _SourceFacts:
     raw_elevation_min_m: float
     raw_elevation_max_m: float
     raw_peak_coordinate: dict[str, object]
+    elevation_conversion: ElevationConversion
     tags: dict[str, str]
     aoi_report: dict[str, object] | None
 
@@ -386,6 +389,94 @@ def _window_for_aoi(source: DatasetReader, aoi: AreaOfInterest) -> _SourceSelect
     )
 
 
+def _elevation_unit_to_m(unit: str) -> float:
+    normalized = " ".join(unit.strip().casefold().replace("_", " ").replace("-", " ").split())
+    if normalized in {"m", "metre", "metres", "meter", "meters"}:
+        return 1.0
+    if normalized in {"ft", "foot", "feet", "international foot", "international feet"}:
+        return 0.3048
+    if normalized in {
+        "us survey foot",
+        "us survey feet",
+        "u.s. survey foot",
+        "u.s. survey feet",
+        "survey foot",
+        "survey feet",
+        "us ft",
+        "ft us",
+        "foot us",
+    }:
+        return 1200.0 / 3937.0
+    raise RasterProcessingError(
+        f"Unsupported elevation unit {unit!r}; convert the DEM elevations to metres or "
+        "declare a supported band unit (metre, ft, or US survey foot) before building"
+    )
+
+
+def _source_elevation_conversion(source: DatasetReader) -> ElevationConversion:
+    scale, offset = float(source.scales[0]), float(source.offsets[0])
+    if not math.isfinite(scale) or not math.isfinite(offset):
+        raise RasterProcessingError(
+            "Raster band 1 has a non-finite elevation scale or offset; correct its "
+            "scale/offset metadata or export physical elevations in metres before building"
+        )
+    declarations: list[tuple[str, Literal["band", "band-tag", "dataset-tag"]]] = []
+    if source.units[0] is not None:
+        declarations.append((source.units[0], "band"))
+    for tags, origin in ((source.tags(1), "band-tag"), (source.tags(), "dataset-tag")):
+        for key, value in tags.items():
+            if key.upper() in {"UNITS", "UNITTYPE"}:
+                declarations.append((value, cast(Literal["band-tag", "dataset-tag"], origin)))
+    if not declarations:
+        return ElevationConversion(
+            scale=scale,
+            offset=offset,
+            source_unit=None,
+            unit_source="assumed-metres",
+            unit_to_m=1.0,
+        )
+    factors = [_elevation_unit_to_m(unit) for unit, _origin in declarations]
+    if any(factor != factors[0] for factor in factors[1:]):
+        raise RasterProcessingError(
+            "Raster band 1 has conflicting elevation units in band metadata and unit tags; "
+            "correct the unit declarations or export elevations in metres before building"
+        )
+    return ElevationConversion(
+        scale=scale,
+        offset=offset,
+        source_unit=declarations[0][0],
+        unit_source=declarations[0][1],
+        unit_to_m=factors[0],
+    )
+
+
+def _read_elevations_m(
+    source: DatasetReader, window: Window, conversion: ElevationConversion
+) -> FloatArray:
+    raw = source.read(1, window=window, masked=True)
+    if raw.dtype.kind not in "biuf":
+        raise RasterProcessingError(
+            "Raster band 1 does not contain real numeric elevations; export a real-valued "
+            "DEM with elevation units before building"
+        )
+    # Decode before float32 storage: large integer encodings can carry relief that is
+    # lost if rounded to float32 before their scale and offset are applied.
+    elevations = np.asarray(raw.astype(np.float64).filled(np.nan), dtype=np.float64)
+    missing = ~np.isfinite(elevations)
+    with np.errstate(over="ignore", invalid="ignore"):
+        elevations *= conversion.scale
+        elevations += conversion.offset
+        elevations *= conversion.unit_to_m
+        result = elevations.astype(np.float32)
+    if bool(np.any(~np.isfinite(result) & ~missing)):
+        raise RasterProcessingError(
+            "Decoded elevations exceed the finite float32 metre range; correct the "
+            "band scale/offset/units or export representable elevations in metres"
+        )
+    result[missing] = np.nan
+    return result
+
+
 def _read_source(
     path: Path, aoi: AreaOfInterest | None
 ) -> tuple[FloatArray, Affine, CRS, _SourceFacts]:
@@ -402,6 +493,7 @@ def _read_source(
                 f"Raster {path} has no horizontal CRS; assign the correct CRS before building"
             )
         source_crs = CRS.from_user_input(source.crs)
+        elevation_conversion = _source_elevation_conversion(source)
         full_shape = (source.height, source.width)
         selection = _SourceSelection(
             windows=(Window.from_slices((0, source.height), (0, source.width)),),
@@ -410,11 +502,7 @@ def _read_source(
         if aoi is not None:
             selection = _window_for_aoi(source, aoi)
         source_parts = [
-            np.asarray(
-                source.read(1, window=window, masked=True).astype(np.float32).filled(np.nan),
-                dtype=np.float32,
-            )
-            for window in selection.windows
+            _read_elevations_m(source, window, elevation_conversion) for window in selection.windows
         ]
         source_data = (
             source_parts[0]
@@ -504,6 +592,7 @@ def _read_source(
             raw_elevation_min_m=raw_min,
             raw_elevation_max_m=raw_max,
             raw_peak_coordinate=raw_peak,
+            elevation_conversion=elevation_conversion,
             tags=tags,
             aoi_report=aoi_report,
         )
@@ -707,6 +796,7 @@ def _write_processed_raster(
     }
     with rasterio.open(output_path, "w", dtype="float32", predictor=3, **common) as target:
         target.write(elevations.astype(np.float32, copy=False), 1)
+        target.set_band_unit(1, "metre")
         target.update_tags(
             UNITS="metre",
             ORIGINAL_NODATA_MASK=mask_path.name,
@@ -748,6 +838,12 @@ def process_local_raster(config: BuildConfig) -> ProcessedRaster:
     source_path = config.dem_path.expanduser().resolve()
     if not source_path.is_file():
         raise RasterProcessingError(f"DEM file does not exist: {source_path}")
+    source_dependencies = raster_dependency_records(source_path)
+    source_checksums = {
+        **config.source_checksums,
+        source_path.name: sha256_file(source_path),
+        **{name: str(record["sha256"]) for name, record in source_dependencies.items()},
+    }
     normalized_aoi = normalize_area_of_interest(config.aoi) if config.aoi is not None else None
     elevations, propagated_mask, transform, crs, source = _read_to_metric_grid(
         source_path, normalized_aoi
@@ -861,6 +957,7 @@ def process_local_raster(config: BuildConfig) -> ProcessedRaster:
             if config.vertical_datum != "unknown"
             else tags.get("VERTICAL_DATUM", "unknown")
         ),
+        elevation_conversion=source.elevation_conversion,
         license=(
             config.data_license
             if config.data_license != "user-supplied; verify source terms"
@@ -890,11 +987,7 @@ def process_local_raster(config: BuildConfig) -> ProcessedRaster:
             if tags.get("SOURCE_URL")
             else []
         ),
-        checksums=(
-            config.source_checksums
-            if config.source_checksums
-            else {source_path.name: sha256_file(source_path)}
-        ),
+        checksums=source_checksums,
     )
     physical_spacing = sum(decision.physical_spacing_xy_mm) / 2.0
     report = RasterResult(

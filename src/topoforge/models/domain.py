@@ -5,8 +5,16 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 
 class DatasetType(StrEnum):
@@ -125,6 +133,20 @@ class AreaOfInterest(BaseModel):
     normalization_method: str
 
 
+class ElevationConversion(BaseModel):
+    """Source-band decoding applied before elevation processing in metres."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scale: float = Field(allow_inf_nan=False)
+    offset: float = Field(allow_inf_nan=False)
+    source_unit: str | None
+    unit_source: Literal["band", "band-tag", "dataset-tag", "assumed-metres"]
+    unit_to_m: float = Field(gt=0, allow_inf_nan=False)
+    output_unit: Literal["metre"] = "metre"
+    formula: Literal["(raw * scale + offset) * unit_to_m"] = "(raw * scale + offset) * unit_to_m"
+
+
 class DatasetMetadata(BaseModel):
     """Dataset semantics and provenance that must survive every build."""
 
@@ -138,12 +160,21 @@ class DatasetMetadata(BaseModel):
     horizontal_crs: str
     vertical_crs: str = "unknown"
     vertical_datum: str = "unknown"
+    elevation_conversion: ElevationConversion | None = None
     license: str = "user-supplied; verify source terms"
     attribution: str = "Provided by the user"
     acquisition_period: str = "unknown"
     download_time: str = "unknown"
     source_urls: list[str] = Field(default_factory=list)
     checksums: dict[str, str] = Field(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def serialize_metadata(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Keep legacy acquisition bytes stable when no conversion was recorded."""
+        payload = cast(dict[str, Any], handler(self))
+        if self.elevation_conversion is None:
+            payload.pop("elevation_conversion", None)
+        return payload
 
 
 class PrinterProfile(BaseModel):

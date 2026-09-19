@@ -15,6 +15,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol
 
+from topoforge.process_containment import enable_windows_process_containment
+
 _WINDOWS_CREATE_NEW_PROCESS_GROUP = 0x00000200
 _WINDOWS_PROCESS_TERMINATE = 0x0001
 _WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
@@ -24,9 +26,6 @@ _WINDOWS_ERROR_INVALID_PARAMETER = 87
 _WINDOWS_WAIT_OBJECT_0 = 0
 _WINDOWS_WAIT_TIMEOUT = 258
 _WINDOWS_WAIT_FAILED = 0xFFFFFFFF
-_WINDOWS_JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
-_WINDOWS_JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
-_WINDOWS_JOB_HANDLE: Any | None = None
 
 _DARWIN_PROC_PGRP_ONLY = 2
 _DARWIN_PROC_PIDTBSDINFO = 3
@@ -850,88 +849,9 @@ def enable_current_process_containment(
     platform_family: ProcessPlatform | None = None,
 ) -> None:
     """Put a Windows worker in a kill-on-close Job Object before it spawns children."""
-    global _WINDOWS_JOB_HANDLE
     family = platform_family or current_process_platform()
-    if family is not ProcessPlatform.WINDOWS:
-        return
-    if os.name != "nt":
-        raise OSError("Windows process containment is unavailable on this host")
-    if _WINDOWS_JOB_HANDLE is not None:
-        return
-    from ctypes import wintypes
-
-    class IoCounters(ctypes.Structure):
-        _fields_ = [
-            ("read_operation_count", ctypes.c_ulonglong),
-            ("write_operation_count", ctypes.c_ulonglong),
-            ("other_operation_count", ctypes.c_ulonglong),
-            ("read_transfer_count", ctypes.c_ulonglong),
-            ("write_transfer_count", ctypes.c_ulonglong),
-            ("other_transfer_count", ctypes.c_ulonglong),
-        ]
-
-    class BasicLimitInformation(ctypes.Structure):
-        _fields_ = [
-            ("per_process_user_time_limit", ctypes.c_longlong),
-            ("per_job_user_time_limit", ctypes.c_longlong),
-            ("limit_flags", wintypes.DWORD),
-            ("minimum_working_set_size", ctypes.c_size_t),
-            ("maximum_working_set_size", ctypes.c_size_t),
-            ("active_process_limit", wintypes.DWORD),
-            ("affinity", ctypes.c_size_t),
-            ("priority_class", wintypes.DWORD),
-            ("scheduling_class", wintypes.DWORD),
-        ]
-
-    class ExtendedLimitInformation(ctypes.Structure):
-        _fields_ = [
-            ("basic_limit_information", BasicLimitInformation),
-            ("io_info", IoCounters),
-            ("process_memory_limit", ctypes.c_size_t),
-            ("job_memory_limit", ctypes.c_size_t),
-            ("peak_process_memory_used", ctypes.c_size_t),
-            ("peak_job_memory_used", ctypes.c_size_t),
-        ]
-
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    create_job = kernel32.CreateJobObjectW
-    create_job.argtypes = (ctypes.c_void_p, wintypes.LPCWSTR)
-    create_job.restype = wintypes.HANDLE
-    set_information = kernel32.SetInformationJobObject
-    set_information.argtypes = (wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
-    set_information.restype = wintypes.BOOL
-    assign_process = kernel32.AssignProcessToJobObject
-    assign_process.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
-    assign_process.restype = wintypes.BOOL
-    get_current_process = kernel32.GetCurrentProcess
-    get_current_process.restype = wintypes.HANDLE
-    close_handle = kernel32.CloseHandle
-    close_handle.argtypes = (wintypes.HANDLE,)
-    close_handle.restype = wintypes.BOOL
-
-    handle = create_job(None, None)
-    if not handle:
-        error = ctypes.get_last_error()
-        raise OSError(error, "CreateJobObjectW failed for the Web worker")
-    information = ExtendedLimitInformation()
-    information.basic_limit_information.limit_flags = _WINDOWS_JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-    if not set_information(
-        handle,
-        _WINDOWS_JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
-        ctypes.byref(information),
-        ctypes.sizeof(information),
-    ):
-        error = ctypes.get_last_error()
-        close_handle(handle)
-        raise OSError(error, "SetInformationJobObject failed for the Web worker")
-    if not assign_process(handle, get_current_process()):
-        error = ctypes.get_last_error()
-        close_handle(handle)
-        raise OSError(
-            error,
-            "AssignProcessToJobObject failed; run TopoForge outside a restrictive parent job",
-        )
-    _WINDOWS_JOB_HANDLE = handle
+    if family is ProcessPlatform.WINDOWS:
+        enable_windows_process_containment()
 
 
 def terminate_process_tree(

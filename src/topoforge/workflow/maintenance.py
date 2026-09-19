@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from topoforge import __version__
 from topoforge.exceptions import ConfigurationError
 from topoforge.platforms import path_is_link_like, stat_result_is_link_like
+from topoforge.raster.dependencies import raster_dependency_records
 from topoforge.util import preflight_zip_central_directory, sha256_bytes
 from topoforge.workflow.local import LocalWorkflowManifest
 
@@ -750,6 +751,9 @@ def _disk_probe(path: Path) -> Path:
 
 def _external_reference_paths(config: WorkflowLaunchConfig) -> tuple[Path, ...]:
     values = [config.build.dem_path, *config.slicer_settings, *config.slicer_filaments]
+    dem = config.build.dem_path.expanduser().resolve()
+    if config.global_source is None and dem.is_file():
+        values.extend(dem.parent / name for name in raster_dependency_records(dem))
     if config.overlay is not None:
         values.extend(source.path for source in config.overlay.sources if source.path is not None)
     if config.build.source_acquisition_manifest is not None:
@@ -1891,6 +1895,14 @@ def _external_backup_files(
     config: WorkflowLaunchConfig,
 ) -> list[_BackupSource]:
     files: list[_BackupSource] = []
+    dem = config.build.dem_path.expanduser().resolve()
+    dependencies = (
+        raster_dependency_records(dem) if config.global_source is None and dem.is_file() else {}
+    )
+    # Keep the original basename and sibling relationship for GDAL discovery.
+    # Unrelated external files retain their historical collision-proof names.
+    raster_files = {dem, *(dem.parent / name for name in dependencies)} if dependencies else set()
+    raster_group = sha256_bytes(str(dem).encode("utf-8"))[:12]
     for path in _external_reference_paths(config):
         parent_identity = _capture_directory_identity(
             path.parent,
@@ -1903,7 +1915,11 @@ def _external_backup_files(
             context="referenced external workflow file",
         )
         path_id = sha256_bytes(str(path).encode("utf-8"))[:12]
-        archive_path = f"external/{path_id}-{digest[:12]}-{path.name}"
+        archive_path = (
+            f"external/raster-{raster_group}/{path.name}"
+            if path in raster_files
+            else f"external/{path_id}-{digest[:12]}-{path.name}"
+        )
         files.append(
             _BackupSource(
                 WorkflowBackupFile(

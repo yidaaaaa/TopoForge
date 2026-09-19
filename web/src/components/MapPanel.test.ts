@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { JobMapManifest } from "../types";
 import { mapStyle, rasterSourceBounds } from "./MapPanel";
+import { savedReferenceCamera } from "./referenceMap";
 
 const manifest: JobMapManifest = {
   schema_version: "topoforge-web-map-v1",
@@ -63,7 +64,7 @@ describe("MapLibre local terrain style", () => {
 
   it("keeps the optional OSM source separate from local terrain", () => {
     const style = mapStyle(true, manifest, "elevation");
-    expect(style.sources.osm).toMatchObject({ type: "raster" });
+    expect(style.sources.osm).toMatchObject({ type: "vector", tiles: [`${window.location.origin}/api/v1/reference/tiles/{z}/{x}/{y}.mvt`], maxzoom: 14 });
     expect(style.sources["job-terrain"]).toMatchObject({
       tiles: [
         "/api/v1/jobs/job-phase10/map/tiles/elevation/{z}/{x}/{y}.png",
@@ -78,5 +79,86 @@ describe("MapLibre local terrain style", () => {
       180.3,
       -15.5,
     ]);
+  });
+});
+
+
+describe("reference map contents", () => {
+  it.each([false, true])("never adds unfiltered political line tiles (online=%s)", (online) => {
+    const style = mapStyle(online);
+    const layers = style.layers.filter((layer) => "source-layer" in layer);
+    expect(layers.every((layer) => !["boundaries"].includes(("source-layer" in layer ? layer["source-layer"] : "") ?? ""))).toBe(true);
+    expect(style.sources).not.toHaveProperty("countries");
+    expect(style.sources["reference-boundaries"]).toMatchObject({
+      type: "geojson", data: expect.stringContaining(window.location.origin),
+    });
+    expect(style.layers.some((layer) => layer.id === "country-borders")).toBe(false);
+    expect(style.glyphs).toBeUndefined();
+    if (online) {
+      expect(layers.map((layer) => "source-layer" in layer ? layer["source-layer"] : undefined)).toEqual(expect.arrayContaining(["streets", "street_labels", "place_labels"]));
+    } else {
+      expect(style.sources).not.toHaveProperty("osm");
+    }
+  });
+  it("selects Chinese or English place names without changing the AOI layers", () => {
+    const zh = mapStyle(true, null, "terrain", "zh-CN");
+    const en = mapStyle(true, null, "terrain", "en");
+    expect(JSON.stringify(zh.layers.find((layer) => layer.id === "osm-places"))).toContain("name_zh");
+    expect(JSON.stringify(en.layers.find((layer) => layer.id === "osm-places"))).toContain("name_en");
+    expect(zh.layers.filter((layer) => layer.id.startsWith("aoi-"))).toEqual(en.layers.filter((layer) => layer.id.startsWith("aoi-")));
+  });
+});
+
+
+it("routes cache-only maps through a separate absolute URL without changing layers", () => {
+  const online = mapStyle(true);
+  const cached = mapStyle(true, null, "terrain", "zh-CN", true);
+  expect(cached.sources.osm).toMatchObject({
+    tiles: [`${window.location.origin}/api/v1/reference/tiles/{z}/{x}/{y}.mvt?cache_only=true`],
+  });
+  expect(cached.layers).toEqual(online.layers);
+});
+
+
+it("restores the last camera and rejects broken or out-of-range saved coordinates", () => {
+  localStorage.setItem("topoforge-reference-camera", JSON.stringify({ center: [120.155, 30.25], zoom: 13 }));
+  expect(savedReferenceCamera()).toEqual({ center: [120.155, 30.25], zoom: 13 });
+  for (const value of ["broken", "null", JSON.stringify({ center: [120, 95], zoom: 13 }), JSON.stringify({ center: [120, 30], zoom: 99 })]) {
+    localStorage.setItem("topoforge-reference-camera", value);
+    expect(savedReferenceCamera()).toBeNull();
+  }
+  localStorage.removeItem("topoforge-reference-camera");
+});
+
+
+describe("optional online terrain reference", () => {
+  it("adds Terrarium hillshade without a completed job and keeps borders and AOI identical", () => {
+    const standard = mapStyle(true);
+    const shaded = mapStyle(true, null, "terrain", "zh-CN", false, "terrain");
+    expect(standard.sources).not.toHaveProperty("reference-dem");
+    expect(shaded.sources["reference-dem"]).toMatchObject({ type: "raster-dem", encoding: "terrarium", tileSize: 256, maxzoom: 14 });
+    const layers = shaded.layers.map(layer => layer.id);
+    expect(layers.indexOf("reference-hillshade")).toBeGreaterThan(layers.indexOf("osm-land-background"));
+    expect(layers.indexOf("reference-hillshade")).toBeLessThan(layers.indexOf("osm-ocean"));
+    expect(layers.indexOf("reference-hillshade")).toBeLessThan(layers.indexOf("osm-street-labels"));
+    expect(shaded.sources["reference-boundaries"]).toEqual(standard.sources["reference-boundaries"]);
+    expect(shaded.layers.filter(layer => layer.id.startsWith("reference-") && layer.type === "line" || layer.id.startsWith("aoi-")))
+      .toEqual(standard.layers.filter(layer => layer.id.startsWith("reference-") && layer.type === "line" || layer.id.startsWith("aoi-")));
+    expect(shaded.terrain).toBeUndefined(); // A 2D reference never changes the selection geometry.
+  });
+
+  it("routes both online sources through cache-only endpoints and removes DEM when disabled", () => {
+    const cached = mapStyle(true, null, "terrain", "en", true, "terrain");
+    expect(cached.sources["reference-dem"]).toMatchObject({ tiles: [`${location.origin}/api/v1/reference/terrain/{z}/{x}/{y}.png?cache_only=true`] });
+    expect(cached.sources.osm).toMatchObject({ tiles: [`${location.origin}/api/v1/reference/tiles/{z}/{x}/{y}.mvt?cache_only=true`] });
+    expect(mapStyle(false, null, "terrain", "en", true, "terrain").sources).not.toHaveProperty("reference-dem");
+  });
+
+  it("retains processed DEM and manufacturing footprints above the reference hillshade", () => {
+    const shaded = mapStyle(true, manifest, "elevation", "zh-CN", false, "terrain");
+    const standard = mapStyle(true, manifest, "elevation");
+    expect(shaded.sources["job-terrain"]).toEqual(standard.sources["job-terrain"]);
+    expect(shaded.sources["manufacturing-tiles"]).toEqual(standard.sources["manufacturing-tiles"]);
+    expect(shaded.layers.findIndex(layer => layer.id === "job-terrain")).toBeGreaterThan(shaded.layers.findIndex(layer => layer.id === "reference-hillshade"));
   });
 });

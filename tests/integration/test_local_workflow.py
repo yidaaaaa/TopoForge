@@ -107,8 +107,9 @@ def test_path_only_build_cannot_write_replacement_workspace_after_real_directory
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    source = tmp_path / "identity-only-source.tif"
-    source.write_bytes(b"identity-only source; build is intercepted\n")
+    source = create_synthetic_geotiff(
+        tmp_path / "source.tif", SyntheticTerrain.SLOPE, rows=4, columns=4
+    )
     workspace = tmp_path / "workflow"
     workspace.mkdir()
     workspace_stat = workspace.stat()
@@ -284,8 +285,9 @@ def test_local_run_resumes_after_slice_failure_and_reuses_verified_stages(
 
 
 def test_project_evidence_requires_slicing_and_official_bambu(tmp_path: Path) -> None:
-    source = tmp_path / "source.tif"
-    source.write_bytes(b"identity-only test source")
+    source = create_synthetic_geotiff(
+        tmp_path / "source.tif", SyntheticTerrain.SLOPE, rows=4, columns=4
+    )
     build = BuildConfig(
         dem_path=source,
         output_dir=tmp_path / "workflow",

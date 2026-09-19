@@ -32,6 +32,7 @@ from shapely.ops import transform, unary_union
 
 from topoforge.exceptions import ConfigurationError
 from topoforge.models import ScalingResult
+from topoforge.overlays.draping import draped_polygon_mesh
 from topoforge.overlays.models import OverlayKind, OverlaySourceConfig
 from topoforge.overlays.sources import ParsedOverlayFeature
 
@@ -468,39 +469,6 @@ def _polygon_parts(geometry: BaseGeometry) -> list[Polygon]:
     return []
 
 
-def _draped_polygon_mesh(
-    polygon: Polygon,
-    surface: TerrainSurface,
-    *,
-    raised_height_mm: float,
-    embed_depth_mm: float,
-) -> tuple[trimesh.Trimesh, float]:
-    thickness = raised_height_mm + embed_depth_mm
-    planar = trimesh.creation.extrude_polygon(polygon, height=thickness, engine="earcut")
-    if not isinstance(planar, trimesh.Trimesh) or len(planar.faces) == 0:
-        raise ConfigurationError("overlay footprint extrusion produced no faces")
-    vertices = np.asarray(planar.vertices, dtype=np.float64).copy()
-    surface_z = surface.surface_z_mm(vertices[:, :2])
-    top = vertices[:, 2] > thickness / 2.0
-    vertices[top, 2] = surface_z[top] + raised_height_mm
-    vertices[~top, 2] = surface_z[~top] - embed_depth_mm
-    mesh = trimesh.Trimesh(
-        vertices=vertices,
-        faces=np.asarray(planar.faces, dtype=np.int64).copy(),
-        process=False,
-        validate=False,
-    )
-    if float(mesh.volume) < 0:
-        mesh.invert()
-    if not bool(mesh.is_watertight) or not bool(mesh.is_winding_consistent):
-        raise ConfigurationError("draped overlay footprint is not a closed consistent mesh")
-    if float(mesh.volume) <= 0:
-        raise ConfigurationError("draped overlay footprint has non-positive volume")
-    reopened_surface = surface.surface_z_mm(vertices[:, :2])
-    error = float(np.max(np.abs(reopened_surface - surface_z)))
-    return mesh, error
-
-
 def build_layer_mesh(
     surface: TerrainSurface,
     source: OverlaySourceConfig,
@@ -508,6 +476,7 @@ def build_layer_mesh(
     *,
     minimum_feature_mm: float,
     allow_original_nodata: bool,
+    max_triangles: int = 2_000_000,
 ) -> tuple[trimesh.Trimesh, float, float, tuple[BaseGeometry, ...]]:
     """Build one independent, watertight overlay object from model-frame features."""
     if source.kind is not OverlayKind.LABEL and source.style.line_width_mm < minimum_feature_mm:
@@ -541,15 +510,18 @@ def build_layer_mesh(
         )
     meshes: list[trimesh.Trimesh] = []
     maximum_error = 0.0
+    triangle_count = 0
     for polygon in _polygon_parts(footprint_union):
         if polygon.area <= 1e-12:
             continue
-        mesh, error = _draped_polygon_mesh(
+        mesh, error = draped_polygon_mesh(
             polygon,
             surface,
             raised_height_mm=source.style.raised_height_mm,
             embed_depth_mm=source.style.embed_depth_mm,
+            max_triangles=max_triangles - triangle_count,
         )
+        triangle_count += len(mesh.faces)
         meshes.append(mesh)
         maximum_error = max(maximum_error, error)
     if not meshes:

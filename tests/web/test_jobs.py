@@ -16,6 +16,12 @@ from typing import Any, cast
 import pytest
 
 from topoforge.exceptions import ConfigurationError
+from topoforge.providers import (
+    ProviderEvaluation,
+    ProviderSelectionError,
+    ProviderSelectionPolicy,
+    ProviderSelectionTrace,
+)
 from topoforge.util import sha256_file
 from topoforge.web import jobs as jobs_module
 from topoforge.web import security as security_module
@@ -617,6 +623,36 @@ def test_worker_failure_is_structured_and_retained(web_config: WebAppConfig) -> 
         assert (manager.jobs_dir / failed.job_id / "stderr.log").is_file()
     finally:
         manager.close()
+
+
+def test_worker_provider_failure_retains_evaluation_reason_in_task_error() -> None:
+    trace = ProviderSelectionTrace(
+        policy=ProviderSelectionPolicy(),
+        evaluations=[
+            ProviderEvaluation(
+                provider_id="copernicus-aws",
+                provider_name="Copernicus DEM AWS",
+                registry_order=0,
+                status="probe-failed",
+                reasons=[
+                    "coverage probe failed with URLError: [SSL: CERTIFICATE_VERIFY_FAILED] "
+                    "unable to get local issuer certificate"
+                ],
+            )
+        ],
+        ranked_provider_ids=[],
+        fetch_attempts=[],
+        outcome="no-eligible-provider",
+    )
+
+    error = worker_module._failure(
+        ProviderSelectionError("no provider satisfied the selection policy", trace)
+    )
+
+    assert error.exception_type == "ProviderSelectionError"
+    assert "copernicus-aws[probe-failed/tls-certificate]" in error.message
+    assert "CERTIFICATE_VERIFY_FAILED" in error.message
+    assert "unable to get local issuer certificate" in error.message
 
 
 def test_running_and_queued_jobs_cancel_without_touching_other_records(

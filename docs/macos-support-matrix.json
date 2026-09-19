@@ -246,7 +246,7 @@
     "builder_host_requirement": "native stable macOS 15 or 26 arm64 without Rosetta",
     "archive_determinism": "two builds of one source commit must be byte-identical",
     "hosted_evidence_scope": "hosted-package",
-    "workflow_run_status": "run-31670153746-passed-hosted-but-candidate-invalidated",
+    "workflow_run_status": "run-31738905128-reproduced-ca-failure-replacement-gated",
     "invalidated_candidates": [
       {
         "source_commit": "ce1b5dabc9f5a69dcf2c64536076fc88827112fb",
@@ -255,6 +255,15 @@
         "archive_sha256": "7036ea340734d284b9b406b43dbb9547ba6e28186fe16aee4433a5e4ff0c6e78",
         "app_payload_sha256": "580fd9c2911117958ca15658814db33769fb8577d329b1c413f23782bdb6fa13",
         "invalidation": "A real user launch without /Library/Frameworks/Python.framework failed because embedded _ssl referenced the external framework libssl.3.dylib.",
+        "usable_candidate": false
+      },
+      {
+        "source_commit": "a5366a8ea2c47e204fe8c933852f3e146b3e69d7",
+        "workflow_run_id": 31731949652,
+        "workflow_run_url": "https://github.com/yidaaaaa/TopoForge/actions/runs/31731949652",
+        "archive_sha256": "d745e5d22a2e7e3862a263f2763efdc3232d8643bcdd9887c7e05c69b5b5c4bc",
+        "app_payload_sha256": "bb24493c3cf8863beffbbfe2ba7f144137c14dacfb32cbeb3f63770fc71b4eb5",
+        "invalidation": "A real user land-AOI fetch failed because neither launcher selected the bundled locked certifi CA collection. Diagnostic run 31738905128 reproduced SSLCertVerificationError on macOS 15 and 26 with host CA paths unavailable.",
         "usable_candidate": false
       }
     ],
@@ -274,6 +283,15 @@
       "host_filesystem_resolution_allowed": false,
       "native_loaded_image_inventory_required": true,
       "dyld_fallback_environment_allowed": false
+    },
+    "tls_trust_closure": {
+      "source_package": "locked certifi dependency",
+      "bundle_resource_required": true,
+      "manifest_hash_binding_required": true,
+      "external_ca_environment_allowed": false,
+      "candidate_python_https_handshake_required": true,
+      "packaged_web_copernicus_acquisition_required": true,
+      "host_ca_masking_allowed": false
     },
     "clean_system_evidence": false,
     "signed": false,

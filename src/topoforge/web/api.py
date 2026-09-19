@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import sqlite3
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import asynccontextmanager
 from importlib.resources import files
@@ -19,7 +21,7 @@ from starlette.background import BackgroundTask
 from starlette.types import Receive, Scope, Send
 
 from topoforge import __version__
-from topoforge.exceptions import ConfigurationError
+from topoforge.exceptions import ConfigurationError, ProviderCacheMissError, ProviderFetchError
 from topoforge.models import AreaOfInterest, AreaOfInterestInput
 from topoforge.raster import normalize_area_of_interest
 from topoforge.util import sha256_file
@@ -54,7 +56,26 @@ from topoforge.web.models import (
     WorkflowCleanupRequest,
     WorkflowRestoreRequest,
 )
+from topoforge.web.place_search import (
+    PUBLIC_GEOCODER,
+    PUBLIC_POLICY,
+    PlaceSearchBusyError,
+    PlaceSearchRequest,
+    PublicSearchDisabledError,
+    WebPlaceSearch,
+)
+from topoforge.web.reference_maps import (
+    read_local_standard_map,
+    read_standard_map_pyramid,
+    read_standard_map_tile,
+)
+from topoforge.web.reference_tiles import (
+    ReferenceTileCache,
+    ReferenceTileUnavailable,
+    fetch_reference_tile,
+)
 from topoforge.web.security import request_host_is_allowed, request_mutation_is_allowed
+from topoforge.web.terrain_tiles import fetch_terrain_tile
 from topoforge.workflow import WorkflowCleanupResult
 
 
@@ -166,7 +187,18 @@ def create_app(
     assets = (static_dir or bundled_static_dir()).resolve()
     verify_static_assets(assets)
 
+    place_search = WebPlaceSearch(
+        resolved.state_dir,
+        endpoint=os.environ.get("TOPOFORGE_GEOCODER_URL", PUBLIC_GEOCODER),
+    )
     visualization = WebVisualizationService(jobs)
+    reference_cache = ReferenceTileCache(
+        resolved.state_dir / "reference-map" / "shortbread-v1.sqlite3"
+    )
+
+    terrain_reference_cache = ReferenceTileCache(
+        resolved.state_dir / "reference-map" / "mapzen-terrarium-v1.sqlite3"
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -187,6 +219,7 @@ def create_app(
     app.state.job_manager = jobs
     app.state.web_config = resolved
     app.state.visualization_service = visualization
+    app.state.place_search = place_search
 
     @app.middleware("http")
     async def loopback_host(
@@ -227,10 +260,10 @@ def create_app(
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "img-src 'self' data: blob: https://tile.openstreetmap.org; "
+            "img-src 'self' data: blob:; "
             "style-src 'self' 'unsafe-inline'; "
             "worker-src 'self' blob:; "
-            "connect-src 'self' https://tile.openstreetmap.org; "
+            "connect-src 'self'; "
             "script-src 'self'; "
             "font-src 'self'; "
             "object-src 'none'; "
@@ -247,6 +280,141 @@ def create_app(
                     "code": "configuration-error",
                     "message": str(exc),
                 }
+            },
+        )
+
+    @app.get("/api/v1/places/config")
+    def place_search_config() -> JSONResponse:
+        return JSONResponse(
+            content={
+                "endpoint": place_search.endpoint,
+                "is_public": place_search.is_public,
+                "policy_url": PUBLIC_POLICY if place_search.is_public else None,
+                "maximum_candidates": 10,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/v1/places/search")
+    def search_places(payload: PlaceSearchRequest) -> JSONResponse:
+        try:
+            result = place_search.search(payload)
+        except PublicSearchDisabledError as exc:
+            raise HTTPException(status_code=403, detail={"code": "search-disabled"}) from exc
+        except PlaceSearchBusyError as exc:
+            raise HTTPException(
+                status_code=429, detail={"code": "search-busy"}, headers={"Retry-After": "1"}
+            ) from exc
+        except ProviderCacheMissError as exc:
+            raise HTTPException(status_code=409, detail={"code": "search-cache-miss"}) from exc
+        except (ProviderFetchError, OSError, ValueError) as exc:
+            raise HTTPException(status_code=502, detail={"code": "search-unavailable"}) from exc
+        return JSONResponse(
+            content=result.model_dump(mode="json"), headers={"Cache-Control": "no-store"}
+        )
+
+    @app.get("/api/v1/reference/standard-map")
+    def standard_map_metadata() -> JSONResponse:
+        result = read_local_standard_map(resolved.state_dir)
+        content = None
+        if result is not None:
+            metadata, _ = result
+            pyramid = read_standard_map_pyramid(resolved.state_dir, metadata)
+            content = metadata.model_dump(mode="json")
+            content["tile_size_px"] = pyramid.tile_size_px
+            content["max_level"] = pyramid.max_level
+            content["tile_url_template"] = (
+                "/api/v1/reference/standard-map/tiles/{level}/{x}/{y}.png?sha256="
+                + metadata.source_sha256
+            )
+            content["image_url"] = (
+                "/api/v1/reference/standard-map/image?sha256=" + metadata.source_sha256
+            )
+        return JSONResponse(content=content, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/v1/reference/standard-map/tiles/{level}/{x}/{y}.png")
+    def standard_map_tile(level: int, x: int, y: int, sha256: str) -> Response:
+        if not 0 <= level <= 6 or not 0 <= x < 64 or not 0 <= y < 64:
+            raise HTTPException(status_code=404, detail="Original map tile is out of range")
+        payload = read_standard_map_tile(resolved.state_dir, sha256, level, x, y)
+        return Response(
+            content=payload,
+            media_type="image/png",
+            headers={"Cache-Control": "private, max-age=86400"},
+        )
+
+    @app.get("/api/v1/reference/standard-map/image")
+    def standard_map_image(sha256: str = "") -> Response:
+        result = read_local_standard_map(resolved.state_dir)
+        if result is None:
+            raise HTTPException(status_code=404, detail="No local standard map is installed")
+        metadata, image_bytes = result
+        if sha256 != metadata.source_sha256:
+            raise HTTPException(
+                status_code=409, detail="Refresh the reference view to load the current map"
+            )
+        return Response(
+            content=image_bytes,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "private, max-age=86400"},
+        )
+
+    @app.get("/api/v1/reference/tiles/{z}/{x}/{y}.mvt")
+    def reference_tile(z: int, x: int, y: int, cache_only: bool = False) -> Response:
+        if not 0 <= z <= 14 or not 0 <= x < 2**z or not 0 <= y < 2**z:
+            raise HTTPException(status_code=404, detail="Reference tile is out of range")
+        try:
+            payload, cache_state, max_age = reference_cache.get(
+                z, x, y, cache_only=cache_only, fetch=fetch_reference_tile
+            )
+        except ReferenceTileUnavailable as exc:
+            # MapLibre treats 404 as an empty tile; 409 preserves the cache-miss UI signal.
+            raise HTTPException(
+                status_code=409, detail=str(exc), headers={"Cache-Control": "no-store"}
+            ) from exc
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Reference map unavailable; check cache storage and "
+                    "local runtime network or proxy settings"
+                ),
+            ) from exc
+        return Response(
+            payload,
+            media_type="application/vnd.mapbox-vector-tile",
+            headers={
+                "Cache-Control": "no-store" if cache_only else f"public, max-age={max_age}",
+                "X-TopoForge-Cache": cache_state,
+            },
+        )
+
+    @app.get("/api/v1/reference/terrain/{z}/{x}/{y}.png")
+    def terrain_reference_tile(z: int, x: int, y: int, cache_only: bool = False) -> Response:
+        if not 0 <= z <= 14 or not 0 <= x < 2**z or not 0 <= y < 2**z:
+            raise HTTPException(status_code=404, detail="Terrain tile is out of range")
+        try:
+            payload, cache_state, max_age = terrain_reference_cache.get(
+                z, x, y, cache_only=cache_only, fetch=fetch_terrain_tile
+            )
+        except ReferenceTileUnavailable as exc:
+            raise HTTPException(
+                status_code=409,
+                detail="Terrain is not cached; view this area online in terrain mode first",
+                headers={"Cache-Control": "no-store"},
+            ) from exc
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Terrain map unavailable; check cache storage and network settings",
+                headers={"Cache-Control": "no-store"},
+            ) from exc
+        return Response(
+            payload,
+            media_type="image/png",
+            headers={
+                "Cache-Control": "no-store" if cache_only else f"public, max-age={max_age}",
+                "X-TopoForge-Cache": cache_state,
             },
         )
 
@@ -590,6 +758,14 @@ def create_app(
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
         return FileResponse(assets / "index.html", media_type="text/html")
+
+    @app.get("/standard-map.html", include_in_schema=False)
+    def standard_map_viewer() -> FileResponse:
+        return FileResponse(assets / "standard-map.html", media_type="text/html")
+
+    @app.get("/standard-map-viewer.js", include_in_schema=False)
+    def standard_map_viewer_script() -> FileResponse:
+        return FileResponse(assets / "standard-map-viewer.js", media_type="text/javascript")
 
     @app.get("/{path:path}", include_in_schema=False)
     def spa_fallback(path: str) -> FileResponse:
