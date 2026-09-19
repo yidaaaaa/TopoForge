@@ -11,7 +11,7 @@ import type { GeometryCollection, Topology } from "topojson-specification";
 import landTopologyJson from "world-atlas/land-110m.json";
 
 import referenceBoundaryUrl from "../data/reference-boundaries.json?url";
-import { referenceBoundaryLayers, referenceLayers as vectorReferenceLayers, savedReferenceCamera, VECTOR_TILE_URL } from "./referenceMap";
+import { referenceBoundaryLayers, referenceLayers as vectorReferenceLayers, savedReferenceCamera, VECTOR_TILE_URL, TERRAIN_TILE_URL, TERRAIN_ATTRIBUTION } from "./referenceMap";
 
 import { translate } from "../i18n";
 import { fetchStandardMap } from "../api";
@@ -19,17 +19,21 @@ import type {
   JobMapManifest,
   Language,
   MapTileStyle,
+  ReferenceMapStyle,
   NormalizedAoi,
   SourceMode,
   StandardMapInfo,
+  PlaceCandidate,
 } from "../types";
 
 interface MapPanelProps {
   language: Language;
+  locatedPlace?: PlaceCandidate | null;
   sourceMode: SourceMode;
   normalizedAoi: NormalizedAoi | null;
   basemapEnabled: boolean;
   basemapCacheOnly?: boolean;
+  basemapStyle?: ReferenceMapStyle;
   drawMode: "bbox" | "center" | null;
   manifest: JobMapManifest | null;
   selectedTileId: string | null;
@@ -88,6 +92,7 @@ export function mapStyle(
   terrainStyle: MapTileStyle = "terrain",
   language: Language = "zh-CN",
   basemapCacheOnly = false,
+  basemapStyle: ReferenceMapStyle = "standard",
 ): StyleSpecification {
   const sources: StyleSpecification["sources"] = {
     land: { type: "geojson", data: offlineLand },
@@ -107,6 +112,14 @@ export function mapStyle(
       minzoom: 0,
       maxzoom: 14,
       attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>',
+    };
+  }
+
+  if (basemapEnabled && basemapStyle === "terrain") {
+    sources["reference-dem"] = {
+      type: "raster-dem", encoding: "terrarium", tileSize: 256,
+      tiles: [`${window.location.origin}${TERRAIN_TILE_URL}${basemapCacheOnly ? "?cache_only=true" : ""}`],
+      minzoom: 0, maxzoom: 14, attribution: TERRAIN_ATTRIBUTION,
     };
   }
 
@@ -132,6 +145,21 @@ export function mapStyle(
       paint: { "line-color": "#a9bbb8", "line-width": 0.55, "line-opacity": 0.72 },
     }]),
   ];
+  if (basemapEnabled && basemapStyle === "terrain") {
+    // Shade the land below water, roads and labels, including the opaque OSM background.
+    const beforeWater = referenceLayers.findIndex(layer => layer.id === "osm-ocean");
+    referenceLayers.splice(beforeWater, 0, {
+      id: "reference-hillshade", type: "hillshade", source: "reference-dem",
+      paint: {
+        "hillshade-exaggeration": 0.65,
+        "hillshade-shadow-color": "#485543",
+        "hillshade-highlight-color": "#fff9e8",
+        "hillshade-accent-color": "#59624b",
+        "hillshade-illumination-direction": 315,
+        "hillshade-illumination-anchor": "map",
+      },
+    });
+  }
   const terrainLayers: StyleSpecification["layers"] = manifest
     ? [
         {
@@ -199,10 +227,12 @@ function emptyCollection(): FeatureCollection {
 
 export function MapPanel({
   language,
+  locatedPlace = null,
   sourceMode,
   normalizedAoi,
   basemapEnabled,
   basemapCacheOnly = false,
+  basemapStyle = "standard",
   drawMode,
   manifest,
   selectedTileId,
@@ -216,6 +246,8 @@ export function MapPanel({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const styleIdentityRef = useRef("");
   const [basemapError, setBasemapError] = useState(false);
+  const [terrainReferenceError, setTerrainReferenceError] = useState(false);
+  const [terrainReferenceLoading, setTerrainReferenceLoading] = useState(false);
   const [standardMap, setStandardMap] = useState<StandardMapInfo | null>(null);
   const [standardMapError, setStandardMapError] = useState(false);
 
@@ -257,11 +289,11 @@ export function MapPanel({
       return;
     }
     styleIdentityRef.current =
-      `${basemapEnabled}:${manifest?.cache_key ?? "none"}:${terrainStyle}:${language}:${basemapCacheOnly}`;
+      `${basemapEnabled}:${manifest?.cache_key ?? "none"}:${terrainStyle}:${language}:${basemapCacheOnly}:${basemapStyle}`;
     const savedCamera = savedReferenceCamera();
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: mapStyle(basemapEnabled, manifest, terrainStyle, language, basemapCacheOnly),
+      style: mapStyle(basemapEnabled, manifest, terrainStyle, language, basemapCacheOnly, basemapStyle),
       center: manifest?.center_wgs84 ?? savedCamera?.center ?? [20, 25],
       zoom: manifest ? manifest.minzoom : savedCamera?.zoom ?? 1.4,
       attributionControl: false,
@@ -273,21 +305,41 @@ export function MapPanel({
       new maplibregl.AttributionControl({ compact: true }),
       "bottom-right",
     );
+    const attribution = containerRef.current.querySelector(".maplibregl-ctrl-attrib");
+    const attributionSize = new ResizeObserver(() => {
+      if (attribution) containerRef.current?.parentElement?.style.setProperty(
+        "--map-attribution-height", `${Math.ceil(attribution.getBoundingClientRect().height)}px`,
+      );
+    });
+    if (attribution) attributionSize.observe(attribution);
     map.on("load", () =>
       (map.getSource("aoi") as GeoJSONSource | undefined)?.setData(collection),
     );
     map.on("error", (event) => {
+      if ("sourceId" in event && event.sourceId === "reference-dem") {
+        setTerrainReferenceError(true);
+        setTerrainReferenceLoading(false);
+      }
       if ("sourceId" in event && event.sourceId === "osm") {
         setBasemapError(true);
         if (map.getLayer("osm-land-background")) map.setLayoutProperty("osm-land-background", "visibility", "none");
       }
     });
+    map.on("sourcedataloading", (event) => {
+      if (event.sourceId === "reference-dem") setTerrainReferenceLoading(true);
+    });
     map.on("sourcedata", (event) => {
+      if (event.sourceId === "reference-dem" && event.isSourceLoaded) {
+        setTerrainReferenceLoading(false);
+      }
       if (event.sourceId === "osm" && event.sourceDataType === "content") {
         if (map.getLayer("osm-land-background")) map.setLayoutProperty("osm-land-background", "visibility", "visible");
       }
     });
-    map.on("movestart", () => setBasemapError(false));
+    map.on("movestart", () => {
+      setBasemapError(false);
+      setTerrainReferenceError(false);
+    });
     map.on("moveend", () => {
       const center = map.getCenter().wrap();
       try {
@@ -304,6 +356,7 @@ export function MapPanel({
     });
     mapRef.current = map;
     return () => {
+      attributionSize.disconnect();
       map.remove();
       mapRef.current = null;
     };
@@ -315,17 +368,19 @@ export function MapPanel({
 
   useEffect(() => {
     const map = mapRef.current;
-    const identity = `${basemapEnabled}:${manifest?.cache_key ?? "none"}:${terrainStyle}:${language}:${basemapCacheOnly}`;
+    const identity = `${basemapEnabled}:${manifest?.cache_key ?? "none"}:${terrainStyle}:${language}:${basemapCacheOnly}:${basemapStyle}`;
     if (!map || styleIdentityRef.current === identity) {
       return;
     }
     styleIdentityRef.current = identity;
     setBasemapError(false);
-    map.setStyle(mapStyle(basemapEnabled, manifest, terrainStyle, language, basemapCacheOnly));
+    setTerrainReferenceError(false);
+    setTerrainReferenceLoading(basemapEnabled && basemapStyle === "terrain");
+    map.setStyle(mapStyle(basemapEnabled, manifest, terrainStyle, language, basemapCacheOnly, basemapStyle));
     map.once("style.load", () =>
       (map.getSource("aoi") as GeoJSONSource | undefined)?.setData(collection),
     );
-  }, [basemapEnabled, manifest, terrainStyle, language, basemapCacheOnly]);
+  }, [basemapEnabled, manifest, terrainStyle, language, basemapCacheOnly, basemapStyle]);
 
   useEffect(() => {
     const source = mapRef.current?.getSource("aoi") as GeoJSONSource | undefined;
@@ -354,7 +409,7 @@ export function MapPanel({
     return () => {
       map.off("style.load", updateSelection);
     };
-  }, [selectedTileId, manifest?.cache_key, terrainStyle, basemapEnabled]);
+  }, [selectedTileId, manifest?.cache_key, terrainStyle, basemapEnabled, basemapCacheOnly, basemapStyle, language]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -450,7 +505,10 @@ export function MapPanel({
       }
     };
     map.on("mousedown", down);
-    map.on("movestart", () => setBasemapError(false));
+    map.on("movestart", () => {
+      setBasemapError(false);
+      setTerrainReferenceError(false);
+    });
     map.on("moveend", () => {
       const center = map.getCenter().wrap();
       try {
@@ -495,14 +553,34 @@ export function MapPanel({
     };
   }, [drawMode, onSelectedTileChange]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !locatedPlace) return;
+    const element = document.createElement("div");
+    element.className = "place-map-pin";
+    element.setAttribute("aria-label", locatedPlace.display_name);
+    element.title = locatedPlace.display_name;
+    element.setAttribute("role", "img");
+    const marker = new maplibregl.Marker({ element })
+      .setLngLat([locatedPlace.longitude, locatedPlace.latitude]).addTo(map);
+    const [west, south, east, north] = locatedPlace.bounding_box_wgs84;
+    map.fitBounds([[west, Math.max(-85.051129, south)], [west > east ? east + 360 : east, Math.min(85.051129, north)]],
+      { padding: 70, maxZoom: 14, duration: matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 500 });
+    return () => { marker.remove(); };
+  }, [locatedPlace]);
+
   return (
     <div
       className="map-shell"
       data-testid="map-panel"
       data-offline-reference="natural-earth-land-and-graticule"
       data-basemap={basemapCacheOnly ? "cached-vector" : basemapEnabled ? "osm-vector" : "offline"}
+      data-basemap-style={basemapStyle}
+      data-terrain-loading={terrainReferenceLoading}
+      data-terrain-error={terrainReferenceError}
       data-has-terrain={manifest ? "true" : "false"}
       data-job-id={manifest?.job_id ?? ""}
+      data-place-center={locatedPlace ? `${locatedPlace.longitude},${locatedPlace.latitude}` : ""}
       data-tile-style={terrainStyle}
     >
       <div ref={containerRef} className="map-canvas" />
@@ -561,9 +639,14 @@ export function MapPanel({
           </small>
         </div>
       )}
+      {basemapEnabled && basemapStyle === "terrain" && (terrainReferenceError || terrainReferenceLoading) && (
+        <div className="map-terrain-status" role="status">
+          {translate(language, terrainReferenceError ? basemapCacheOnly ? "terrainReferenceCacheMiss" : "terrainReferenceUnavailable" : "terrainReferenceLoading")}
+        </div>
+      )}
       {(visualizationLoading || visualizationError || standardMapError || (basemapEnabled && (basemapError || basemapCacheOnly))) && (
         <div className={`map-data-status${visualizationError || standardMapError ? " error" : ""}`}>
-          {visualizationError ?? (standardMapError ? translate(language, "standardMapUnavailable") : basemapEnabled && basemapError ? translate(language, basemapCacheOnly ? "basemapCacheMiss" : "basemapUnavailable") : translate(language, visualizationLoading ? "visualizationLoading" : "basemapCacheHelp"))}
+          {visualizationError ?? (standardMapError ? translate(language, "standardMapUnavailable") : basemapEnabled && basemapError ? translate(language, basemapCacheOnly ? "basemapCacheMiss" : "basemapUnavailable") : translate(language, visualizationLoading ? "visualizationLoading" : "basemapCacheStatus"))}
         </div>
       )}
       {manifest && selectedTileId && (

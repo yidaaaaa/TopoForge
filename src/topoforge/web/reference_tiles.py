@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import sqlite3
 import threading
 import time
 from collections.abc import Callable
 from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import Request, urlopen
 
@@ -43,6 +45,14 @@ def fetch_reference_tile(z: int, x: int, y: int) -> bytes:
     return data
 
 
+@dataclass(frozen=True)
+class ReferenceTileDownload:
+    """Downloaded reference bytes and available provider metadata for local provenance."""
+
+    payload: bytes
+    provenance: dict[str, str]
+
+
 class ReferenceTileUnavailable(LookupError):
     """The requested tile is absent from the local cache."""
 
@@ -69,6 +79,12 @@ class ReferenceTileCache:
                 "PRIMARY KEY (z, x, y))"
             )
 
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS tile_provenance ("
+                "z INTEGER, x INTEGER, y INTEGER, metadata TEXT NOT NULL, "
+                "PRIMARY KEY (z, x, y))"
+            )
+
     def get(
         self,
         z: int,
@@ -76,7 +92,7 @@ class ReferenceTileCache:
         y: int,
         *,
         cache_only: bool,
-        fetch: Callable[[int, int, int], bytes] = fetch_reference_tile,
+        fetch: Callable[[int, int, int], bytes | ReferenceTileDownload] = fetch_reference_tile,
     ) -> tuple[bytes, str, int]:
         """Return payload, cache outcome and remaining freshness; never fetch in cache-only mode."""
         if not 0 <= z <= 14 or not 0 <= x < 2**z or not 0 <= y < 2**z:
@@ -93,10 +109,12 @@ class ReferenceTileCache:
             cached = self._read(z, x, y)
             if cached is not None and cached[1] > 0:
                 return cached[0], "hit", cached[1]
-            payload = fetch(z, x, y)
+            result = fetch(z, x, y)
+            payload = result.payload if isinstance(result, ReferenceTileDownload) else result
+            provenance = result.provenance if isinstance(result, ReferenceTileDownload) else None
             if len(payload) > MAX_TILE_BYTES:
                 raise ValueError("Reference tile exceeds the download limit")
-            self._store(z, x, y, payload)
+            self._store(z, x, y, payload, provenance)
             return payload, "miss", CACHE_TTL_SECONDS
 
     def _read(self, z: int, x: int, y: int) -> tuple[bytes, int] | None:
@@ -110,6 +128,7 @@ class ReferenceTileCache:
             payload = bytes(row[0])
             if len(payload) > MAX_TILE_BYTES or hashlib.sha256(payload).hexdigest() != row[1]:
                 db.execute("DELETE FROM tiles WHERE z=? AND x=? AND y=?", (z, x, y))
+                db.execute("DELETE FROM tile_provenance WHERE z=? AND x=? AND y=?", (z, x, y))
                 return None
             db.execute(
                 "UPDATE tiles SET accessed_at=? WHERE z=? AND x=? AND y=?",
@@ -118,7 +137,9 @@ class ReferenceTileCache:
             remaining = max(0, math.ceil(float(row[2]) + CACHE_TTL_SECONDS - time.time()))
             return payload, remaining
 
-    def _store(self, z: int, x: int, y: int, payload: bytes) -> None:
+    def _store(
+        self, z: int, x: int, y: int, payload: bytes, provenance: dict[str, str] | None = None
+    ) -> None:
         with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("DELETE FROM tiles WHERE z=? AND x=? AND y=?", (z, x, y))
             count, size = db.execute(
@@ -142,4 +163,15 @@ class ReferenceTileCache:
                     time.time(),
                     time.time_ns(),
                 ),
+            )
+            db.execute("DELETE FROM tile_provenance WHERE z=? AND x=? AND y=?", (z, x, y))
+            if provenance is not None:
+                db.execute(
+                    "INSERT INTO tile_provenance VALUES (?, ?, ?, ?)",
+                    (z, x, y, json.dumps(provenance, sort_keys=True)),
+                )
+            db.execute(
+                "DELETE FROM tile_provenance WHERE NOT EXISTS ("
+                "SELECT 1 FROM tiles WHERE tiles.z=tile_provenance.z "
+                "AND tiles.x=tile_provenance.x AND tiles.y=tile_provenance.y)"
             )

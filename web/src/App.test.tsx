@@ -6,19 +6,25 @@ vi.mock("./components/MapPanel", () => ({
     manifest,
     basemapEnabled,
     basemapCacheOnly,
+    basemapStyle,
     selectedTileId,
+    locatedPlace,
     onSelectedTileChange,
   }: {
     manifest: { job_id: string } | null;
     basemapEnabled: boolean;
     basemapCacheOnly: boolean;
+    basemapStyle: string;
+    locatedPlace?: { longitude: number; latitude: number } | null;
     selectedTileId: string | null;
     onSelectedTileChange: (tileId: string) => void;
   }) => (
     <div
       data-testid="map-panel"
       data-basemap-enabled={basemapEnabled}
+      data-basemap-style={basemapStyle}
       data-cache-only={basemapCacheOnly}
+      data-place-center={locatedPlace ? `${locatedPlace.longitude},${locatedPlace.latitude}` : ""}
       data-job-id={manifest?.job_id ?? ""}
       data-selected-tile={selectedTileId ?? ""}
     >
@@ -307,6 +313,36 @@ describe("TopoForge bilingual workspace", () => {
         return response({});
       }),
     );
+  });
+
+  it("locates coordinates without altering the print area until explicitly applied", async () => {
+    render(<App />);
+    await screen.findByText("v0.10.2");
+    expect(screen.getByRole("button", { name: "本地 DEM" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.change(screen.getByRole("textbox", { name: "查找地点" }), { target: { value: "101.9, 31.1" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜索" }));
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-place-center", "101.9,31.1");
+    expect(screen.getByRole("button", { name: "本地 DEM" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "以此为打印中心" }));
+    expect(screen.getByRole("button", { name: "中心与半径" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("spinbutton", { name: "经度" })).toHaveValue(101.9);
+    expect(screen.getByRole("spinbutton", { name: "纬度" })).toHaveValue(31.1);
+    expect(screen.getByRole("spinbutton", { name: "半径（米）" })).toHaveValue(10000);
+  });
+
+  it("restores terrain mode offline and switches styles without changing the print input", async () => {
+    localStorage.setItem("topoforge-basemap-style", "terrain");
+    localStorage.setItem("topoforge-basemap-mode", "cached");
+    render(<App />);
+    await screen.findByText("v0.10.2");
+    expect(screen.getByRole("combobox", { name: "底图样式" })).toHaveValue("terrain");
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-cache-only", "true");
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-basemap-style", "terrain");
+    fireEvent.change(screen.getByRole("combobox", { name: "底图样式" }), { target: { value: "standard" } });
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-basemap-style", "standard");
+    expect(screen.getByTestId("map-panel")).toHaveAttribute("data-cache-only", "true");
+    expect(localStorage.getItem("topoforge-basemap-style")).toBe("standard");
+    expect(screen.getByRole("button", { name: "本地 DEM" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("restores cache-only mode without starting in online mode", async () => {

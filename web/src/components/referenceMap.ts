@@ -1,6 +1,9 @@
 import type { ExpressionSpecification, LayerSpecification } from "maplibre-gl";
 import type { Language } from "../types";
 
+export const TERRAIN_TILE_URL = "/api/v1/reference/terrain/{z}/{x}/{y}.png";
+export const TERRAIN_ATTRIBUTION = '<a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener noreferrer">Mapzen Terrain</a> · <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener noreferrer">terrain data sources</a>';
+
 export const VECTOR_TILE_URL = "/api/v1/reference/tiles/{z}/{x}/{y}.mvt";
 
 /** Natural/local context plus country and regional names; boundary geometry is curated separately. */

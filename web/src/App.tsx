@@ -39,6 +39,8 @@ import {
 } from "./api";
 import { BuildPanel } from "./components/BuildPanel";
 import { FileBrowser } from "./components/FileBrowser";
+import { PlaceSearch } from "./components/PlaceSearch";
+import type { PlaceCandidate } from "./types";
 import { MapPanel } from "./components/MapPanel";
 import { ResultsPanel } from "./components/ResultsPanel";
 import {
@@ -60,6 +62,7 @@ import type {
   JsonObject,
   Language,
   NormalizedAoi,
+  ReferenceMapStyle,
   WorkspaceTab,
 } from "./types";
 
@@ -117,13 +120,23 @@ function initialBasemapMode(): BasemapMode {
   return saved === "online" || saved === "cached" ? saved : "off";
 }
 
+function initialBasemapStyle(): ReferenceMapStyle {
+  try { return localStorage.getItem("topoforge-basemap-style") === "terrain" ? "terrain" : "standard"; }
+  catch { return "standard"; }
+}
+
 export default function App() {
   const [language, setLanguage] = useState<Language>(initialLanguage);
   const [health, setHealth] = useState<Health | null>(null);
   const [form, setForm] = useState<FormState>(defaultFormState);
   const [normalizedAoi, setNormalizedAoi] = useState<NormalizedAoi | null>(null);
+  const [locatedPlace, setLocatedPlace] = useState<PlaceCandidate | null>(null);
   const [drawMode, setDrawMode] = useState<"bbox" | "center" | null>(null);
   const [basemapMode, setBasemapMode] = useState<BasemapMode>(initialBasemapMode);
+  const [basemapStyle, setBasemapStyle] = useState<ReferenceMapStyle>(initialBasemapStyle);
+  useEffect(() => {
+    try { localStorage.setItem("topoforge-basemap-style", basemapStyle); } catch { /* optional preference */ }
+  }, [basemapStyle]);
   const basemapEnabled = basemapMode !== "off";
   const basemapCacheOnly = basemapMode === "cached";
   useEffect(() => {
@@ -678,26 +691,34 @@ export default function App() {
               </button>
             </div>
             {tab === "map" && (
-              <div className="basemap-options">
-                <label className="toolbar-toggle">
-                  <input
-                    type="checkbox"
-                    checked={basemapEnabled}
-                    onChange={(event) => setBasemapMode(event.target.checked ? "online" : "off")}
-                  />
-                  <span className="toggle" aria-hidden="true" />
-                  <span>{basemapCacheOnly ? t("cachedBasemap") : basemapEnabled ? t("basemap") : t("offlineMap")}</span>
-                </label>
-                {basemapEnabled && (
-                  <label className="cache-only-toggle" title={t("basemapCacheHelp")}>
+              <div className="basemap-tools">
+                <select className="basemap-style-picker" aria-label={t("referenceMapStyle")}
+                  value={basemapStyle} disabled={!basemapEnabled}
+                  onChange={event => setBasemapStyle(event.target.value as ReferenceMapStyle)}>
+                  <option value="standard">{t("referenceStandard")}</option>
+                  <option value="terrain">{t("referenceTerrain")}</option>
+                </select>
+                <div className="basemap-options">
+                  <label className="toolbar-toggle">
                     <input
                       type="checkbox"
-                      checked={basemapCacheOnly}
-                      onChange={(event) => setBasemapMode(event.target.checked ? "cached" : "online")}
+                      checked={basemapEnabled}
+                      onChange={(event) => setBasemapMode(event.target.checked ? "online" : "off")}
                     />
-                    <span>{t("basemapCacheOnly")}</span>
+                    <span className="toggle" aria-hidden="true" />
+                    <span>{basemapCacheOnly ? t("cachedBasemap") : basemapEnabled ? t("basemap") : t("offlineMap")}</span>
                   </label>
-                )}
+                  {basemapEnabled && (
+                    <label className="cache-only-toggle" title={t("basemapCacheHelp")}>
+                      <input
+                        type="checkbox"
+                        checked={basemapCacheOnly}
+                        onChange={(event) => setBasemapMode(event.target.checked ? "cached" : "online")}
+                      />
+                      <span>{t("basemapCacheOnly")}</span>
+                    </label>
+                  )}
+                </div>
               </div>
             )}
             {tab === "preview" && selectedJob?.state === "running" && (
@@ -708,11 +729,20 @@ export default function App() {
             )}
           </div>
           <div className="visual-stage">
-            <div hidden={tab !== "map"} className="stage-view">
+            <div hidden={tab !== "map"} className="stage-view map-stage">
+              <PlaceSearch language={language} cacheOnly={basemapCacheOnly}
+                onEnableBasemap={basemapMode === "off" ? () => setBasemapMode("online") : undefined}
+                onLocate={place => { setLocatedPlace(place); setDrawMode(null); }}
+                onUseCenter={place => {
+                  updateForm({ ...form, center: [place.longitude, place.latitude], sourceMode: "center-radius" });
+                  setDrawMode(null);
+                }} />
               <MapPanel
+                locatedPlace={locatedPlace}
                 language={language}
                 sourceMode={form.sourceMode}
                 normalizedAoi={normalizedAoi}
+                basemapStyle={basemapStyle}
                 basemapEnabled={basemapEnabled}
                 basemapCacheOnly={basemapCacheOnly}
                 drawMode={drawMode}

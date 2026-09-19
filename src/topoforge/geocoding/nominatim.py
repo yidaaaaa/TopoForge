@@ -156,6 +156,7 @@ class NominatimGeocoder:
         limit: int | None = None,
         country_codes: list[str] | None = None,
         accept_language: str | None = None,
+        cache_only: bool = False,
     ) -> PlaceSearchResult:
         """Return candidates; ambiguity is retained rather than silently resolved."""
         normalized_query = " ".join(query.split())
@@ -188,7 +189,8 @@ class NominatimGeocoder:
                 dataset_id="nominatim-search",
                 dataset_version="jsonv2",
                 url=url,
-            )
+            ),
+            cache_only=cache_only,
         )
         try:
             payload = json.loads(result.path.read_text(encoding="utf-8"))
@@ -196,6 +198,8 @@ class NominatimGeocoder:
             raise ProviderFetchError("Nominatim response is not valid UTF-8 JSON") from exc
         if not isinstance(payload, list):
             raise ProviderFetchError("Nominatim search response root is not a JSON list")
+        if len(payload) > resolved_limit:
+            raise ProviderFetchError("Geocoder exceeded the requested candidate limit")
         candidates = [_candidate_from_payload(item) for item in payload]
         status = "none" if not candidates else "unique" if len(candidates) == 1 else "ambiguous"
         return PlaceSearchResult(

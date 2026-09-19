@@ -129,3 +129,36 @@ it("restores the last camera and rejects broken or out-of-range saved coordinate
   }
   localStorage.removeItem("topoforge-reference-camera");
 });
+
+
+describe("optional online terrain reference", () => {
+  it("adds Terrarium hillshade without a completed job and keeps borders and AOI identical", () => {
+    const standard = mapStyle(true);
+    const shaded = mapStyle(true, null, "terrain", "zh-CN", false, "terrain");
+    expect(standard.sources).not.toHaveProperty("reference-dem");
+    expect(shaded.sources["reference-dem"]).toMatchObject({ type: "raster-dem", encoding: "terrarium", tileSize: 256, maxzoom: 14 });
+    const layers = shaded.layers.map(layer => layer.id);
+    expect(layers.indexOf("reference-hillshade")).toBeGreaterThan(layers.indexOf("osm-land-background"));
+    expect(layers.indexOf("reference-hillshade")).toBeLessThan(layers.indexOf("osm-ocean"));
+    expect(layers.indexOf("reference-hillshade")).toBeLessThan(layers.indexOf("osm-street-labels"));
+    expect(shaded.sources["reference-boundaries"]).toEqual(standard.sources["reference-boundaries"]);
+    expect(shaded.layers.filter(layer => layer.id.startsWith("reference-") && layer.type === "line" || layer.id.startsWith("aoi-")))
+      .toEqual(standard.layers.filter(layer => layer.id.startsWith("reference-") && layer.type === "line" || layer.id.startsWith("aoi-")));
+    expect(shaded.terrain).toBeUndefined(); // A 2D reference never changes the selection geometry.
+  });
+
+  it("routes both online sources through cache-only endpoints and removes DEM when disabled", () => {
+    const cached = mapStyle(true, null, "terrain", "en", true, "terrain");
+    expect(cached.sources["reference-dem"]).toMatchObject({ tiles: [`${location.origin}/api/v1/reference/terrain/{z}/{x}/{y}.png?cache_only=true`] });
+    expect(cached.sources.osm).toMatchObject({ tiles: [`${location.origin}/api/v1/reference/tiles/{z}/{x}/{y}.mvt?cache_only=true`] });
+    expect(mapStyle(false, null, "terrain", "en", true, "terrain").sources).not.toHaveProperty("reference-dem");
+  });
+
+  it("retains processed DEM and manufacturing footprints above the reference hillshade", () => {
+    const shaded = mapStyle(true, manifest, "elevation", "zh-CN", false, "terrain");
+    const standard = mapStyle(true, manifest, "elevation");
+    expect(shaded.sources["job-terrain"]).toEqual(standard.sources["job-terrain"]);
+    expect(shaded.sources["manufacturing-tiles"]).toEqual(standard.sources["manufacturing-tiles"]);
+    expect(shaded.layers.findIndex(layer => layer.id === "job-terrain")).toBeGreaterThan(shaded.layers.findIndex(layer => layer.id === "reference-hillshade"));
+  });
+});

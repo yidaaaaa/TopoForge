@@ -1,5 +1,8 @@
 import type {
   AoiInput,
+  Language,
+  PlaceSearchConfig,
+  PlaceSearchResponse,
   StandardMapInfo,
   FileListing,
   Health,
@@ -212,5 +215,18 @@ export function loadLocalConfig(
   return request<JsonObject>("/api/v1/config/load", {
     method: "POST",
     body: JSON.stringify({ kind, path }),
+  });
+}
+
+
+export function fetchPlaceSearchConfig(signal: AbortSignal): Promise<PlaceSearchConfig> {
+  return request<PlaceSearchConfig>("/api/v1/places/config", { signal });
+}
+
+export function searchPlaces(query: string, language: Language, cacheOnly: boolean,
+  allowPublicService: boolean, signal: AbortSignal): Promise<PlaceSearchResponse> {
+  return request<PlaceSearchResponse>("/api/v1/places/search", {
+    method: "POST", signal,
+    body: JSON.stringify({ query, language, cache_only: cacheOnly, allow_public_service: allowPublicService }),
   });
 }

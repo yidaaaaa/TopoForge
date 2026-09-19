@@ -115,6 +115,102 @@ AOI still requires either provider network access or a complete retained provide
 Enabling the OpenStreetMap switch explicitly requests public map tiles and does not alter
 the terrain source or manufacturing result.
 
+## Terrain basemap before building
+
+Enable the basemap, then choose **普通地图 / Standard map** or **地形地图 /
+Terrain map** in the map toolbar. Terrain mode shades mountains and valleys under
+the existing roads, water and labels, without requiring a completed job. It keeps
+the current camera and selection. The chosen style is remembered in this browser.
+The **地形 / 高程 / 阴影** controls on a completed job still display that job's
+processed DEM; they are separate from this browsing background.
+
+Terrain reference tiles come from the public
+[AWS Terrain Tiles collection](https://registry.opendata.aws/terrain-tiles/), using
+Mapzen's [Terrarium RGB encoding](https://github.com/tilezen/joerd/blob/master/docs/formats.md).
+There is no API key. These are mixed, publisher-processed elevation sources with
+varying age and resolution, not a uniform-resolution terrain product. This view
+only shades relief; it does not add contour lines, satellite imagery or a 3D mesh.
+No additional detail is created when zooming beyond the available source tiles.
+Printing continues to use the selected local DEM or existing acquisition provider.
+
+Only visible terrain tiles and renderer-required edge neighbours are requested.
+The loopback runtime fetches a fixed S3 path with bounded zoom/coordinates,
+four concurrent downloads, a twenty-second socket timeout and a 512 KiB limit per
+tile. Each response must be a verified 256 x 256 RGB PNG. Encoded bytes are preserved
+without resizing or colour correction, because RGB values encode elevation.
+The browser receives a same-origin URL; runtime proxy/TLS settings apply.
+
+Viewed terrain is cached separately in
+`--state-dir/reference-map/mapzen-terrarium-v1.sqlite3`. It has the same independent
+128 MiB payload / 4096 tile LRU limits and seven-day online freshness as the road
+cache. Both caches together retain at most 256 MiB of payloads; SQLite metadata,
+provider records and transient journals add overhead. The terrain cache records
+digests, retrieval time, source URL, available ETag/version/Last-Modified/source-file
+headers, encoding, CRS and licensing links. Native resolution, acquisition period,
+vertical datum and NoData/interpolation fractions stay unknown when not established;
+publication time and pixel spacing do not establish acquisition date or source resolution.
+
+**仅使用本地缓存 / Use local cache only** also covers terrain requests. It reads
+previously verified tiles, including stale ones, and never downloads a missing
+replacement. Visit the desired area and zoom levels in terrain mode online before
+going offline. Missing terrain produces a specific message while the other map
+layers remain usable. Switching the basemap off removes both remote sources. No
+bulk terrain download or offline world pack is offered by this UI. Source credits
+remain visible in the map attribution; see `DATA_LICENSES.md` for dataset terms.
+
+## Find a place
+
+Use **查找地点 / Find a place** above the map. Enter a city, landmark or address,
+then press Search or Enter. For Chinese names, try separating the landmark and city
+with a comma (for example `西湖, 杭州`) and check the returned full address. The candidate list retains full names and WGS84
+coordinates to distinguish places with the same name. Selecting a result moves the
+map and adds a pin; it leaves the print area unchanged. Draw a bounding box, or
+choose **以此为打印中心 / Use as print center** and adjust the radius in metres.
+When the basemap is off, **显示道路与地名（联网） / Show streets and labels
+(online)** offers an explicit shortcut to enable it. Location search provides
+geographic context; elevation acquisition remains separate.
+
+**联网搜索 / Search online** is off initially. Enable it explicitly to use the
+configured service; that choice is remembered only for that endpoint. The default
+is the OSMF public Nominatim service, subject to its
+[usage policy](https://operations.osmfoundation.org/policies/nominatim/): manual
+submitted searches only, no autocomplete, one shared rate limiter (at least 1.1
+seconds between requests per local Web process), identifying User-Agent and OSM
+attribution. Multiple browser tabs share the same limiter; a concurrent request is
+rejected with a retry message. Queries are sent to the service; do not send private
+or confidential information. This local trial is not a service-capacity commitment
+for public distribution; select a suitable provider before scaling it up. Coverage,
+address detail and mainland network availability depend on the service.
+
+Successful responses persist under `--state-dir/place-search`, keyed by endpoint,
+query and language, with checksums verified on reuse. Each response is limited to
+256 KiB and ten candidates, with one attempt and a ten-second socket timeout.
+There is no automatic expiry or total disk quota for these small query records.
+Stop the app before removing this dedicated directory to clear the search cache;
+it is separate from DEM and basemap caches. A corrupt or missing offline entry
+reports a cache miss and makes no upstream request.
+
+With Search online off, or **仅使用本地缓存 / Use local cache only** enabled,
+searches only consult that local query cache. Previously selected locations and
+favorites are stored separately in this browser (20 recent and 50 favorites), and
+can be removed from the list. Browser/site storage cleanup removes them; different
+browser origins, including changed forwarded ports, have separate lists. The
+query cache resides on the machine running TopoForge.
+
+Enter a numeric **longitude, latitude** pair (for example `101.9, 31.1`) for offline
+WGS84 positioning, without a search request. Latitude is limited to the map's Web
+Mercator range (±85.051129°). Do not paste GCJ-02/BD-09 coordinates as WGS84.
+Saved locations and coordinate input remain usable if the service is unavailable.
+An uncached place name cannot be resolved offline. Full offline terrain building
+also needs the relevant local elevation data.
+
+To use another OSM/Nominatim-compatible endpoint, set `TOPOFORGE_GEOCODER_URL`
+to its HTTP(S) base URL before starting TopoForge. The adapter appends `/search`;
+do not include credentials, query parameters or fragments. Restart after changing
+it. The UI shows the configured host and requires a new online choice when it
+changes. The browser cannot submit an arbitrary endpoint URL. The existing core
+geocoder performs the query; Web does not duplicate its coordinate logic.
+
 ## Frontend development and checks
 
 ```bash
@@ -196,7 +292,7 @@ and zoom levels not already cached show a missing-cache message. The selected mo
 remembered across reloads together with the last map position and zoom; cache-only responses bypass browser caching so disk misses
 remain visible. Online mode refreshes entries after seven days. Cache storage errors
 are reported instead of silently losing offline coverage. This switch controls reference
-map requests; model acquisition still needs a local DEM or separately cached elevation data.
+map requests and place-search requests; model acquisition still needs a local DEM or separately cached elevation data.
 The cache resides on the machine running TopoForge, including the remote host when using
 a forwarded preview. Do not bulk-download
 OSMF tiles or use this service for offline packs. Keep the displayed OSM attribution.
