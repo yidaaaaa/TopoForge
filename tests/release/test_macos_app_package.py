@@ -1988,3 +1988,55 @@ def test_final_closure_records_exact_apple_system_paths() -> None:
     )
 
     assert records[0]["dependencies"][0]["resolved_path"] == "/usr/lib/libSystem.B.dylib"
+
+
+def test_macho_normalization_seals_final_bytes_after_rewriting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = tmp_path / "TopoForge.app"
+    python = app / PYTHON_PATH
+    _write_file(python, _thin_macho("arm64", "11.0"), 0o755)
+    original_hash = sha256_file(python)
+    signed: set[str] = set()
+    calls: list[list[str]] = []
+
+    def codesign(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert command[0] == "/usr/bin/codesign"
+        calls.append(command)
+        target = command[-1]
+        if "--sign" in command:
+            assert command[command.index("--sign") + 1] == "-"
+            assert "--timestamp=none" in command
+            expected = "org.topoforge.runtime." + hashlib.sha256(PYTHON_PATH.encode()).hexdigest()
+            assert command[command.index("--identifier") + 1] == expected
+            Path(target).write_bytes(Path(target).read_bytes() + b"fixture-ad-hoc-seal")
+            signed.add(target)
+        if "--verify" in command:
+            assert target in signed and kwargs["check"] is True
+        status = 0 if target in signed else 1
+        return subprocess.CompletedProcess(
+            command, status, "", "Signature=adhoc\n" if target in signed else "not signed\n"
+        )
+
+    monkeypatch.setattr(builder.subprocess, "run", codesign)
+    records = builder._normalize_macho(app, load_config(_config_path()))
+    assert len(records) == 1
+    assert records[0]["sha256"] == sha256_file(python) != original_hash
+    assert records[0]["bytes"] == python.stat().st_size
+    assert [c[1] for c in calls] == ["--display", "--display", "--force", "--verify", "--display"]
+
+
+@pytest.mark.parametrize("failure", ["verification", "identity"])
+def test_macho_signing_fails_closed_on_invalid_seal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    def codesign(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert kwargs["check"] is True
+        if failure == "verification" and "--verify" in command:
+            raise subprocess.CalledProcessError(1, command, stderr="invalid code signature")
+        return subprocess.CompletedProcess(command, 0, "", "Authority=Unexpected signer\n")
+
+    monkeypatch.setattr(builder.subprocess, "run", codesign)
+    expected = subprocess.CalledProcessError if failure == "verification" else RuntimeError
+    with pytest.raises(expected):
+        builder._adhoc_sign_macho(tmp_path / "Python", relative_path=PYTHON_PATH)

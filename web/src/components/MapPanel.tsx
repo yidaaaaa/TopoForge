@@ -44,6 +44,10 @@ interface MapPanelProps {
   onCenterChange: (center: [number, number]) => void;
 }
 
+function wrappedLongitude(longitude: number): number {
+  return ((longitude + 180) % 360 + 360) % 360 - 180;
+}
+
 const landTopology = landTopologyJson as unknown as Topology<{
   land: GeometryCollection;
 }>;
@@ -284,6 +288,11 @@ export function MapPanel({
     [activeGeometry],
   );
 
+  const collectionRef = useRef(collection);
+  collectionRef.current = collection;
+  const drawCallbacksRef = useRef({ onBboxChange, onCenterChange });
+  drawCallbacksRef.current = { onBboxChange, onCenterChange };
+
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
       return;
@@ -313,7 +322,7 @@ export function MapPanel({
     });
     if (attribution) attributionSize.observe(attribution);
     map.on("load", () =>
-      (map.getSource("aoi") as GeoJSONSource | undefined)?.setData(collection),
+      (map.getSource("aoi") as GeoJSONSource | undefined)?.setData(collectionRef.current),
     );
     map.on("error", (event) => {
       if ("sourceId" in event && event.sourceId === "reference-dem") {
@@ -350,7 +359,7 @@ export function MapPanel({
     });
     map.on("mousemove", (event) => {
       setCursor([
-        Number(event.lngLat.lng.toFixed(5)),
+        Number(wrappedLongitude(event.lngLat.lng).toFixed(5)),
         Number(event.lngLat.lat.toFixed(5)),
       ]);
     });
@@ -377,9 +386,10 @@ export function MapPanel({
     setTerrainReferenceError(false);
     setTerrainReferenceLoading(basemapEnabled && basemapStyle === "terrain");
     map.setStyle(mapStyle(basemapEnabled, manifest, terrainStyle, language, basemapCacheOnly, basemapStyle));
-    map.once("style.load", () =>
-      (map.getSource("aoi") as GeoJSONSource | undefined)?.setData(collection),
-    );
+    const applyAoi = () =>
+      (map.getSource("aoi") as GeoJSONSource | undefined)?.setData(collectionRef.current);
+    map.once("style.load", applyAoi);
+    return () => { map.off("style.load", applyAoi); };
   }, [basemapEnabled, manifest, terrainStyle, language, basemapCacheOnly, basemapStyle]);
 
   useEffect(() => {
@@ -496,27 +506,17 @@ export function MapPanel({
       map.dragPan.enable();
       setDraft(null);
       if (west !== east && south !== north) {
-        onBboxChange([west, south, east, north]);
+        drawCallbacksRef.current.onBboxChange(east - west >= 360
+          ? [-180, south, 180, north]
+          : [wrappedLongitude(west), south, wrappedLongitude(east), north]);
       }
     };
     const click = (event: MapMouseEvent) => {
       if (drawMode === "center") {
-        onCenterChange([event.lngLat.lng, event.lngLat.lat]);
+        drawCallbacksRef.current.onCenterChange([wrappedLongitude(event.lngLat.lng), event.lngLat.lat]);
       }
     };
     map.on("mousedown", down);
-    map.on("movestart", () => {
-      setBasemapError(false);
-      setTerrainReferenceError(false);
-    });
-    map.on("moveend", () => {
-      const center = map.getCenter().wrap();
-      try {
-        localStorage.setItem("topoforge-reference-camera", JSON.stringify({
-          center: [center.lng, center.lat], zoom: map.getZoom(),
-        }));
-      } catch { /* The map remains usable when browser storage is unavailable. */ }
-    });
     map.on("mousemove", move);
     map.on("mouseup", up);
     map.on("click", click);
@@ -527,8 +527,9 @@ export function MapPanel({
       map.off("click", click);
       map.dragPan.enable();
       canvas.style.cursor = "";
+      setDraft(null);
     };
-  }, [drawMode, onBboxChange, onCenterChange]);
+  }, [drawMode]);
 
   useEffect(() => {
     const map = mapRef.current;

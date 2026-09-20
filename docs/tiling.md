@@ -127,6 +127,15 @@ Each print tile publishes connector-bearing global STL/3MF/GLB and print-local S
 
 `tile-slice-manifest.json` binds the print assembly, connector plan, slicer executable, copied settings/filament hashes, and every G-code/report. Per-tile reports preserve the literal command, stdout/stderr, exit code, G-code hash/size, reopened layer/time/material metrics, and explicit out-of-bed, empty-layer, floating-region, and support checks. Bambu Studio results additionally carry the complete P2S parameter gate. The release script `scripts/verify_phase5_bambu_tile_projects.py` creates the separate Bambu project 3MF role, verifies its archive and embedded G-code MD5, and performs a second normative slice without external profiles.
 
+The Bambu project reader follows archive-local model references from the root build
+item and root components, as defined by the [3MF Production Extension](https://github.com/3MFConsortium/spec_production/blob/master/3MF%20Production%20Extension.md).
+Object IDs are scoped to their model part; nested local components and placement
+transforms are included in the measurement. Referenced child build sections are ignored.
+Cross-part references require matching internal model relationships. Missing parts,
+invalid paths/indices, cycles and excessive graph expansion fail verification. Model XML
+is limited to 64 MiB across at most 256 parts. This changes archive measurement only;
+existing G-code, official P2S parameter and reopen/reslice gates remain required.
+
 ## Strict verification
 
 `verify_tile_set()` reopens and cross-checks:

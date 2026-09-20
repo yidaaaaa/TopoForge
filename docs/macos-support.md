@@ -85,7 +85,15 @@ case/Unicode path uniqueness, internal symlink closure, ordinary-file/hard-link 
 ZIP metadata, `Info.plist`, real arm64 Mach-O slices and deployment floors, every dynamic load
 command and dylib identity, locked dependency inventory, and production Web assets. Before
 archiving, every non-Apple dependency is resolved inside the bundle and rewritten to a canonical
-`@loader_path` reference; build-machine `LC_RPATH` values are removed. Final verification allows
+`@loader_path` reference; build-machine `LC_RPATH` values are removed. After these
+mutations, each arm64 binary receives a verified ad-hoc code signature, with a stable
+bundle-relative identifier and no signing timestamp. This satisfies the native loader's
+code-integrity requirement; it is not Developer ID signing or notarization. The existing
+"unsigned candidate" role means the app has no distribution identity. Payload hashes
+are computed after sealing the binaries, and hosted jobs must still prove reproducible
+archives and execution on both declared OS targets. See [Apple's arm64 signing
+requirement](https://support.apple.com/guide/security/secebb113be1/web).
+Final verification allows
 external images only under `/System/Library/` and `/usr/lib/` and never consults matching host
 paths. Native acceptance clears all `DYLD_*` search fallbacks, explicitly exercises `ssl`, `_ssl`,
 `hashlib`, `_hashlib`, `http.client`, and `urllib.request`, records dyld-loaded images, and rejects

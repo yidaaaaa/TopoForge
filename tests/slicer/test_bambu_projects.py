@@ -2239,3 +2239,163 @@ def test_generation_rejects_executable_replacement_at_every_execution_boundary(
     assert replaced is True
     assert not output.exists()
     assert list(tmp_path.glob(f".{output.name}.topoforge-stage-*")) == []
+
+
+def _multipart_project_members(
+    *, build_reference: bool = False
+) -> tuple[bytes, list[tuple[str, bytes]]]:
+    production = "http://schemas.microsoft.com/3dmanufacturing/production/2015/06"
+    core = "http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
+    part = _MODEL_XML.replace(b'<item objectid="1"/>', b"")
+    resources = """<object id="1" type="model"><components>
+    <component objectid="1" p:path="/3D/Objects/a.model" transform="2 0 0 0 1 0 0 0 1 0 0 0"/>
+    <component objectid="1" p:path="/3D/Objects/b.model" transform="1 0 0 0 1 0 0 0 1 10 0 0"/>
+    </components></object>"""
+    item = '<item objectid="1" transform="0 1 0 -1 0 0 0 0 1 4 8 0"/>'
+    if build_reference:
+        resources = ""
+        item = (
+            '<item objectid="1" p:path="/3D/Objects/a.model" transform="2 0 0 0 3 0 0 0 4 0 0 0"/>'
+        )
+    root = (
+        f'<model unit="millimeter" xmlns="{core}" xmlns:p="{production}" requiredextensions="p">'
+        f"<resources>{resources}</resources><build>{item}</build></model>"
+    ).encode()
+    rels = b"""<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+    <Relationship Id="a" Target="/3D/Objects/a.model" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
+    <Relationship Id="b" Target="Objects/b.model" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
+    </Relationships>"""
+    return root, [
+        ("3D/Objects/a.model", part),
+        # Child build entries must be ignored, even when they reference absent objects.
+        (
+            "3D/Objects/b.model",
+            part.replace(b"<build></build>", b'<build><item objectid="999"/></build>'),
+        ),
+        ("3D/_rels/3dmodel.model.rels", rels),
+    ]
+
+
+def _measure_multipart_archive(
+    tmp_path: Path, root: bytes, members: Sequence[tuple[str, bytes]]
+) -> dict[str, Any]:
+    gcode = b"; BambuStudio 02.07.01.62\n"
+    primary = tmp_path / "primary.gcode"
+    primary.write_bytes(gcode)
+    project = tmp_path / "multipart.3mf"
+    _write_project_archive(project, gcode, model_xml=root, extra_members=members)
+    return archive_evidence(project, primary)
+
+
+@pytest.mark.parametrize("build_reference", [False, True])
+def test_archive_measures_production_model_parts_with_scoped_ids_and_transforms(
+    tmp_path: Path, build_reference: bool
+) -> None:
+    root, members = _multipart_project_members(build_reference=build_reference)
+    evidence = _measure_multipart_archive(tmp_path, root, members)
+    assert evidence["project_model_dimensions_mm"] == (
+        [2.0, 6.0, 12.0] if build_reference else [2.0, 11.0, 3.0]
+    )
+    assert evidence["project_model_triangle_count"] == (1 if build_reference else 2)
+    assert evidence["embedded_gcode_md5_verified"]
+    assert evidence["embedded_gcode_matches_primary"]
+
+
+@pytest.mark.parametrize(
+    ("path", "message"),
+    [
+        ("Objects/a.model", "absolute archive-local"),
+        ("https://example.com/a.model", "absolute archive-local"),
+        ("//host/a.model", "absolute archive-local"),
+        ("/3D/../a.model", "safe relative path"),
+        ("/3D/%2e%2e/a.model", "safe relative path"),
+        ("/3D%2fObjects/a.model", "absolute archive-local"),
+        ("/3D/Objects/a.model#fragment", "absolute archive-local"),
+        ("/3D/Objects/a.model?query", "absolute archive-local"),
+        ("/3D/Objects/%ZZ.model", "absolute archive-local"),
+        ("/3D/Objects/%FF.model", "UTF-8"),
+        ("/3D/Objects/a.xml", "bounded .model"),
+        ("/3D/Objects/absent.model", "matching model relationship"),
+    ],
+)
+def test_archive_rejects_invalid_production_model_paths(
+    tmp_path: Path, path: str, message: str
+) -> None:
+    root, members = _multipart_project_members()
+    root = root.replace(b"/3D/Objects/a.model", path.encode())
+    with pytest.raises(RuntimeError, match=message):
+        _measure_multipart_archive(tmp_path, root, members)
+
+
+@pytest.mark.parametrize("missing", ["part", "relationship", "object"])
+def test_archive_rejects_missing_production_reference_targets(tmp_path: Path, missing: str) -> None:
+    root, members = _multipart_project_members()
+    if missing == "part":
+        members = [(name, data) for name, data in members if name != "3D/Objects/a.model"]
+        message = "missing model part"
+    elif missing == "relationship":
+        members = [(name, data) for name, data in members if not name.endswith(".rels")]
+        message = "matching model relationship"
+    else:
+        # The root object's matching ID must not substitute for an absent child object.
+        members = [
+            (name, data.replace(b'object id="1"', b'object id="2"')) for name, data in members
+        ]
+        message = "missing object"
+    with pytest.raises(RuntimeError, match=message):
+        _measure_multipart_archive(tmp_path, root, members)
+
+
+@pytest.mark.parametrize("cross_part", [False, True])
+def test_archive_rejects_child_cycles_and_cross_part_components(
+    tmp_path: Path, cross_part: bool
+) -> None:
+    root, members = _multipart_project_members()
+    production = b' xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06"'
+    part = _shared_component_dag_model(0).replace(b"<model ", b"<model" + production + b" ")
+    a = part.index(b'<object id="1"')
+    b = part.index(b"</resources>")
+    path = b' p:path="/3D/Objects/b.model"' if cross_part else b""
+    part = (
+        part[:a]
+        + b'<object id="1"><components><component objectid="1"'
+        + path
+        + b"/></components></object>"
+        + part[b:]
+    )
+    members = [(name, part if name == "3D/Objects/a.model" else data) for name, data in members]
+    with pytest.raises(RuntimeError, match="only local objects" if cross_part else "cycle"):
+        _measure_multipart_archive(tmp_path, root, members)
+
+
+@pytest.mark.parametrize("budget", ["bytes", "parts", "expanded"])
+def test_archive_bounds_aggregate_model_parts_and_expansion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, budget: str
+) -> None:
+    root, members = _multipart_project_members()
+    if budget == "bytes":
+        monkeypatch.setattr(bambu_projects_module, "_PROJECT_MAX_MODEL_XML_BYTES", len(root) + 1)
+        message = "aggregate byte limit"
+    elif budget == "parts":
+        monkeypatch.setattr(bambu_projects_module, "_PROJECT_MAX_MODEL_PARTS", 2)
+        message = "model part count limit"
+    else:
+        monkeypatch.setattr(bambu_projects_module, "_PROJECT_MAX_EXPANDED_INSTANCES", 100)
+        root = root.replace(
+            b'objectid="1" p:path="/3D/Objects/a.model"',
+            b'objectid="13" p:path="/3D/Objects/a.model"',
+        )
+        members = [
+            (name, _shared_component_dag_model(12) if name == "3D/Objects/a.model" else data)
+            for name, data in members
+        ]
+        message = "object instance limit"
+    with pytest.raises(RuntimeError, match=message):
+        _measure_multipart_archive(tmp_path, root, members)
+
+
+def test_archive_rejects_invalid_triangle_in_referenced_model_part(tmp_path: Path) -> None:
+    root, members = _multipart_project_members()
+    members = [(name, data.replace(b'v3="2"', b'v3="99"')) for name, data in members]
+    with pytest.raises(RuntimeError, match="triangle indices are invalid"):
+        _measure_multipart_archive(tmp_path, root, members)
