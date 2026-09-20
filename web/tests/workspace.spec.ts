@@ -253,7 +253,16 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   await page.addInitScript(() => {
     window.localStorage.setItem("topoforge-language", "zh-CN");
   });
-  await page.goto("/");
+  // Workspace validation can outlast the default locator timeout on shared CI CPUs.
+  // Wait for this real prerequisite and still require the backup/cleanup controls below.
+  const [initialMaintenance] = await Promise.all([
+    page.waitForResponse((response) =>
+      response.url().endsWith(`/api/v1/jobs/${completedJob.job_id}/maintenance`) &&
+      response.request().method() === "GET",
+    ),
+    page.goto("/"),
+  ]);
+  expect(initialMaintenance.ok()).toBe(true);
   await expect(page.getByText("本地地形制造工作台")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: basename(completedJob.workspace_dir) }),
