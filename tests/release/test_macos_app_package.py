@@ -2040,3 +2040,35 @@ def test_macho_signing_fails_closed_on_invalid_seal(
     expected = subprocess.CalledProcessError if failure == "verification" else RuntimeError
     with pytest.raises(expected):
         builder._adhoc_sign_macho(tmp_path / "Python", relative_path=PYTHON_PATH)
+
+
+@pytest.mark.parametrize("seal", ["valid", "unsigned", "corrupt", "authority", "wrong-id"])
+def test_extracted_macho_requires_valid_candidate_adhoc_seal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, seal: str
+) -> None:
+    path = tmp_path / "Python"
+    identity = "org.topoforge.runtime." + hashlib.sha256(PYTHON_PATH.encode()).hexdigest()
+    checks: list[str] = []
+
+    def codesign(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert kwargs["check"] is True
+        assert command[-1] == str(path)
+        checks.append(command[1])
+        if seal == "corrupt" and "--verify" in command:
+            raise subprocess.CalledProcessError(1, command, stderr="invalid signature")
+        if seal == "unsigned":
+            raise subprocess.CalledProcessError(1, command, stderr="not signed")
+        signature = "Authority=Developer ID" if seal == "authority" else "Signature=adhoc"
+        identifier = "unexpected" if seal == "wrong-id" else identity
+        return subprocess.CompletedProcess(
+            command, 0, "", f"Identifier={identifier}\n{signature}\n"
+        )
+
+    monkeypatch.setattr(app_verifier.subprocess, "run", codesign)
+    if seal == "valid":
+        app_verifier._verify_adhoc_macho(path, relative_path=PYTHON_PATH)
+        assert checks == ["--verify", "--display"]
+    else:
+        error = subprocess.CalledProcessError if seal in {"corrupt", "unsigned"} else RuntimeError
+        with pytest.raises(error):
+            app_verifier._verify_adhoc_macho(path, relative_path=PYTHON_PATH)
