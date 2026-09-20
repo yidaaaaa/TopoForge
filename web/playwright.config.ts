@@ -3,6 +3,8 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   outputDir: "./test-results",
+  // Browser cases share one local server; keep CI validation work from competing.
+  workers: process.env.CI ? 1 : undefined,
   reporter: [[process.env.CI ? "github" : "list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
   webServer: {
     command: "uv run python scripts/run_playwright_server.py --port 8771",

@@ -253,13 +253,15 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   await page.addInitScript(() => {
     window.localStorage.setItem("topoforge-language", "zh-CN");
   });
-  // Workspace validation can outlast the default locator timeout on shared CI CPUs.
-  // Wait for this real prerequisite and still require the backup/cleanup controls below.
+  // Each maintenance operation validates real files before publishing its UI state.
+  const waitForMaintenance = () => page.waitForResponse((response) =>
+    response.url().endsWith(`/api/v1/jobs/${completedJob.job_id}/maintenance`) &&
+    response.request().method() === "GET",
+  );
+  // These transitions include follow-up requests; the whole test still has its 90 s budget.
+  const expectOperation = expect.configure({ timeout: 30_000 });
   const [initialMaintenance] = await Promise.all([
-    page.waitForResponse((response) =>
-      response.url().endsWith(`/api/v1/jobs/${completedJob.job_id}/maintenance`) &&
-      response.request().method() === "GET",
-    ),
+    waitForMaintenance(),
     page.goto("/"),
   ]);
   expect(initialMaintenance.ok()).toBe(true);
@@ -330,15 +332,17 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   const cleanupButton = page.getByRole("button", { name: "清理旧阶段" });
   await expect(backupButton).toBeEnabled();
   await expect(cleanupButton).toBeEnabled();
-  const [backupResponse] = await Promise.all([
+  const [backupResponse, backupMaintenance] = await Promise.all([
     page.waitForResponse(
       (response) =>
         response.url().endsWith(`/api/v1/jobs/${completedJob.job_id}/backup`) &&
         response.request().method() === "POST",
     ),
+    waitForMaintenance(),
     backupButton.click(),
   ]);
   expect(backupResponse.ok()).toBe(true);
+  expect(backupMaintenance.ok()).toBe(true);
   const backup = (await backupResponse.json()) as {
     backup_id: string;
     workflow_id: string;
@@ -368,15 +372,32 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
     backup.archive_sha256,
   );
   page.once("dialog", (dialog) => dialog.accept());
-  await cleanupButton.click();
+  const [cleanupResponse, cleanupMaintenance] = await Promise.all([
+    page.waitForResponse((response) =>
+      response.url().endsWith(`/api/v1/jobs/${completedJob.job_id}/cleanup`) &&
+      response.request().method() === "POST",
+    ),
+    waitForMaintenance(),
+    cleanupButton.click(),
+  ]);
+  expect(cleanupResponse.ok()).toBe(true);
+  expect(cleanupMaintenance.ok()).toBe(true);
   await expect(page.getByText("旧阶段已清理")).toBeVisible();
   await expect(cleanupButton).toBeDisabled();
-  const [restoreResponse] = await Promise.all([
+  const waitForRestoredData = (suffix: string) => page.waitForResponse((response) =>
+    response.url().endsWith(`/${suffix}`) &&
+    response.url().includes("/api/v1/jobs/") &&
+    !response.url().includes(`/api/v1/jobs/${completedJob.job_id}/`) &&
+    response.request().method() === "GET",
+  );
+  const [restoreResponse, restoredMap, restoredAssembly] = await Promise.all([
     page.waitForResponse(
       (response) =>
         response.url().endsWith(`/api/v1/backups/${backup.backup_id}/restore`) &&
         response.request().method() === "POST",
     ),
+    waitForRestoredData("map/manifest"),
+    waitForRestoredData("assembly"),
     backupRow.getByRole("button", { name: "恢复副本" }).click(),
   ]);
   expect(restoreResponse.ok()).toBe(true);
@@ -384,7 +405,13 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
     job_id: string;
     workspace_dir: string;
   };
-  await expect(page.getByText("备份已恢复为新任务")).toBeVisible();
+  for (const [response, suffix] of [
+    [restoredMap, "map/manifest"], [restoredAssembly, "assembly"],
+  ] as const) {
+    expect(response.ok()).toBe(true);
+    expect(response.url()).toContain(`/api/v1/jobs/${restoredJob.job_id}/${suffix}`);
+  }
+  await expectOperation(page.getByText("备份已恢复为新任务")).toBeVisible();
   await expect(
     page.getByRole("heading", {
       name: `${basename(completedJob.workspace_dir)}-restored-${backup.backup_id.slice(0, 8)}`,
@@ -563,7 +590,7 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   expect(trashed.job_ids).toEqual([restoredJob.job_id]);
   expect(trashed.backups_preserved).toBe(true);
   expect(trashed.required_checks_passed).toBe(true);
-  await expect(page.getByText("Selected jobs moved to trash")).toBeVisible();
+  await expectOperation(page.getByText("Selected jobs moved to trash")).toBeVisible();
   expect((await page.request.get(`/api/v1/jobs/${restoredJob.job_id}`)).status()).toBe(404);
   await taskSearchEnglish.fill("");
   await expect(page.getByText(new RegExp(`Batch ${trashed.batch_id.slice(0, 12)}`))).toBeVisible();
@@ -579,7 +606,7 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
     page.getByRole("button", { name: "Restore batch" }).click(),
   ]);
   expect(trashRestoreResponse.ok()).toBe(true);
-  await expect(page.getByText("Trash batch restored")).toBeVisible();
+  await expectOperation(page.getByText("Trash batch restored")).toBeVisible();
   expect((await page.request.get(`/api/v1/jobs/${restoredJob.job_id}`)).ok()).toBe(true);
 
   const repeatPlan = await page.request.post("/api/v1/lifecycle/deletions/plan", {
