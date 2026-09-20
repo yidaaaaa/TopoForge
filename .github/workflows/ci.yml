@@ -36,8 +36,20 @@ jobs:
         working-directory: web
       - run: npx playwright install --with-deps chromium
         working-directory: web
-      - run: npm run test:ui
+      - name: Run browser acceptance
+        id: browser-tests
+        run: npm run test:ui
         working-directory: web
+      - name: Retain browser failure evidence
+        if: failure() && steps.browser-tests.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: topoforge-browser-failure-${{ github.run_attempt }}
+          path: |
+            web/test-results/
+            web/playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pyright

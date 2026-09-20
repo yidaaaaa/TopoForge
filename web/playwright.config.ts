@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   outputDir: "./test-results",
-  reporter: [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
+  reporter: [[process.env.CI ? "github" : "list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
   webServer: {
     command: "uv run python scripts/run_playwright_server.py --port 8771",
     cwd: "..",
