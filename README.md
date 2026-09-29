@@ -12,6 +12,8 @@ TopoForge is a Python 3.11–3.14 CLI-first engine that converts georeferenced e
 
 ## Local bilingual Web application
 
+中文入门：参见[本地安装、地图选区与离线使用](docs/local-quickstart.zh-CN.md)。
+
 Launch the packaged local application from the repository or an installed wheel:
 
 ```bash
@@ -30,8 +32,13 @@ progress/cancellation; bilingual job search, filtering, sorting, batch lifecycle
 
 The server accepts only loopback hosts. Local file browsing is limited to explicit
 `--input-root` directories, Web-created workflows must be children of
-`--workspace-root`, and job/artifact records remain below `--state-dir`. The default map includes bundled Natural Earth country outlines and a graticule, so AOI work remains geographically legible offline; the optional OpenStreetMap layer is the only browser network request. Verify
-an installed application without starting a listener:
+`--workspace-root`, and job/artifact records remain below `--state-dir`. The bundled
+Natural Earth reference layers and graticule work offline. Optional road and terrain
+basemaps and place search use the local server, which fetches upstream data only when
+the corresponding online mode is enabled. **Use local cache only** covers those map
+and search requests; building terrain still needs a local DEM or separately cached
+provider data. See the [offline preparation steps](docs/local-quickstart.zh-CN.md#断网前准备).
+Verify an installed application without starting a listener:
 
 ```bash
 topoforge web --check --workspace-root topoforge-workspaces --input-root . --no-open

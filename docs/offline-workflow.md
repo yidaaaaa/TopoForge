@@ -2,19 +2,27 @@
 
 TopoForge 0.10.3 CLI can configure, run, inspect, back up, restore, resume, and add checksum-bound local overlays without starting the optional Web server. A new global AOI still needs either network access or every required provider request already present in the content-addressed cache.
 
+For a Chinese WebUI walkthrough, see [本地安装、地图选区与离线使用](local-quickstart.zh-CN.md).
+
+The map's **Use local cache only** setting controls road/terrain basemaps and place
+search. It does not download printing elevation data or disable provider acquisition.
+Prepare a local DEM for a new disconnected build; a completed workspace can be reopened
+without downloading its source again. Basemap and search caches live in the Web state
+directory, separately from the provider cache and workflow backups.
+
 ## Prepare the locked environment
 
 On a connected machine, populate the `uv` cache and retain the repository plus `.venv` or the cache directory:
 
 ```bash
-uv sync
+uv sync --locked
 uv run topoforge doctor
 ```
 
 With the required wheels already cached, the same lock can be installed without network access:
 
 ```bash
-uv sync --offline
+uv sync --locked --offline
 uv run topoforge doctor
 ```
 
@@ -88,4 +96,4 @@ Restore rejects an existing destination, verifies paths/CRCs/sizes/SHA-256 value
 
 - Several TopoForge terrain models have been physically printed on a Bambu Lab P2S with very good operator-reported results; quantitative connector calibration remains pending and does not block local software use.
 - `self_intersection_status` remains `not_fully_checked`; Phase 6 did not promote a backend with unsuitable accuracy, licensing, or resource behavior.
-- The optional Phase 11 WebUI packages its assets locally and binds only to loopback. Local DEM XYZ tiles and assembly views remain same-origin and deterministic. CLI workflows still call the Python core directly and do not need the Web service. Uncached global AOIs and the optional OpenStreetMap layer remain the only network-dependent paths.
+- The local WebUI packages its assets locally and binds only to loopback. Local DEM XYZ tiles and assembly views remain same-origin and deterministic. CLI workflows still call the Python core directly and do not need the Web service. Uncached global acquisition, optional road/terrain basemaps, and online place search require upstream network access. Previously viewed map tiles and cached search queries can be read without upstream requests; missing coverage is reported rather than downloaded in cache-only mode.
