@@ -50,6 +50,7 @@ def _run(
     command = [
         str(python_executable),
         "-I",
+        "-B",
         "-X",
         "utf8",
         "-m",

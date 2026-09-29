@@ -5,6 +5,8 @@ uv.lock text eol=lf
 scripts/rollback-topoforge-*.sh text eol=lf
 # Vite preserves the source HTML newline style in the packaged index.
 web/index.html text eol=lf
+# Vite copies public files and data assets byte-for-byte; normalize all text inputs.
+web/** text=auto eol=lf
 # The Web manifest binds generated asset bytes; checkout must never translate them.
 src/topoforge/web/static/** -text
 src/topoforge/web/static/assets/*.css -whitespace

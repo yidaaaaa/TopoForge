@@ -1207,6 +1207,7 @@ def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) ->
             b"  printf '%s\\n' \"${DYLD_FALLBACK_LIBRARY_PATH-unset}\"\n"
             b"  printf '%s\\n' \"${DYLD_FALLBACK_FRAMEWORK_PATH-unset}\"\n"
             + tls_capture
+            + b"  printf '%s\\n' \"${PYTHONDONTWRITEBYTECODE-unset}\"\n"
             + b"  printf '%s\\n' \"$@\"\n"
             b'} > "$CAPTURE"\n'
         ),
@@ -1236,8 +1237,10 @@ def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) ->
     assert cli_lines[4:10] == [str(ca_bundle)] * len(TLS_CA_FILE_ENVIRONMENT_VARIABLES) + [
         str(ca_bundle.parent)
     ]
-    assert cli_lines[10:] == [
+    assert cli_lines[10] == "1"
+    assert cli_lines[11:] == [
         "-I",
+        "-B",
         "-X",
         "utf8",
         "-m",
@@ -1256,8 +1259,10 @@ def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) ->
     assert web_lines[4:10] == [str(ca_bundle)] * len(TLS_CA_FILE_ENVIRONMENT_VARIABLES) + [
         str(ca_bundle.parent)
     ]
-    assert web_lines[10:17] == [
+    assert web_lines[10] == "1"
+    assert web_lines[11:19] == [
         "-I",
+        "-B",
         "-X",
         "utf8",
         "-m",
@@ -1265,7 +1270,7 @@ def test_launcher_info_plist_and_application_support_contract(tmp_path: Path) ->
         "web",
         "--host",
     ]
-    assert web_lines[17:] == ["127.0.0.1", "--check", "--no-open"]
+    assert web_lines[19:] == ["127.0.0.1", "--check", "--no-open"]
 
     rejected = subprocess.run(
         [str(app / WEB_LAUNCHER_PATH), "--host=0.0.0.0"],
@@ -1988,3 +1993,127 @@ def test_final_closure_records_exact_apple_system_paths() -> None:
     )
 
     assert records[0]["dependencies"][0]["resolved_path"] == "/usr/lib/libSystem.B.dylib"
+
+
+def test_macho_normalization_seals_final_bytes_after_rewriting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = tmp_path / "TopoForge.app"
+    python = app / PYTHON_PATH
+    _write_file(python, _thin_macho("arm64", "11.0"), 0o755)
+    original_hash = sha256_file(python)
+    signed: set[str] = set()
+    calls: list[list[str]] = []
+
+    def codesign(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert command[0] == "/usr/bin/codesign"
+        calls.append(command)
+        target = command[-1]
+        if "--sign" in command:
+            assert command[command.index("--sign") + 1] == "-"
+            assert "--timestamp=none" in command
+            expected = "org.topoforge.runtime." + hashlib.sha256(PYTHON_PATH.encode()).hexdigest()
+            assert command[command.index("--identifier") + 1] == expected
+            Path(target).write_bytes(Path(target).read_bytes() + b"fixture-ad-hoc-seal")
+            signed.add(target)
+        if "--verify" in command:
+            assert target in signed
+        status = 0 if target in signed else 1
+        return subprocess.CompletedProcess(
+            command, status, "", "Signature=adhoc\n" if target in signed else "not signed\n"
+        )
+
+    monkeypatch.setattr(builder.subprocess, "run", codesign)
+    records = builder._normalize_macho(app, load_config(_config_path()))
+    assert len(records) == 1
+    assert records[0]["sha256"] == sha256_file(python) != original_hash
+    assert records[0]["bytes"] == python.stat().st_size
+    assert [c[1] for c in calls] == [
+        "--display",
+        "--display",
+        "--force",
+        "--verify",
+        "--display",
+        "--verify",
+    ]
+
+
+@pytest.mark.parametrize("failure", ["verification", "identity"])
+def test_macho_signing_fails_closed_on_invalid_seal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    def codesign(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert kwargs["check"] is True
+        if failure == "verification" and "--verify" in command:
+            raise subprocess.CalledProcessError(1, command, stderr="invalid code signature")
+        return subprocess.CompletedProcess(command, 0, "", "Authority=Unexpected signer\n")
+
+    monkeypatch.setattr(builder.subprocess, "run", codesign)
+    expected = subprocess.CalledProcessError if failure == "verification" else RuntimeError
+    with pytest.raises(expected):
+        builder._adhoc_sign_macho(tmp_path / "Python", relative_path=PYTHON_PATH)
+
+
+@pytest.mark.parametrize("seal", ["valid", "unsigned", "corrupt", "authority", "wrong-id"])
+def test_extracted_macho_requires_valid_candidate_adhoc_seal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, seal: str
+) -> None:
+    path = tmp_path / "Python"
+    identity = "org.topoforge.runtime." + hashlib.sha256(PYTHON_PATH.encode()).hexdigest()
+    checks: list[str] = []
+
+    def codesign(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert kwargs["check"] is True
+        assert command[-1] == str(path)
+        checks.append(command[1])
+        if seal == "corrupt" and "--verify" in command:
+            raise subprocess.CalledProcessError(1, command, stderr="invalid signature")
+        if seal == "unsigned":
+            raise subprocess.CalledProcessError(1, command, stderr="not signed")
+        signature = "Authority=Developer ID" if seal == "authority" else "Signature=adhoc"
+        identifier = "unexpected" if seal == "wrong-id" else identity
+        return subprocess.CompletedProcess(
+            command, 0, "", f"Identifier={identifier}\n{signature}\n"
+        )
+
+    monkeypatch.setattr(app_verifier.subprocess, "run", codesign)
+    if seal == "valid":
+        app_verifier._verify_adhoc_macho(path, relative_path=PYTHON_PATH)
+        assert checks == ["--verify", "--display"]
+    else:
+        with pytest.raises(RuntimeError):
+            app_verifier._verify_adhoc_macho(path, relative_path=PYTHON_PATH)
+
+
+def test_framework_resource_seal_matches_final_nested_binary_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = tmp_path / "TopoForge.app"
+    framework = app / "Contents/Frameworks/Python.framework/Versions/3.12/Python"
+    child = app / PYTHON_PATH
+    for path in (framework, child):
+        _write_file(path, _thin_macho("arm64", "11.0"), 0o755)
+    sealed: set[Path] = set()
+    resource_seal: dict[Path, str] = {}
+
+    def codesign(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        del kwargs
+        path = Path(command[-1])
+        if "--sign" in command:
+            path.write_bytes(path.read_bytes() + b"fixture-ad-hoc-seal")
+            sealed.add(path)
+            if path == framework:
+                resource_seal[child] = sha256_file(child)
+        if "--verify" in command and path == framework:
+            assert resource_seal[child] == sha256_file(child), "nested code changed after sealing"
+        return subprocess.CompletedProcess(
+            command,
+            0 if path in sealed else 1,
+            "",
+            "Signature=adhoc\n" if path in sealed else "not signed\n",
+        )
+
+    monkeypatch.setattr(builder.subprocess, "run", codesign)
+    builder._normalize_macho(app, load_config(_config_path()))
+    assert sealed == {framework, child}
+    assert resource_seal[child] == sha256_file(child), "framework resource seal is stale"

@@ -32,7 +32,11 @@ if __package__:
         load_config,
         write_json_with_sha256,
     )
-    from scripts.verify_macos_app import _poison_host_tls_environment, execute_archive
+    from scripts.verify_macos_app import (
+        _poison_host_tls_environment,
+        _verify_runtime_seals,
+        execute_archive,
+    )
 else:
     from macos_app import (  # type: ignore[import-not-found]
         CLI_LAUNCHER_PATH,
@@ -45,6 +49,7 @@ else:
     )
     from verify_macos_app import (  # type: ignore[import-not-found]
         _poison_host_tls_environment,
+        _verify_runtime_seals,
         execute_archive,
     )
 
@@ -761,6 +766,7 @@ def verify_macos_system(
             f"for {expected_target}"
         )
     web = verify_web_lifecycle(app, work_root=root / "web lifecycle with spaces" / "地形")
+    _verify_runtime_seals(app)
     clean = evidence_scope == "clean-system"
     report = {
         "schema_version": SYSTEM_SCHEMA_VERSION,

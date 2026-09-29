@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -125,11 +126,12 @@ unset PYTHONHOME PYTHONPATH PYTHONSTARTUP DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH
 unset DYLD_FALLBACK_LIBRARY_PATH DYLD_FALLBACK_FRAMEWORK_PATH
 export PYTHONUTF8=1
 export PYTHONNOUSERSITE=1
+export PYTHONDONTWRITEBYTECODE=1
 """
     + _TLS_ENVIRONMENT
     + """
 exec "$CONTENTS_DIR/Frameworks/Python.framework/Versions/3.12/bin/python3.12" \
-  -I -X utf8 -m topoforge.cli.app "$@"
+  -I -B -X utf8 -m topoforge.cli.app "$@"
 """
 )
 
@@ -149,11 +151,12 @@ unset PYTHONHOME PYTHONPATH PYTHONSTARTUP DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH
 unset DYLD_FALLBACK_LIBRARY_PATH DYLD_FALLBACK_FRAMEWORK_PATH
 export PYTHONUTF8=1
 export PYTHONNOUSERSITE=1
+export PYTHONDONTWRITEBYTECODE=1
 """
     + _TLS_ENVIRONMENT
     + """
 exec "$CONTENTS_DIR/Frameworks/Python.framework/Versions/3.12/bin/python3.12" \
-  -I -X utf8 -m topoforge.cli.app web --host 127.0.0.1 "$@"
+  -I -B -X utf8 -m topoforge.cli.app web --host 127.0.0.1 "$@"
 """
 )
 
@@ -461,6 +464,40 @@ def _strip_signature(path: Path) -> None:
         raise RuntimeError(f"Mach-O file remains signed after normalization: {path}")
 
 
+def _adhoc_sign_macho(path: Path, *, relative_path: str) -> None:
+    """Seal rewritten arm64 code without a Developer ID identity or signing timestamp."""
+    identifier = "org.topoforge.runtime." + hashlib.sha256(relative_path.encode()).hexdigest()
+    subprocess.run(
+        [
+            "/usr/bin/codesign",
+            "--force",
+            "--sign",
+            "-",
+            "--timestamp=none",
+            "--identifier",
+            identifier,
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["/usr/bin/codesign", "--verify", "--strict", str(path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = subprocess.run(
+        ["/usr/bin/codesign", "--display", "--verbose=2", str(path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    if "Signature=adhoc" not in result.stderr.splitlines():
+        raise RuntimeError(f"Normalized Mach-O does not have an ad-hoc signature: {path}")
+
+
 def _apply_macho_rewrite(path: Path, plan: dict[str, Any]) -> None:
     command = ["/usr/bin/install_name_tool"]
     for change in plan["changes"]:
@@ -522,8 +559,25 @@ def _normalize_macho(root: Path, config: dict[str, Any]) -> list[dict[str, Any]]
         path = root.joinpath(*PurePosixPath(plan["path"]).parts)
         _apply_macho_rewrite(path, plan)
 
-    for path in paths:
+    # codesign seals framework resources when given its main Mach-O. Nested code must
+    # reach its final bytes first, or the outer resource envelope immediately goes stale.
+    for path in sorted(paths, key=lambda item: (-len(item.relative_to(root).parts), item)):
         _strip_signature(path)
+        _adhoc_sign_macho(path, relative_path=path.relative_to(root).as_posix())
+
+    # An immediate check of each seal cannot detect later changes in its nested code.
+    for path in paths:
+        result = subprocess.run(
+            ["/usr/bin/codesign", "--verify", "--strict", str(path)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode:
+            raise RuntimeError(
+                "Final Mach-O seal failed after all nested code was signed; "
+                f"rebuild the candidate: {path}: {result.stderr[-2000:]}"
+            )
 
     final_payloads = {path.relative_to(root).as_posix(): path.read_bytes() for path in paths}
     closure_records = macho_closure_records(

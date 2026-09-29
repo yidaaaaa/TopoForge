@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -331,6 +332,43 @@ def _apply_packaged_tls_environment(environment: dict[str, str], ca_bundle: Path
     environment[TLS_CA_DIRECTORY_ENVIRONMENT_VARIABLE] = str(ca_bundle.parent)
 
 
+def _verify_adhoc_macho(path: Path, *, relative_path: str) -> None:
+    """Require an intact local arm64 seal with the candidate's stable identity."""
+    try:
+        subprocess.run(
+            ["/usr/bin/codesign", "--verify", "--strict", str(path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"Mach-O ad-hoc verification failed; rebuild the candidate: {relative_path}: "
+            f"{(exc.stderr or '')[-2000:]}"
+        ) from exc
+    signature = subprocess.run(
+        ["/usr/bin/codesign", "--display", "--verbose=2", str(path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    fields = signature.stderr.splitlines()
+    identifier = "org.topoforge.runtime." + hashlib.sha256(relative_path.encode()).hexdigest()
+    if "Signature=adhoc" not in fields or f"Identifier={identifier}" not in fields:
+        raise RuntimeError(
+            "Mach-O does not carry the expected ad-hoc seal; "
+            f"rebuild the candidate: {relative_path}"
+        )
+
+
+def _verify_runtime_seals(app: Path) -> None:
+    """Verify the extracted runtime again after executing packaged workflows."""
+    manifest = json.loads((app / MANIFEST_PATH).read_text(encoding="utf-8"))
+    for record in manifest["python_runtime"]["macho_files"]:
+        path = app / Path(*PurePosixPath(record["path"]).parts)
+        _verify_adhoc_macho(path, relative_path=record["path"])
+
+
 def execute_archive(
     archive: Path,
     *,
@@ -369,14 +407,7 @@ def execute_archive(
             raise RuntimeError(f"extracted Mach-O is not arm64-only: {record['path']}")
         if slices[0]["minimum_macos"] != record["minimum_macos"]:
             raise RuntimeError(f"extracted Mach-O deployment target changed: {record['path']}")
-        signature = subprocess.run(
-            ["/usr/bin/codesign", "--display", "--verbose=2", str(path)],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if signature.returncode == 0:
-            raise RuntimeError(f"Phase 13A Mach-O unexpectedly remains signed: {record['path']}")
+        _verify_adhoc_macho(path, relative_path=record["path"])
 
     codesign = subprocess.run(
         ["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)],
@@ -410,7 +441,7 @@ def execute_archive(
     _apply_packaged_tls_environment(probe_environment, ca_bundle)
     commands: list[dict[str, Any]] = []
     dependency_probe, command = _run_json(
-        [str(python), "-I", "-X", "utf8", "-c", DEPENDENCY_PROBE],
+        [str(python), "-I", "-B", "-X", "utf8", "-c", DEPENDENCY_PROBE],
         cwd=root,
         environment=probe_environment,
     )
@@ -582,6 +613,7 @@ def execute_archive(
             "required_checks_passed": True,
         }
     )
+    _verify_runtime_seals(app)
     return app, static
 
 

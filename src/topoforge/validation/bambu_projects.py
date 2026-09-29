@@ -23,6 +23,7 @@ from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO
+from urllib.parse import unquote
 from xml.etree import ElementTree as ET
 from zipfile import ZIP_DEFLATED, ZIP_STORED, BadZipFile, ZipFile, ZipInfo
 
@@ -47,6 +48,9 @@ _PROJECT_MAX_RELATIONSHIP_BYTES = 8 * 1024 * 1024
 # A 64 MiB model keeps production terrain capacity while the streaming parser below
 # clears XML nodes eagerly instead of retaining a second full ElementTree.
 _PROJECT_MAX_MODEL_XML_BYTES = 64 * 1024 * 1024
+_PROJECT_MAX_MODEL_PARTS = 256
+_PROJECT_MAIN_MODEL = "3D/3dmodel.model"
+_PROJECT_PRODUCTION_PATH = "{http://schemas.microsoft.com/3dmanufacturing/production/2015/06}path"
 # Component graphs can encode exponentially many mesh instances in a tiny XML
 # document. These limits are checked with a memoized, saturating graph summary
 # before any transformed vertex traversal begins.
@@ -1777,7 +1781,65 @@ def _reject_external_relationships(payload: bytes, *, name: str) -> None:
             raise RuntimeError(f"Bambu project archive contains an external relationship: {name}")
 
 
-def _project_model_measurement(payload: bytes | bytearray) -> dict[str, Any]:
+def _project_model_part_name(value: str) -> str:
+    """Resolve a canonical package-root model URI without filesystem access."""
+    if (
+        not value.startswith("/")
+        or value.startswith("//")
+        or any(char in value for char in ("?", "#", "\\"))
+        or re.search(r"%(?![0-9a-fA-F]{2})|%2[fF]|%5[cC]", value)
+    ):
+        raise RuntimeError("Bambu project model path must be an absolute archive-local URI")
+    try:
+        name = unquote(value[1:], encoding="utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError("Bambu project model path has invalid UTF-8 escapes") from exc
+    _windows_archive_alias(name)
+    if not name.endswith(".model") or len(name.encode("utf-8")) > _PROJECT_MAX_MEMBER_NAME_BYTES:
+        raise RuntimeError("Bambu project model path must name a bounded .model member")
+    return name
+
+
+def _project_model_relationship_targets(payload: bytes | bytearray | None) -> set[str]:
+    if payload is None:
+        return set()
+    if len(payload) > _PROJECT_MAX_RELATIONSHIP_BYTES:
+        raise RuntimeError("Bambu project model relationships exceed the byte limit")
+    try:
+        root = ET.fromstring(payload)
+    except ET.ParseError as exc:
+        raise RuntimeError("Bambu project model relationships are invalid XML") from exc
+    namespace = "{http://schemas.openxmlformats.org/package/2006/relationships}"
+    if root.tag != namespace + "Relationships":
+        raise RuntimeError("Bambu project model relationships have an invalid root")
+    targets: set[str] = set()
+    identifiers: set[str] = set()
+    for item in root:
+        if item.tag != namespace + "Relationship":
+            raise RuntimeError("Bambu project model relationships contain an invalid entry")
+        identifier = item.attrib.get("Id", "")
+        if not identifier or identifier in identifiers:
+            raise RuntimeError("Bambu project model relationship ids must be unique and nonempty")
+        identifiers.add(identifier)
+        if item.attrib.get("TargetMode", "Internal") != "Internal":
+            raise RuntimeError("Bambu project model relationship must be internal")
+        if (
+            item.attrib.get("Type")
+            == "http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"
+        ):
+            target = item.attrib.get("Target", "")
+            if not target.startswith("/"):
+                target = "/3D/" + target
+            targets.add(_project_model_part_name(target))
+    return targets
+
+
+def _project_model_measurement(
+    payload: bytes | bytearray,
+    *,
+    model_parts: Mapping[str, bytes | bytearray] | None = None,
+    model_relationships: bytes | bytearray | None = None,
+) -> dict[str, Any]:
     core_namespace = "http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
     core_prefix = f"{{{core_namespace}}}"
 
@@ -1804,194 +1866,258 @@ def _project_model_measurement(payload: bytes | bytearray) -> dict[str, Any]:
             x * matrix[2] + y * matrix[5] + z * matrix[8] + matrix[11],
         )
 
-    objects: dict[int, dict[str, Any]] = {}
-    build_items: list[tuple[int, tuple[float, ...]]] = []
-    resources_count = 0
-    build_count = 0
-    element_stack: list[ET.Element] = []
-    tag_stack: list[str] = []
-    current_object: dict[str, Any] | None = None
-    try:
-        events = ET.iterparse(io.BytesIO(payload), events=("start", "end"))
-        for event, element in events:
-            if event == "start":
-                parent_tag = tag_stack[-1] if tag_stack else None
-                grandparent_tag = tag_stack[-2] if len(tag_stack) > 1 else None
-                element_stack.append(element)
-                tag_stack.append(element.tag)
-                if len(tag_stack) == 1:
-                    if element.tag != f"{core_prefix}model":
-                        raise RuntimeError("Bambu project model has no core model root")
-                    if element.attrib.get("unit", "millimeter").casefold() not in {
-                        "millimeter",
-                        "millimetre",
-                        "mm",
-                    }:
-                        raise RuntimeError("Bambu project model must use millimetres")
-                elif len(tag_stack) == 2 and element.tag == f"{core_prefix}resources":
-                    resources_count += 1
-                elif len(tag_stack) == 2 and element.tag == f"{core_prefix}build":
-                    build_count += 1
-                elif (
-                    element.tag == f"{core_prefix}object"
-                    and parent_tag == f"{core_prefix}resources"
-                    and grandparent_tag == f"{core_prefix}model"
+    parts = model_parts or {}
+    if len(parts) + 1 > _PROJECT_MAX_MODEL_PARTS:
+        raise RuntimeError("Bambu project exceeds the model part count limit")
+    if len(payload) + sum(len(value) for value in parts.values()) > _PROJECT_MAX_MODEL_XML_BYTES:
+        raise RuntimeError("Bambu project model XML exceeds the aggregate byte limit")
+    if _PROJECT_MAIN_MODEL in parts:
+        raise RuntimeError("Bambu project model parts redefine the root model")
+    relationship_targets = _project_model_relationship_targets(model_relationships)
+    objects: dict[tuple[str, int], dict[str, Any]] = {}
+    loaded_parts: set[str] = set()
+
+    def parse_model(
+        model_payload: bytes | bytearray, part_name: str
+    ) -> list[tuple[tuple[str, int], tuple[float, ...]]]:
+        def reference(element: ET.Element, object_id: int) -> tuple[str, int]:
+            if object_id <= 0:
+                raise RuntimeError("Bambu project object reference must be positive")
+            path = element.attrib.get(_PROJECT_PRODUCTION_PATH)
+            if path is None:
+                return part_name, object_id
+            # Production Extension permits cross-part components only in the root model.
+            if part_name != _PROJECT_MAIN_MODEL:
+                raise RuntimeError("Bambu project child model must reference only local objects")
+            target = _project_model_part_name(path)
+            if target not in relationship_targets:
+                raise RuntimeError("Bambu project model part has no matching model relationship")
+            if target not in parts:
+                raise RuntimeError("Bambu project references a missing model part")
+            return target, object_id
+
+        build_items: list[tuple[tuple[str, int], tuple[float, ...]]] = []
+        resources_count = 0
+        build_count = 0
+        element_stack: list[ET.Element] = []
+        tag_stack: list[str] = []
+        current_object: dict[str, Any] | None = None
+        try:
+            events = ET.iterparse(io.BytesIO(model_payload), events=("start", "end"))
+            for event, element in events:
+                if event == "start":
+                    parent_tag = tag_stack[-1] if tag_stack else None
+                    grandparent_tag = tag_stack[-2] if len(tag_stack) > 1 else None
+                    element_stack.append(element)
+                    tag_stack.append(element.tag)
+                    if len(tag_stack) == 1:
+                        if element.tag != f"{core_prefix}model":
+                            raise RuntimeError("Bambu project model has no core model root")
+                        if element.attrib.get("unit", "millimeter").casefold() not in {
+                            "millimeter",
+                            "millimetre",
+                            "mm",
+                        }:
+                            raise RuntimeError("Bambu project model must use millimetres")
+                    elif len(tag_stack) == 2 and element.tag == f"{core_prefix}resources":
+                        resources_count += 1
+                    elif len(tag_stack) == 2 and element.tag == f"{core_prefix}build":
+                        build_count += 1
+                    elif (
+                        element.tag == f"{core_prefix}object"
+                        and parent_tag == f"{core_prefix}resources"
+                        and grandparent_tag == f"{core_prefix}model"
+                    ):
+                        try:
+                            object_id = int(element.attrib["id"])
+                        except (KeyError, ValueError) as exc:
+                            raise RuntimeError(
+                                "Bambu project model has an invalid object id"
+                            ) from exc
+                        if object_id <= 0 or (part_name, object_id) in objects:
+                            raise RuntimeError(
+                                "Bambu project model object ids must be unique and positive"
+                            )
+                        current_object = {
+                            "id": object_id,
+                            "mesh_count": 0,
+                            "components_group_count": 0,
+                            "vertices_group_count": 0,
+                            "triangles_group_count": 0,
+                            "vertices": [],
+                            "triangle_count": 0,
+                            "maximum_triangle_index": -1,
+                            "components": [],
+                        }
+                    elif current_object is not None:
+                        if (
+                            element.tag == f"{core_prefix}mesh"
+                            and parent_tag == f"{core_prefix}object"
+                        ):
+                            current_object["mesh_count"] += 1
+                        elif (
+                            element.tag == f"{core_prefix}components"
+                            and parent_tag == f"{core_prefix}object"
+                        ):
+                            current_object["components_group_count"] += 1
+                        elif (
+                            element.tag == f"{core_prefix}vertices"
+                            and parent_tag == f"{core_prefix}mesh"
+                        ):
+                            current_object["vertices_group_count"] += 1
+                        elif (
+                            element.tag == f"{core_prefix}triangles"
+                            and parent_tag == f"{core_prefix}mesh"
+                        ):
+                            current_object["triangles_group_count"] += 1
+                    continue
+
+                parent_tag = tag_stack[-2] if len(tag_stack) > 1 else None
+                grandparent_tag = tag_stack[-3] if len(tag_stack) > 2 else None
+                if current_object is not None and (
+                    element.tag == f"{core_prefix}vertex"
+                    and parent_tag == f"{core_prefix}vertices"
+                    and grandparent_tag == f"{core_prefix}mesh"
                 ):
                     try:
-                        object_id = int(element.attrib["id"])
+                        coordinates = tuple(float(element.attrib[axis]) for axis in ("x", "y", "z"))
                     except (KeyError, ValueError) as exc:
-                        raise RuntimeError("Bambu project model has an invalid object id") from exc
-                    if object_id <= 0 or object_id in objects:
-                        raise RuntimeError(
-                            "Bambu project model object ids must be unique and positive"
-                        )
-                    current_object = {
-                        "id": object_id,
-                        "mesh_count": 0,
-                        "components_group_count": 0,
-                        "vertices_group_count": 0,
-                        "triangles_group_count": 0,
-                        "vertices": [],
-                        "triangle_count": 0,
-                        "maximum_triangle_index": -1,
-                        "components": [],
-                    }
-                elif current_object is not None:
-                    if element.tag == f"{core_prefix}mesh" and parent_tag == f"{core_prefix}object":
-                        current_object["mesh_count"] += 1
-                    elif (
-                        element.tag == f"{core_prefix}components"
-                        and parent_tag == f"{core_prefix}object"
+                        raise RuntimeError("Bambu project model has an invalid vertex") from exc
+                    if len(coordinates) != 3 or not all(
+                        math.isfinite(value) for value in coordinates
                     ):
-                        current_object["components_group_count"] += 1
-                    elif (
-                        element.tag == f"{core_prefix}vertices"
-                        and parent_tag == f"{core_prefix}mesh"
-                    ):
-                        current_object["vertices_group_count"] += 1
-                    elif (
-                        element.tag == f"{core_prefix}triangles"
-                        and parent_tag == f"{core_prefix}mesh"
-                    ):
-                        current_object["triangles_group_count"] += 1
-                continue
-
-            parent_tag = tag_stack[-2] if len(tag_stack) > 1 else None
-            grandparent_tag = tag_stack[-3] if len(tag_stack) > 2 else None
-            if current_object is not None and (
-                element.tag == f"{core_prefix}vertex"
-                and parent_tag == f"{core_prefix}vertices"
-                and grandparent_tag == f"{core_prefix}mesh"
-            ):
-                try:
-                    coordinates = tuple(float(element.attrib[axis]) for axis in ("x", "y", "z"))
-                except (KeyError, ValueError) as exc:
-                    raise RuntimeError("Bambu project model has an invalid vertex") from exc
-                if len(coordinates) != 3 or not all(math.isfinite(value) for value in coordinates):
-                    raise RuntimeError("Bambu project model has a non-finite vertex")
-                current_object["vertices"].append(coordinates)
-            elif current_object is not None and (
-                element.tag == f"{core_prefix}triangle"
-                and parent_tag == f"{core_prefix}triangles"
-                and grandparent_tag == f"{core_prefix}mesh"
-            ):
-                try:
-                    indices = tuple(int(element.attrib[axis]) for axis in ("v1", "v2", "v3"))
-                except (KeyError, ValueError) as exc:
-                    raise RuntimeError("Bambu project model has an invalid triangle") from exc
-                if len(set(indices)) != 3 or min(indices) < 0:
-                    raise RuntimeError("Bambu project model triangle indices are invalid")
-                current_object["triangle_count"] += 1
-                current_object["maximum_triangle_index"] = max(
-                    current_object["maximum_triangle_index"],
-                    *indices,
-                )
-            elif current_object is not None and (
-                element.tag == f"{core_prefix}component"
-                and parent_tag == f"{core_prefix}components"
-                and grandparent_tag == f"{core_prefix}object"
-            ):
-                try:
-                    referenced_id = int(element.attrib["objectid"])
-                except (KeyError, ValueError) as exc:
-                    raise RuntimeError("Bambu project component has an invalid object id") from exc
-                current_object["components"].append(
-                    (referenced_id, transform(element.attrib.get("transform")))
-                )
-            elif (
-                element.tag == f"{core_prefix}item"
-                and parent_tag == f"{core_prefix}build"
-                and grandparent_tag == f"{core_prefix}model"
-            ):
-                try:
-                    build_object_id = int(element.attrib["objectid"])
-                except (KeyError, ValueError) as exc:
-                    raise RuntimeError("Bambu project build item has an invalid object id") from exc
-                build_items.append((build_object_id, transform(element.attrib.get("transform"))))
-            elif current_object is not None and (
-                element.tag == f"{core_prefix}object" and parent_tag == f"{core_prefix}resources"
-            ):
-                mesh_count = int(current_object["mesh_count"])
-                component_group_count = int(current_object["components_group_count"])
-                if (mesh_count, component_group_count) not in {(1, 0), (0, 1)}:
-                    raise RuntimeError(
-                        "Bambu project object must contain one mesh or components group"
-                    )
-                vertices = current_object["vertices"]
-                triangle_count = int(current_object["triangle_count"])
-                components = current_object["components"]
-                if mesh_count:
-                    if (
-                        current_object["vertices_group_count"] != 1
-                        or current_object["triangles_group_count"] != 1
-                        or not vertices
-                        or triangle_count <= 0
-                    ):
-                        raise RuntimeError("Bambu project model has an empty triangle mesh")
-                    if current_object["maximum_triangle_index"] >= len(vertices):
+                        raise RuntimeError("Bambu project model has a non-finite vertex")
+                    current_object["vertices"].append(coordinates)
+                elif current_object is not None and (
+                    element.tag == f"{core_prefix}triangle"
+                    and parent_tag == f"{core_prefix}triangles"
+                    and grandparent_tag == f"{core_prefix}mesh"
+                ):
+                    try:
+                        indices = tuple(int(element.attrib[axis]) for axis in ("v1", "v2", "v3"))
+                    except (KeyError, ValueError) as exc:
+                        raise RuntimeError("Bambu project model has an invalid triangle") from exc
+                    if len(set(indices)) != 3 or min(indices) < 0:
                         raise RuntimeError("Bambu project model triangle indices are invalid")
-                    objects[int(current_object["id"])] = {
-                        "vertices": tuple(vertices),
-                        "triangle_count": triangle_count,
-                        "components": (),
-                    }
-                else:
-                    if not components:
-                        raise RuntimeError("Bambu project components group is empty")
-                    objects[int(current_object["id"])] = {
-                        "vertices": (),
-                        "triangle_count": 0,
-                        "components": tuple(components),
-                    }
-                current_object = None
+                    current_object["triangle_count"] += 1
+                    current_object["maximum_triangle_index"] = max(
+                        current_object["maximum_triangle_index"],
+                        *indices,
+                    )
+                elif current_object is not None and (
+                    element.tag == f"{core_prefix}component"
+                    and parent_tag == f"{core_prefix}components"
+                    and grandparent_tag == f"{core_prefix}object"
+                ):
+                    try:
+                        referenced_id = int(element.attrib["objectid"])
+                    except (KeyError, ValueError) as exc:
+                        raise RuntimeError(
+                            "Bambu project component has an invalid object id"
+                        ) from exc
+                    current_object["components"].append(
+                        (
+                            reference(element, referenced_id),
+                            transform(element.attrib.get("transform")),
+                        )
+                    )
+                elif (
+                    element.tag == f"{core_prefix}item"
+                    and parent_tag == f"{core_prefix}build"
+                    and grandparent_tag == f"{core_prefix}model"
+                    and part_name == _PROJECT_MAIN_MODEL
+                ):
+                    try:
+                        build_object_id = int(element.attrib["objectid"])
+                    except (KeyError, ValueError) as exc:
+                        raise RuntimeError(
+                            "Bambu project build item has an invalid object id"
+                        ) from exc
+                    build_items.append(
+                        (
+                            reference(element, build_object_id),
+                            transform(element.attrib.get("transform")),
+                        )
+                    )
+                elif current_object is not None and (
+                    element.tag == f"{core_prefix}object"
+                    and parent_tag == f"{core_prefix}resources"
+                ):
+                    mesh_count = int(current_object["mesh_count"])
+                    component_group_count = int(current_object["components_group_count"])
+                    if (mesh_count, component_group_count) not in {(1, 0), (0, 1)}:
+                        raise RuntimeError(
+                            "Bambu project object must contain one mesh or components group"
+                        )
+                    vertices = current_object["vertices"]
+                    triangle_count = int(current_object["triangle_count"])
+                    components = current_object["components"]
+                    if mesh_count:
+                        if (
+                            current_object["vertices_group_count"] != 1
+                            or current_object["triangles_group_count"] != 1
+                            or not vertices
+                            or triangle_count <= 0
+                        ):
+                            raise RuntimeError("Bambu project model has an empty triangle mesh")
+                        if current_object["maximum_triangle_index"] >= len(vertices):
+                            raise RuntimeError("Bambu project model triangle indices are invalid")
+                        objects[(part_name, int(current_object["id"]))] = {
+                            "vertices": tuple(vertices),
+                            "triangle_count": triangle_count,
+                            "components": (),
+                        }
+                    else:
+                        if not components:
+                            raise RuntimeError("Bambu project components group is empty")
+                        objects[(part_name, int(current_object["id"]))] = {
+                            "vertices": (),
+                            "triangle_count": 0,
+                            "components": tuple(components),
+                        }
+                    current_object = None
 
-            tag_stack.pop()
-            element_stack.pop()
-            element.clear()
-            if element_stack:
-                with suppress(ValueError):
-                    element_stack[-1].remove(element)
-    except ET.ParseError as exc:
-        raise RuntimeError(f"Bambu project model XML is invalid: {exc}") from exc
+                tag_stack.pop()
+                element_stack.pop()
+                element.clear()
+                if element_stack:
+                    with suppress(ValueError):
+                        element_stack[-1].remove(element)
+        except ET.ParseError as exc:
+            raise RuntimeError(f"Bambu project model XML is invalid: {exc}") from exc
 
-    if resources_count != 1:
-        raise RuntimeError("Bambu project model must contain one core resources element")
-    if build_count != 1:
-        raise RuntimeError("Bambu project model must contain one core build element")
+        if resources_count != 1:
+            raise RuntimeError("Bambu project model must contain one core resources element")
+        if build_count != 1:
+            raise RuntimeError("Bambu project model must contain one core build element")
+        return build_items
+
+    build_items = parse_model(payload, _PROJECT_MAIN_MODEL)
+    loaded_parts.add(_PROJECT_MAIN_MODEL)
     if len(build_items) != 1:
         raise RuntimeError("Bambu project model must contain exactly one build item")
     build_object_id, build_transform = build_items[0]
+
+    def load_object(object_id: tuple[str, int]) -> dict[str, Any]:
+        part_name, _identifier = object_id
+        if part_name not in loaded_parts:
+            parse_model(parts[part_name], part_name)
+            loaded_parts.add(part_name)
+        model_object = objects.get(object_id)
+        if model_object is None:
+            raise RuntimeError("Bambu project references a missing object")
+        return model_object
 
     def saturated_add(left: int, right: int, limit: int) -> int:
         if left > limit or right > limit or right > limit - left:
             return limit + 1
         return left + right
 
-    summaries: dict[int, tuple[int, int, int, int]] = {}
+    summaries: dict[tuple[str, int], tuple[int, int, int, int]] = {}
 
     def summarize(
-        object_id: int,
-        active: frozenset[int],
+        object_id: tuple[str, int],
+        active: frozenset[tuple[str, int]],
     ) -> tuple[int, int, int, int]:
         if object_id in active:
             raise RuntimeError("Bambu project component graph contains a cycle")
@@ -2003,9 +2129,7 @@ def _project_model_measurement(payload: bytes | bytearray) -> dict[str, Any]:
                 "Bambu project component graph exceeds the expanded depth limit "
                 f"{_PROJECT_MAX_COMPONENT_DEPTH}"
             )
-        model_object = objects.get(object_id)
-        if model_object is None:
-            raise RuntimeError("Bambu project references a missing object")
+        model_object = load_object(object_id)
         vertices = model_object["vertices"]
         if vertices:
             summary = (
@@ -2077,16 +2201,14 @@ def _project_model_measurement(payload: bytes | bytearray) -> dict[str, Any]:
     triangle_count = 0
 
     def visit(
-        object_id: int,
+        object_id: tuple[str, int],
         transforms: tuple[tuple[float, ...], ...],
-        active: frozenset[int],
+        active: frozenset[tuple[str, int]],
     ) -> None:
         nonlocal triangle_count
         if object_id in active:
             raise RuntimeError("Bambu project component graph contains a cycle")
-        model_object = objects.get(object_id)
-        if model_object is None:
-            raise RuntimeError("Bambu project references a missing object")
+        model_object = load_object(object_id)
         vertices = model_object["vertices"]
         if vertices:
             for vertex in vertices:
@@ -2122,7 +2244,8 @@ def _inspect_archive_pinned(
     project = project_file.path
     actual_md5 = hashlib.md5(usedforsecurity=False)
     recorded_md5_bytes: bytes | None = None
-    model_xml_bytes: bytearray | None = None
+    model_payloads: dict[str, bytearray] = {}
+    model_relationships: bytes | None = None
     embedded_matches_primary = True
     try:
         project_size = project_file.information.st_size
@@ -2141,6 +2264,11 @@ def _inspect_archive_pinned(
         primary_file.handle.seek(0)
         with ZipFile(project_file.handle, "r") as package:
             members = _validated_project_members(package, project=project)
+            model_infos = [info for info in members.values() if info.filename.endswith(".model")]
+            if len(model_infos) > _PROJECT_MAX_MODEL_PARTS:
+                raise RuntimeError("Bambu project exceeds the model part count limit")
+            if sum(info.file_size for info in model_infos) > _PROJECT_MAX_MODEL_XML_BYTES:
+                raise RuntimeError("Bambu project model XML exceeds the aggregate byte limit")
             embedded_info = members["Metadata/plate_1.gcode"]
             if embedded_info.file_size != primary_snapshot.size:
                 embedded_matches_primary = False
@@ -2149,7 +2277,7 @@ def _inspect_archive_pinned(
                     continue
                 capture_relationship = info.filename.endswith(".rels")
                 capture_md5 = info.filename == "Metadata/plate_1.gcode.md5"
-                capture_model = info.filename == "3D/3dmodel.model"
+                capture_model = info.filename.endswith(".model")
                 captured = bytearray()
                 count = 0
                 with package.open(info, "r") as member:
@@ -2194,10 +2322,12 @@ def _inspect_archive_pinned(
                     )
                 if capture_relationship:
                     _reject_external_relationships(bytes(captured), name=info.filename)
+                    if info.filename == "3D/_rels/3dmodel.model.rels":
+                        model_relationships = bytes(captured)
                 elif capture_md5:
                     recorded_md5_bytes = bytes(captured)
                 elif capture_model:
-                    model_xml_bytes = captured
+                    model_payloads[info.filename] = captured
             if primary_file.handle.read(1):
                 embedded_matches_primary = False
         _require_pinned_unchanged(project_file, label="Bambu project archive")
@@ -2207,6 +2337,7 @@ def _inspect_archive_pinned(
 
     if recorded_md5_bytes is None:
         raise RuntimeError("Bambu project archive has no embedded G-code MD5 record")
+    model_xml_bytes = model_payloads.pop(_PROJECT_MAIN_MODEL, None)
     if model_xml_bytes is None:
         raise RuntimeError("Bambu project archive has no model XML")
     try:
@@ -2216,7 +2347,9 @@ def _inspect_archive_pinned(
     if re.fullmatch(r"[0-9A-F]{32}", recorded_md5) is None:
         raise RuntimeError("Bambu project embedded G-code MD5 is malformed")
     actual_md5_value = actual_md5.hexdigest().upper()
-    model_measurement = _project_model_measurement(model_xml_bytes)
+    model_measurement = _project_model_measurement(
+        model_xml_bytes, model_parts=model_payloads, model_relationships=model_relationships
+    )
     evidence = {
         "archive_test_passed": True,
         "embedded_gcode_md5": recorded_md5,
