@@ -11,18 +11,18 @@ git clone https://github.com/yidaaaaa/TopoForge.git
 cd TopoForge
 uv sync --locked
 uv run --offline topoforge doctor
-mkdir -p outputs/local-web/inputs
+mkdir -p outputs/my-topoforge/inputs
 ```
 
-已有仓库和安装环境时，进入原来的仓库目录即可。将自己的高程 GeoTIFF 放入 `outputs/local-web/inputs`；如果它有同名 `.msk`、`.aux.xml` 或 `.ovr` 附属文件，一起保留。没有本地高程文件时，也可以联网通过地图选区获取。
+已有仓库和安装环境时，进入原来的仓库目录即可。将自己的高程 GeoTIFF 放入 `outputs/my-topoforge/inputs`；如果它有同名 `.msk`、`.aux.xml` 或 `.ovr` 附属文件，一起保留。没有本地高程文件时，也可以联网通过地图选区获取。
 
 ```bash
 uv run --offline topoforge web \
   --host 127.0.0.1 \
   --port 8765 \
-  --state-dir outputs/local-web/state \
-  --workspace-root outputs/local-web/workspaces \
-  --input-root outputs/local-web/inputs
+  --state-dir outputs/my-topoforge/state \
+  --workspace-root outputs/my-topoforge/workspaces \
+  --input-root outputs/my-topoforge/inputs
 ```
 
 打开 [本地 WebUI](http://127.0.0.1:8765/)，在页面顶部选择中文。`uv run --offline` 只限制 uv 的依赖下载，不会关闭应用里的地图或高程联网功能。若端口被占用，可以将 `8765` 换成空闲端口，并打开相应地址。
