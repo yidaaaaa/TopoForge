@@ -144,7 +144,10 @@ def test_native_macos_ci_uses_only_frozen_arm64_runner_labels() -> None:
     )
     assert "scripts/report_pytest_failure.py" in step_runs["Report slicer regression failure"]
     assert step_runs["Run unit regression suite"] == "uv run pytest tests/unit"
-    assert step_runs["Run Web API regression suite"] == "uv run pytest tests/web/test_api.py"
+    assert step_runs["Run Web API regression suite"] == (
+        "uv run pytest tests/web/test_api.py tests/web/test_server.py "
+        "tests/web/test_server_shutdown.py"
+    )
     assert step_runs["Run recovered Web job cancellation regression"] == (
         "uv run pytest "
         "tests/web/test_jobs.py::test_running_job_recovers_and_cancels_after_manager_restart"

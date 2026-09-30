@@ -148,6 +148,7 @@
         "tls_trust",
         "contents",
         "macho",
+        "host",
         "static_checks_passed",
         "native_execution",
         "required_checks_passed"
@@ -359,6 +360,7 @@
             "required_checks_passed": {"const": true}
           }
         },
+        "host": {"$ref": "#/properties/host"},
         "static_checks_passed": {
           "const": true
         },
@@ -453,7 +455,14 @@
           }
         },
         "strict_reopen": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model_stl", "model_3mf", "preview_glb"],
+          "properties": {
+            "model_stl": {"$ref": "#/$defs/meshReopen"},
+            "model_3mf": {"$ref": "#/$defs/threeMfReopen"},
+            "preview_glb": {"$ref": "#/$defs/meshReopen"}
+          }
         },
         "copernicus_provider": {
           "type": "object",
@@ -624,6 +633,9 @@
             "properties": {
               "macos_major": {
                 "const": 15
+              },
+              "macos_version": {
+                "pattern": "^15[.][0-9]+(?:[.][0-9]+)?$"
               }
             }
           }
@@ -635,6 +647,9 @@
             "properties": {
               "macos_major": {
                 "const": 26
+              },
+              "macos_version": {
+                "pattern": "^26[.][0-9]+(?:[.][0-9]+)?$"
               }
             }
           }
@@ -643,6 +658,54 @@
     }
   ],
   "$defs": {
+    "meshReopen": {
+      "type": "object",
+      "required": [
+        "finite_vertices",
+        "finite_face_normals",
+        "watertight",
+        "winding_consistent",
+        "manifold",
+        "positive_volume",
+        "flat_bottom",
+        "connected_components",
+        "degenerate_faces",
+        "duplicate_faces",
+        "triangle_count"
+      ],
+      "properties": {
+        "finite_vertices": {"const": true},
+        "finite_face_normals": {"const": true},
+        "watertight": {"const": true},
+        "winding_consistent": {"const": true},
+        "manifold": {"const": true},
+        "positive_volume": {"const": true},
+        "flat_bottom": {"const": true},
+        "connected_components": {"type": "integer", "const": 1},
+        "degenerate_faces": {"type": "integer", "const": 0},
+        "duplicate_faces": {"type": "integer", "const": 0},
+        "triangle_count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "threeMfReopen": {
+      "type": "object",
+      "required": [
+        "unit",
+        "object_count",
+        "build_item_count",
+        "vertex_count",
+        "triangle_count",
+        "strict_warning_count"
+      ],
+      "properties": {
+        "unit": {"const": "millimeter"},
+        "object_count": {"type": "integer", "minimum": 1},
+        "build_item_count": {"type": "integer", "minimum": 1},
+        "vertex_count": {"type": "integer", "minimum": 1},
+        "triangle_count": {"type": "integer", "minimum": 1},
+        "strict_warning_count": {"type": "integer", "const": 0}
+      }
+    },
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"

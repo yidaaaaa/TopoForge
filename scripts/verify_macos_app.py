@@ -25,6 +25,7 @@ if __package__:
         TLS_PROBE_URL,
         VERIFICATION_SCHEMA_VERSION,
         WEB_LAUNCHER_PATH,
+        bundle_entries,
         canonical_json_bytes,
         extract_archive,
         inspect_archive,
@@ -46,6 +47,7 @@ else:
         TLS_PROBE_URL,
         VERIFICATION_SCHEMA_VERSION,
         WEB_LAUNCHER_PATH,
+        bundle_entries,
         canonical_json_bytes,
         extract_archive,
         inspect_archive,
@@ -151,6 +153,26 @@ print(json.dumps({
 }, sort_keys=True))
 """
 DEPENDENCY_PROBE = DEPENDENCY_PROBE.replace("__TOPOFORGE_TLS_PROBE_URL__", TLS_PROBE_URL)
+
+SUPERVISOR_PROBE = r"""
+import json
+import pathlib
+import sys
+
+from topoforge import process_containment
+
+completed = process_containment.run_contained_command(
+    [sys.executable, "-I", "-B", "-S", "-c", "print('TopoForge packaged supervisor child')"],
+    timeout_seconds=30,
+)
+print(json.dumps({
+    "python_executable": str(pathlib.Path(sys.executable).resolve()),
+    "supervisor_module": str(pathlib.Path(process_containment.__file__).resolve()),
+    "exit_code": completed.returncode,
+    "stdout": completed.stdout,
+    "stderr": completed.stderr,
+}, sort_keys=True))
+"""
 
 _APPLE_SYSTEM_IMAGE_PREFIXES = ("/System/Library/", "/usr/lib/")
 
@@ -369,6 +391,48 @@ def _verify_runtime_seals(app: Path) -> None:
         _verify_adhoc_macho(path, relative_path=record["path"])
 
 
+def _exercise_packaged_supervisor(
+    app: Path,
+    *,
+    cwd: Path,
+    environment: dict[str, str],
+) -> dict[str, Any]:
+    """Exercise the real external-command supervisor using only bundled Python code."""
+    probe, command = _run_json(
+        [str(app / PYTHON_PATH), "-I", "-B", "-X", "utf8", "-c", SUPERVISOR_PROBE],
+        cwd=cwd,
+        environment=environment,
+    )
+    if (
+        probe.get("exit_code") != 0
+        or probe.get("stdout") != "TopoForge packaged supervisor child\n"
+        or probe.get("stderr") != ""
+        or not isinstance(probe.get("python_executable"), str)
+        or not _inside_app(probe["python_executable"], app)
+        or not isinstance(probe.get("supervisor_module"), str)
+        or not _inside_app(probe["supervisor_module"], app)
+    ):
+        raise RuntimeError("Packaged external-command supervisor did not complete inside the app")
+    return command
+
+
+def _verify_unchanged_app_payload(
+    app: Path,
+    *,
+    manifest: dict[str, Any],
+    bounds: dict[str, Any],
+) -> None:
+    """Reject added bytecode, modified files, or any other runtime payload change."""
+    observed = [
+        record for record in bundle_entries(app, bounds=bounds) if record["path"] != MANIFEST_PATH
+    ]
+    if observed != manifest["contents"]["files"]:
+        raise RuntimeError(
+            "Packaged execution changed the app payload; suppress runtime writes "
+            "inside TopoForge.app and rebuild the candidate"
+        )
+
+
 def execute_archive(
     archive: Path,
     *,
@@ -569,6 +633,9 @@ def execute_archive(
             "PYTHONNOUSERSITE": "1",
         },
     )
+    commands.append(_exercise_packaged_supervisor(app, cwd=root, environment=probe_environment))
+    _verify_unchanged_app_payload(app, manifest=manifest, bounds=config["bounds"])
+    _verify_runtime_seals(app)
     static.update(
         {
             "host": host,
@@ -613,7 +680,6 @@ def execute_archive(
             "required_checks_passed": True,
         }
     )
-    _verify_runtime_seals(app)
     return app, static
 
 

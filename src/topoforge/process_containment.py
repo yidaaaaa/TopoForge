@@ -113,9 +113,12 @@ def _command_launch(
     if not windows:
         if parent_pipe_fd is None:
             raise ValueError("POSIX command launch requires a parent-liveness pipe")
+        # Isolated mode ignores PYTHONDONTWRITEBYTECODE. Keep signed or
+        # read-only embedded runtimes unchanged with an explicit interpreter flag.
         return [
             sys.executable,
             "-I",
+            "-B",
             "-S",
             str(Path(__file__).resolve()),
             str(parent_pipe_fd),
@@ -126,7 +129,7 @@ def _command_launch(
     executable = getattr(sys, "_base_executable", None)
     if not isinstance(executable, str) or not executable or "\x00" in executable:
         raise OSError("Cannot locate the base Python interpreter; repair the Python installation")
-    return [executable, "-I", "-S", str(Path(__file__).resolve()), *command], {
+    return [executable, "-I", "-B", "-S", str(Path(__file__).resolve()), *command], {
         "creationflags": 0x00000200
     }
 

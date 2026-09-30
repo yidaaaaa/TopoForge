@@ -561,19 +561,34 @@ def _valid_system_report(archive: Path) -> dict[str, Any]:
         "native_arm64": True,
         "required_checks_passed": True,
     }
+    host = {
+        "system": "Darwin",
+        "machine": "arm64",
+        "macos_version": "15.7.9",
+        "macos_major": 15,
+        "native_arm64": True,
+        "translated": False,
+    }
+    archive_report["host"] = dict(host)
+    mesh_reopen = {
+        "finite_vertices": True,
+        "finite_face_normals": True,
+        "watertight": True,
+        "winding_consistent": True,
+        "manifold": True,
+        "positive_volume": True,
+        "flat_bottom": True,
+        "connected_components": 1,
+        "degenerate_faces": 0,
+        "duplicate_faces": 0,
+        "triangle_count": 12,
+    }
     return {
         "schema_version": SYSTEM_SCHEMA_VERSION,
         "package_role": "phase13a-macos-arm64-unsigned-candidate",
         "evidence_scope": "hosted-package",
         "target_id": "macos-15-arm64",
-        "host": {
-            "system": "Darwin",
-            "machine": "arm64",
-            "macos_version": "15.7.9",
-            "macos_major": 15,
-            "native_arm64": True,
-            "translated": False,
-        },
+        "host": host,
         "source": archive_report["source"],
         "archive": archive_report["archive"],
         "app_payload_sha256": archive_report["contents"]["payload_sha256"],
@@ -588,7 +603,18 @@ def _valid_system_report(archive: Path) -> dict[str, Any]:
                     "preview_glb": "c" * 64,
                 },
             },
-            "strict_reopen": {},
+            "strict_reopen": {
+                "model_stl": dict(mesh_reopen),
+                "preview_glb": dict(mesh_reopen),
+                "model_3mf": {
+                    "unit": "millimeter",
+                    "object_count": 1,
+                    "build_item_count": 1,
+                    "vertex_count": 8,
+                    "triangle_count": 12,
+                    "strict_warning_count": 0,
+                },
+            },
             "copernicus_provider": {
                 "job_id": "fixture-provider-job",
                 "workflow_id": "fixture-provider-workflow",
@@ -1400,6 +1426,96 @@ def test_evidence_validator_rejects_cross_binding_drift(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="source differs"):
         validate_evidence_report(report)
+
+
+@pytest.mark.parametrize("role", ["model_stl", "model_3mf", "preview_glb"])
+def test_evidence_validator_requires_every_reopen_role_and_field(tmp_path: Path, role: str) -> None:
+    report = _valid_system_report(_fixture_archive(tmp_path / "candidate"))
+    missing_role = deepcopy(report)
+    del missing_role["web_lifecycle"]["strict_reopen"][role]
+    with pytest.raises(jsonschema.ValidationError, match="required property"):
+        validate_evidence_report(missing_role)
+
+    for field in report["web_lifecycle"]["strict_reopen"][role]:
+        missing_field = deepcopy(report)
+        del missing_field["web_lifecycle"]["strict_reopen"][role][field]
+        with pytest.raises(jsonschema.ValidationError, match="required property"):
+            validate_evidence_report(missing_field)
+
+
+@pytest.mark.parametrize("role", ["model_stl", "preview_glb"])
+def test_evidence_validator_rejects_failed_mesh_reopen(tmp_path: Path, role: str) -> None:
+    report = _valid_system_report(_fixture_archive(tmp_path / "candidate"))
+    result = report["web_lifecycle"]["strict_reopen"][role]
+    failures = {
+        **{field: False for field, value in result.items() if value is True},
+        "connected_components": 2,
+        "degenerate_faces": 1,
+        "duplicate_faces": 1,
+        "triangle_count": 0,
+    }
+    for field, failure in failures.items():
+        changed = deepcopy(report)
+        changed["web_lifecycle"]["strict_reopen"][role][field] = failure
+        with pytest.raises(jsonschema.ValidationError):
+            validate_evidence_report(changed)
+
+
+def test_evidence_validator_rejects_failed_3mf_reopen(tmp_path: Path) -> None:
+    report = _valid_system_report(_fixture_archive(tmp_path / "candidate"))
+    failures = {
+        "unit": "meter",
+        "object_count": 0,
+        "build_item_count": 0,
+        "vertex_count": 0,
+        "triangle_count": 0,
+        "strict_warning_count": 1,
+    }
+    for field, failure in failures.items():
+        changed = deepcopy(report)
+        changed["web_lifecycle"]["strict_reopen"]["model_3mf"][field] = failure
+        with pytest.raises(jsonschema.ValidationError):
+            validate_evidence_report(changed)
+
+
+@pytest.mark.parametrize("role", ["model_stl", "model_3mf", "preview_glb"])
+@pytest.mark.parametrize("count", [True, 12.0])
+def test_evidence_validator_preserves_exact_integer_reopen_counts(
+    tmp_path: Path, role: str, count: bool | float
+) -> None:
+    report = _valid_system_report(_fixture_archive(tmp_path / "candidate"))
+    report["web_lifecycle"]["strict_reopen"][role]["triangle_count"] = count
+    with pytest.raises((jsonschema.ValidationError, ValueError)):
+        validate_evidence_report(report)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("macos_version", "26.6.2"), ("macos_major", 26)],
+)
+def test_evidence_validator_rejects_inconsistent_host_version(
+    tmp_path: Path, field: str, value: str | int
+) -> None:
+    report = _valid_system_report(_fixture_archive(tmp_path / "candidate"))
+    report["host"][field] = value
+    report["archive_verification"]["host"][field] = value
+    with pytest.raises((jsonschema.ValidationError, ValueError)):
+        validate_evidence_report(report)
+
+
+def test_evidence_validator_binds_archive_host_to_system_host(tmp_path: Path) -> None:
+    report = _valid_system_report(_fixture_archive(tmp_path / "candidate"))
+    report["archive_verification"]["host"]["macos_version"] = "15.7.8"
+    with pytest.raises(ValueError, match="host differs"):
+        validate_evidence_report(report)
+
+
+def test_evidence_validator_accepts_consistent_macos26_report(tmp_path: Path) -> None:
+    report = _valid_system_report(_fixture_archive(tmp_path / "candidate"))
+    report["target_id"] = "macos-26-arm64"
+    report["host"].update(macos_version="26.6.2", macos_major=26)
+    report["archive_verification"]["host"] = dict(report["host"])
+    validate_evidence_report(report)
 
 
 def test_github_hosted_runner_cannot_emit_clean_system_evidence(

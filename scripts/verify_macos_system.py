@@ -729,6 +729,16 @@ def validate_evidence_report(
         raise ValueError("system evidence archive differs from archive verification")
     if report["app_payload_sha256"] != archive_verification["contents"]["payload_sha256"]:
         raise ValueError("system evidence app payload differs from archive verification")
+    if report["host"] != archive_verification["host"]:
+        raise ValueError(
+            "system evidence host differs from archive verification; "
+            "rerun acceptance on the target host"
+        )
+    for role, result in report["web_lifecycle"]["strict_reopen"].items():
+        if not _strict_artifact_reopen_passed(role, result):
+            raise ValueError(
+                f"system evidence strict reopen failed for {role}; rerun packaged acceptance"
+            )
     expected_major = TARGETS[report["target_id"]]
     if report["host"]["macos_major"] != expected_major:
         raise ValueError("system evidence target differs from the native host")

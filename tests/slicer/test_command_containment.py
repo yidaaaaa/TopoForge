@@ -7,7 +7,9 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -81,6 +83,35 @@ def test_missing_command_retains_normalized_failure(tmp_path: Path) -> None:
     assert result.stderr
 
 
+def test_isolated_supervisor_does_not_write_bytecode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache_root = tmp_path / "supervisor-cache"
+    original_launch = process_containment._command_launch
+
+    def launch_with_cache_destination(
+        command: Sequence[str], *, windows: bool, parent_pipe_fd: int | None = None
+    ) -> tuple[list[str], dict[str, Any]]:
+        launch, options = original_launch(command, windows=windows, parent_pipe_fd=parent_pipe_fd)
+        # Redirect only the real supervisor's standard-library cache writes. The
+        # target below also suppresses writes, so it cannot contaminate evidence.
+        launch[1:1] = ["-X", f"pycache_prefix={cache_root}"]
+        return launch, options
+
+    monkeypatch.setattr(process_containment, "_command_launch", launch_with_cache_destination)
+    result = run_command(
+        [sys.executable, "-I", "-B", "-c", "print('contained command completed')"],
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        timeout_seconds=10.0,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "contained command completed\n"
+    assert not tuple(cache_root.rglob("*.pyc")), (
+        "The isolated supervisor ignored PYTHONDONTWRITEBYTECODE and mutated its runtime"
+    )
+
+
 def test_windows_launch_bypasses_redirector_and_imports(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -88,12 +119,20 @@ def test_windows_launch_bypasses_redirector_and_imports(
     monkeypatch.setattr(sys, "_base_executable", base)
     command = ["slicer.exe", "model with spaces.stl"]
     launch, options = process_containment._command_launch(command, windows=True)
-    assert launch == [base, "-I", "-S", str(Path(process_containment.__file__).resolve()), *command]
+    assert launch == [
+        base,
+        "-I",
+        "-B",
+        "-S",
+        str(Path(process_containment.__file__).resolve()),
+        *command,
+    ]
     assert options == {"creationflags": 0x00000200}
     launch, options = process_containment._command_launch(command, windows=False, parent_pipe_fd=42)
     assert launch == [
         sys.executable,
         "-I",
+        "-B",
         "-S",
         str(Path(process_containment.__file__).resolve()),
         "42",

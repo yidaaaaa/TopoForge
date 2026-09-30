@@ -3,15 +3,52 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
+import socket
 import threading
 import webbrowser
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
 import uvicorn
+from uvicorn.config import STARTUP_FAILURE
 
 from topoforge.web.api import create_app, verify_static_assets
 from topoforge.web.models import WebAppConfig
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _open_ready_browser(url: str) -> None:
+    try:
+        if webbrowser.open(url):
+            return
+    except Exception:
+        _LOGGER.warning("Could not open the browser; open %s manually.", url, exc_info=True)
+        return
+    _LOGGER.warning("Could not open the browser; open %s manually.", url)
+
+
+class _BrowserOpeningServer(uvicorn.Server):
+    def __init__(self, config: uvicorn.Config, *, browser_url: str | None) -> None:
+        super().__init__(config)
+        self._browser_url = browser_url
+
+    async def startup(self, sockets: list[socket.socket] | None = None) -> None:
+        """Open the browser only after application startup and socket binding succeed."""
+        await super().startup(sockets=sockets)
+        if self.started and not self.should_exit and self._browser_url is not None:
+            url = self._browser_url
+            self._browser_url = None
+            # Browser discovery may block. Keep serving requests while it runs,
+            # and do not keep the application alive if the browser fails to exit.
+            threading.Thread(
+                target=_open_ready_browser,
+                args=(url,),
+                name="topoforge-open-browser",
+                daemon=True,
+            ).start()
 
 
 def is_loopback_host(host: str) -> bool:
@@ -79,12 +116,19 @@ def run_web_server(
     application = create_app(resolved, static_dir=static_dir)
     url_host = "[::1]" if host.strip("[]") == "::1" else host
     url = f"http://{url_host}:{port}/"
-    if open_browser:
-        threading.Timer(0.8, lambda: webbrowser.open(url)).start()
-    uvicorn.run(
-        application,
-        host=host.strip("[]"),
-        port=port,
-        log_level="info",
-        access_log=True,
+    server = _BrowserOpeningServer(
+        uvicorn.Config(
+            application,
+            host=host.strip("[]"),
+            port=port,
+            log_level="info",
+            access_log=True,
+        ),
+        browser_url=url if open_browser else None,
     )
+    # Uvicorn re-raises SIGINT after graceful shutdown. Preserve the CLI
+    # launcher's successful Ctrl+C behavior when startup already completed.
+    with suppress(KeyboardInterrupt):
+        server.run()
+    if not server.started:
+        raise SystemExit(STARTUP_FAILURE)
