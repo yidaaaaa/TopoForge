@@ -1,5 +1,6 @@
 import {
   Box,
+  CheckCircle2,
   Crosshair,
   FolderOpen,
   Layers3,
@@ -9,9 +10,9 @@ import {
   Settings2,
   SquareDashedMousePointer,
 } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 
-import { CONNECTOR_TOLERANCE_OPTIONS_MM } from "../config";
+import { CONNECTOR_TOLERANCE_OPTIONS_MM, defaultFormState } from "../config";
 import { translate, type TranslationKey } from "../i18n";
 import type {
   FormState,
@@ -20,7 +21,12 @@ import type {
   SourceMode,
 } from "../types";
 
+import type { DraftStatus } from "../useWorkspaceDraft";
+import { PresetPanel } from "./PresetPanel";
+
 interface BuildPanelProps {
+  collapsed: boolean;
+  draftStatus: DraftStatus;
   language: Language;
   form: FormState;
   normalizedAoi: NormalizedAoi | null;
@@ -70,6 +76,8 @@ function NumberField({
 }
 
 export function BuildPanel({
+  collapsed,
+  draftStatus,
   language,
   form,
   normalizedAoi,
@@ -87,6 +95,11 @@ export function BuildPanel({
     (key: TranslationKey) => translate(language, key),
     [language],
   );
+  const [advanced, setAdvanced] = useState(false);
+  const draftLabels = { new: "draftNew", restored: "draftRestored", saved: "draftSaved", invalid: "draftInvalid", unavailable: "draftUnavailable" } as const;
+  const advancedKeys = ["samplingMode", "meshSamplingMm", "maxGridCells", "maxEstimatedTriangles", "maxEstimatedMemoryMb", "resourceBudgetMode", "maximumTileWidthMm", "maximumTileDepthMm", "connectorToleranceMm", "overlapCells", "slicingEnabled", "slicerName", "projectEvidenceEnabled", "overlayConfigPath"] as const;
+  const advancedModified = advancedKeys.some(key => form[key] !== defaultFormState[key]);
+  const samplingLabels = { "print-aware": "samplingPrintAware", "source-preserving": "samplingSource", custom: "samplingCustom" } as const;
   const update = <Key extends keyof FormState>(
     key: Key,
     value: FormState[Key],
@@ -107,7 +120,18 @@ export function BuildPanel({
   };
 
   return (
-    <aside className="control-panel" aria-label={t("tabConfiguration")}>
+    <aside id="build-settings-panel" className="control-panel" hidden={collapsed} aria-label={t("tabConfiguration")}>
+      <div className="panel-intro">
+        <span className="eyebrow">01 · {t("prepareTerrain")}</span>
+        <h1>{t("buildSetup")}</h1>
+        <p>{t("basicModeHelp")}</p>
+        <div className="segmented two parameter-mode" role="group" aria-label={t("parameterMode")}>
+          <button type="button" className={!advanced ? "active" : ""} aria-pressed={!advanced} onClick={() => setAdvanced(false)}>{t("basicMode")}</button>
+          <button type="button" className={advanced ? "active" : ""} aria-pressed={advanced} onClick={() => setAdvanced(true)}>{t("advancedMode")}</button>
+        </div>
+        <p className={`draft-status ${draftStatus === "unavailable" || draftStatus === "invalid" ? "warning" : ""}`} role="status"><CheckCircle2 size={13} />{t(draftLabels[draftStatus])}</p>
+        <PresetPanel language={language} form={form} onApply={onFormChange} />
+      </div>
       <section className="control-section">
         <div className="section-heading">
           <MapPinned size={17} />
@@ -294,6 +318,7 @@ export function BuildPanel({
             onChange={(value) => update("baseThicknessMm", value ?? 0)}
           />
         </div>
+        <p className="field-help">{t("modelSizeHelp")}</p>
         <label className="field">
           <span>{t("verticalScale")}</span>
           <select
@@ -311,6 +336,7 @@ export function BuildPanel({
             <option value="custom">{t("verticalCustom")}</option>
           </select>
         </label>
+        <p className="field-help">{t("verticalScaleHelp")}</p>
         {form.verticalScaleMode === "custom" && (
           <NumberField
             label={t("verticalExaggeration")}
@@ -322,6 +348,7 @@ export function BuildPanel({
         )}
       </section>
 
+      <div className="advanced-build-controls" hidden={!advanced}>
       <section className="control-section">
         <div className="section-heading">
           <Ruler size={17} />
@@ -514,7 +541,16 @@ export function BuildPanel({
         )}
       </section>
 
+      </div>
+      {!advanced && <section className="advanced-summary">
+        <strong>{t("advancedSummary")}</strong>
+        <p>{t(samplingLabels[form.samplingMode])} · {form.maximumTileWidthMm} × {form.maximumTileDepthMm} mm</p>
+        <p>{form.slicingEnabled ? t("enableSlicing") : t("slicingOff")}{form.overlayConfigPath.trim() ? ` · ${t("overlayActive")}` : ""}</p>
+        {advancedModified && <span className="settings-notice">{t("advancedActive")}</span>}
+        <button type="button" className="text-button" onClick={() => setAdvanced(true)}>{t("reviewAdvanced")} →</button>
+      </section>}
       <div className="primary-action">
+        <div className="build-summary"><span>{t("buildSizeSummary")}</span><strong>{form.modelWidthMm} × {form.modelDepthMm ?? "—"} mm</strong></div>
         <button type="button" className="primary" onClick={onSubmit} disabled={busy}>
           <Play size={18} fill="currentColor" />
           {busy ? t("submitting") : t("startBuild")}

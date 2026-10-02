@@ -270,6 +270,13 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
     page.getByRole("heading", { name: basename(completedJob.workspace_dir) }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "开始构建" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "模型下载" })).toBeVisible();
+  const modelLink = page.getByRole("link", { name: /^通用 3MF（仅几何）/ });
+  await expect(modelLink).toHaveAttribute("href", `/api/v1/jobs/${completedJob.job_id}/artifacts/model_3mf`);
+  const [modelDownload] = await Promise.all([page.waitForEvent("download"), modelLink.click()]);
+  expect(await modelDownload.failure()).toBeNull();
+  expect(modelDownload.suggestedFilename()).toBe("model.3mf");
+
   const jobSearch = page.getByRole("searchbox", { name: "搜索任务" });
   const jobFilter = page.getByRole("combobox", { name: "筛选任务状态" });
   const visibleJobs = page.getByLabel("可见任务数");
@@ -297,6 +304,7 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await verticalScale.selectOption("auto-perceptual");
   await expect(verticalExaggeration).toBeHidden();
+  await page.getByRole("button", { name: "高级", exact: true }).click();
   const connectorTolerance = page.getByRole("combobox", {
     name: "连接器总间隙（毫米）",
   });
@@ -328,6 +336,7 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
     panelScrollBeforeSlicing,
   );
   await slicingToggle.click();
+  await page.getByText("备份与项目维护", { exact: true }).click();
   const backupButton = page.getByRole("button", { name: "创建备份" });
   const cleanupButton = page.getByRole("button", { name: "清理旧阶段" });
   await expect(backupButton).toBeEnabled();
@@ -454,7 +463,8 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   await expect.poll(() => osmTileRequests).toBeGreaterThan(0);
 
   await page.setViewportSize({ width: 1365, height: 758 });
-  await page.getByRole("tab", { name: "三维模型" }).click();
+  await page.getByRole("button", { name: "查看三维模型", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "三维模型" })).toHaveAttribute("aria-selected", "true");
   const previewCanvas = page.locator(".preview-canvas canvas");
   await expect(previewCanvas).toBeVisible();
   await expect(page.getByTestId("terrain-preview")).toHaveAttribute(
@@ -593,6 +603,7 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   await expectOperation(page.getByText("Selected jobs moved to trash")).toBeVisible();
   expect((await page.request.get(`/api/v1/jobs/${restoredJob.job_id}`)).status()).toBe(404);
   await taskSearchEnglish.fill("");
+  await page.locator("summary").filter({ hasText: "Trash and recovery" }).click();
   await expect(page.getByText(new RegExp(`Batch ${trashed.batch_id.slice(0, 12)}`))).toBeVisible();
 
   page.once("dialog", (dialog) => dialog.accept());

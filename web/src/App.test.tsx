@@ -42,6 +42,7 @@ vi.mock("./components/TerrainPreview", () => ({
 }));
 
 import App from "./App";
+import { DRAFT_KEY, PRESETS_KEY, freshForm, saveDraft } from "./workspaceStorage";
 
 const health = {
   status: "ok",
@@ -315,6 +316,109 @@ describe("TopoForge bilingual workspace", () => {
     );
   });
 
+  it("restores edited drafts without submitting jobs and preserves advanced values in basic mode", async () => {
+    const view = render(<App />);
+    await screen.findByText("v0.10.2");
+    fireEvent.change(screen.getByRole("textbox", { name: "工作区名称" }), { target: { value: "my-terrain" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "DEM 文件" }), { target: { value: "/data/山脉.tif" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "宽度（毫米）" }), { target: { value: "240" } });
+    fireEvent.click(screen.getByRole("button", { name: "高级" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "连接器总间隙（毫米）" }), { target: { value: "0.3" } });
+    fireEvent.click(screen.getByRole("button", { name: "基础" }));
+    expect(screen.queryByRole("combobox", { name: "连接器总间隙（毫米）" })).not.toBeInTheDocument();
+    expect(screen.getByText("已调整高级设置，生成时仍会使用")).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(DRAFT_KEY)!).value.connectorToleranceMm).toBe(0.3);
+    view.unmount();
+    render(<App />);
+    expect(screen.getByText("已恢复上次的草稿")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "工作区名称" })).toHaveValue("my-terrain");
+    expect(screen.getByRole("textbox", { name: "DEM 文件" })).toHaveValue("/data/山脉.tif");
+    expect(screen.getByRole("spinbutton", { name: "宽度（毫米）" })).toHaveValue(240);
+    fireEvent.click(screen.getByRole("button", { name: "查看高级设置 →" }));
+    expect(screen.getByRole("combobox", { name: "连接器总间隙（毫米）" })).toHaveValue("0.3");
+    expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+  });
+
+  it.each([false, true])("normalizes a restored area once, respecting pending edits (%s)", async (editArea) => {
+    saveDraft({ ...freshForm(), sourceMode: "center-radius" });
+    const fallback = vi.mocked(fetch).getMockImplementation()!;
+    let resolveArea!: (value: Response) => void;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/api/v1/aoi/normalize")) return new Promise<Response>(resolve => { resolveArea = resolve; });
+      return fallback(input, init);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+    await screen.findByText("v0.10.2");
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    if (editArea) fireEvent.change(screen.getByRole("spinbutton", { name: "Longitude" }), { target: { value: "101.5" } });
+    await act(async () => resolveArea(response({
+      target_local_crs: "EPSG:32647", area_m2: 400_000_000,
+      crosses_antimeridian: false, bounds_wgs84: [99.8, 29.4, 100.1, 29.7],
+    })));
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/api/v1/aoi/normalize"))).toHaveLength(1);
+    if (editArea) {
+      expect(screen.queryByText("EPSG:32647")).not.toBeInTheDocument();
+      expect(screen.getByRole("spinbutton", { name: "Longitude" })).toHaveValue(101.5);
+    } else expect(screen.getByText("EPSG:32647")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input, init]) => String(input).endsWith("/api/v1/jobs") && init?.method === "POST")).toBe(false);
+  });
+
+  it("saves and applies a named preset without replacing the current source or project", async () => {
+    const view = render(<App />);
+    await screen.findByText("v0.10.2");
+    fireEvent.change(screen.getByRole("spinbutton", { name: "宽度（毫米）" }), { target: { value: "120" } });
+    fireEvent.click(screen.getByText("常用预设"));
+    fireEvent.change(screen.getByRole("textbox", { name: "预设名称" }), { target: { value: "桌面款" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存当前模型设置" }));
+    expect(screen.getByText("预设已保存")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("spinbutton", { name: "宽度（毫米）" }), { target: { value: "200" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "工作区名称" }), { target: { value: "another-place" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "DEM 文件" }), { target: { value: "/data/other.tif" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用预设" }));
+    expect(screen.getByRole("spinbutton", { name: "宽度（毫米）" })).toHaveValue(120);
+    expect(screen.getByRole("textbox", { name: "DEM 文件" })).toHaveValue("/data/other.tif");
+    expect(screen.getByRole("textbox", { name: "工作区名称" })).toHaveValue("another-place");
+    expect(JSON.parse(localStorage.getItem(PRESETS_KEY)!).value).toHaveLength(1);
+    view.unmount(); render(<App />);
+    fireEvent.click(screen.getByText("常用预设"));
+    const choices = screen.getByRole("combobox", { name: "选择预设" });
+    const id = JSON.parse(localStorage.getItem(PRESETS_KEY)!).value[0].id;
+    fireEvent.change(choices, { target: { value: id } });
+    fireEvent.click(screen.getByRole("button", { name: "删除所选预设" }));
+    expect(screen.getByText("预设已删除，当前模型设置保留")).toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: "宽度（毫米）" })).toHaveValue(120);
+  });
+
+  it("collapses and restores side panels without losing the current form", async () => {
+    render(<App />);
+    await screen.findByText("v0.10.2");
+    fireEvent.change(screen.getByRole("spinbutton", { name: "宽度（毫米）" }), { target: { value: "220" } });
+    fireEvent.click(screen.getByRole("button", { name: "收起模型设置" }));
+    expect(screen.queryByRole("spinbutton", { name: "宽度（毫米）" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "展开模型设置" })).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(screen.getByRole("button", { name: "收起任务与结果" }));
+    expect(screen.queryByRole("heading", { name: "任务" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "展开模型设置" }));
+    expect(screen.getByRole("spinbutton", { name: "宽度（毫米）" })).toHaveValue(220);
+    fireEvent.click(screen.getByRole("button", { name: "展开任务与结果" }));
+    expect(screen.getByRole("heading", { name: "任务" })).toBeInTheDocument();
+  });
+
+  it("keeps the form usable when browser persistence is denied", async () => {
+    const read = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new DOMException("denied", "SecurityError"); });
+    const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new DOMException("denied", "SecurityError"); });
+    try {
+      render(<App />);
+      await screen.findByText("v0.10.2");
+      fireEvent.click(screen.getByRole("button", { name: "中" }));
+      fireEvent.change(screen.getByRole("spinbutton", { name: "宽度（毫米）" }), { target: { value: "230" } });
+      expect(screen.getByRole("spinbutton", { name: "宽度（毫米）" })).toHaveValue(230);
+      expect(screen.getByText("草稿暂未保存；请保持页面打开")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "开始构建" })).toBeEnabled();
+    } finally { read.mockRestore(); write.mockRestore(); }
+  });
+
   it("locates coordinates without altering the print area until explicitly applied", async () => {
     render(<App />);
     await screen.findByText("v0.10.2");
@@ -373,6 +477,8 @@ describe("TopoForge bilingual workspace", () => {
   it("keeps source, sampling, map, preview, jobs, and artifacts visible as one workspace", () => {
     render(<App />);
     expect(screen.getByRole("heading", { name: "数据源" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "采样" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "高级" }));
     expect(screen.getByRole("heading", { name: "采样" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "地图" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "三维模型" })).toBeInTheDocument();
@@ -406,6 +512,7 @@ describe("TopoForge bilingual workspace", () => {
 
   it("offers all six connector clearances and preserves the selected value across languages", () => {
     render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "高级" }));
     const tolerance = screen.getByRole("combobox", {
       name: "连接器总间隙（毫米）",
     });
@@ -641,6 +748,7 @@ describe("TopoForge bilingual workspace", () => {
         completedJob.job_id,
       ),
     );
+    fireEvent.click(screen.getByText("备份与项目维护", { exact: true }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "清理旧阶段" })).toBeEnabled(),
     );
@@ -674,6 +782,7 @@ describe("TopoForge bilingual workspace", () => {
         secondJob.job_id,
       ),
     );
+    fireEvent.click(screen.getByText("备份与项目维护", { exact: true }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "清理旧阶段" })).toBeEnabled(),
     );
@@ -942,6 +1051,7 @@ describe("TopoForge bilingual workspace", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(<App />);
+    fireEvent.click(await screen.findByText("任务管理", { exact: true }));
     const removeRecord = await screen.findByRole("button", {
       name: "移除任务记录",
     });
@@ -965,6 +1075,7 @@ describe("TopoForge bilingual workspace", () => {
     expect(screen.queryByText("cancelled-project")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "failed-project" })).toBeInTheDocument();
 
+    fireEvent.click(screen.getByText("任务管理", { exact: true }));
     fireEvent.click(screen.getByRole("button", { name: "将项目移入回收站" }));
     expect(await screen.findByLabelText("批量操作预检")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "执行已核对操作" }));
@@ -1058,6 +1169,7 @@ describe("TopoForge bilingual workspace", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
+    fireEvent.click(await screen.findByText("备份与项目维护", { exact: true }));
     const backupButton = await screen.findByRole("button", { name: "创建备份" });
     fireEvent.click(backupButton);
     await waitFor(() => expect(screen.getByText("备份已校验")).toBeInTheDocument());

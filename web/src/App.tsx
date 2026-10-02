@@ -4,6 +4,10 @@ import {
   LayoutGrid,
   Map as MapIcon,
   Mountain,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   RefreshCw,
 } from "lucide-react";
 import {
@@ -46,7 +50,6 @@ import { ResultsPanel } from "./components/ResultsPanel";
 import {
   aoiInput,
   buildJobRequest,
-  defaultFormState,
 } from "./config";
 import { translate, type TranslationKey } from "./i18n";
 import type {
@@ -66,6 +69,8 @@ import type {
   WorkspaceTab,
 } from "./types";
 
+import { useWorkspaceDraft } from "./useWorkspaceDraft";
+
 const TerrainPreview = lazy(() =>
   import("./components/TerrainPreview").then((module) => ({
     default: module.TerrainPreview,
@@ -79,7 +84,8 @@ const AssemblyPanel = lazy(() =>
 );
 
 function initialLanguage(): Language {
-  const saved = window.localStorage.getItem("topoforge-language");
+  let saved: string | null = null;
+  try { saved = window.localStorage.getItem("topoforge-language"); } catch { /* Browser preferences are optional. */ }
   if (saved === "zh-CN" || saved === "en") {
     return saved;
   }
@@ -116,7 +122,8 @@ function errorMessage(reason: unknown, language: Language): string {
 type BasemapMode = "off" | "online" | "cached";
 
 function initialBasemapMode(): BasemapMode {
-  const saved = window.localStorage.getItem("topoforge-basemap-mode");
+  let saved: string | null = null;
+  try { saved = window.localStorage.getItem("topoforge-basemap-mode"); } catch { /* Stay offline if storage is unavailable. */ }
   return saved === "online" || saved === "cached" ? saved : "off";
 }
 
@@ -128,7 +135,9 @@ function initialBasemapStyle(): ReferenceMapStyle {
 export default function App() {
   const [language, setLanguage] = useState<Language>(initialLanguage);
   const [health, setHealth] = useState<Health | null>(null);
-  const [form, setForm] = useState<FormState>(defaultFormState);
+  const { form, setForm, draftStatus } = useWorkspaceDraft();
+  const [settingsOpen, setSettingsOpen] = useState(true);
+  const [resultsOpen, setResultsOpen] = useState(true);
   const [normalizedAoi, setNormalizedAoi] = useState<NormalizedAoi | null>(null);
   const [locatedPlace, setLocatedPlace] = useState<PlaceCandidate | null>(null);
   const [drawMode, setDrawMode] = useState<"bbox" | "center" | null>(null);
@@ -140,11 +149,14 @@ export default function App() {
   const basemapEnabled = basemapMode !== "off";
   const basemapCacheOnly = basemapMode === "cached";
   useEffect(() => {
-    window.localStorage.setItem("topoforge-basemap-mode", basemapMode);
+    try { window.localStorage.setItem("topoforge-basemap-mode", basemapMode); } catch { /* Optional preference. */ }
   }, [basemapMode]);
   const [tab, setTab] = useState<WorkspaceTab>("map");
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const initialDraftAoi = useRef(draftStatus === "restored" ? aoiInput(form) : null);
+  const currentDraftContext = useRef({ form, language });
+  currentDraftContext.current = { form, language };
   const [maintenance, setMaintenance] = useState<JobMaintenanceOverview | null>(null);
   const [maintenanceLoading, setMaintenanceLoading] = useState(false);
   const [maintenanceBusy, setMaintenanceBusy] = useState<
@@ -181,6 +193,20 @@ export default function App() {
     (key: TranslationKey) => translate(language, key),
     [language],
   );
+
+  useEffect(() => {
+    const input = initialDraftAoi.current;
+    if (!input) return;
+    let active = true;
+    // Reuse the engine's local AOI normalization; a restored draft never launches
+    // a job or fetches elevation data. Edits made while this is pending win.
+    normalizeAoi(input).then(area => {
+      if (active && JSON.stringify(aoiInput(currentDraftContext.current.form)) === JSON.stringify(input)) setNormalizedAoi(area);
+    }).catch(reason => {
+      if (active && JSON.stringify(aoiInput(currentDraftContext.current.form)) === JSON.stringify(input)) setNotice({ tone: "error", text: errorMessage(reason, currentDraftContext.current.language) });
+    });
+    return () => { active = false; };
+  }, []);
 
   const loadJobs = useCallback((force = false): Promise<void> => {
     if (lifecycleMutationInProgress.current && !force) {
@@ -245,7 +271,7 @@ export default function App() {
   }, [loadJobs]);
 
   useEffect(() => {
-    window.localStorage.setItem("topoforge-language", language);
+    try { window.localStorage.setItem("topoforge-language", language); } catch { /* Optional preference. */ }
     document.documentElement.lang = language;
   }, [language]);
 
@@ -448,6 +474,7 @@ export default function App() {
       const payload = buildJobRequest(form, health, overlay);
       await validateJob(payload);
       const record = await createJob(payload);
+      setResultsOpen(true);
       selectionClearedByUser.current = false;
       setSelectedJobId(record.job_id);
       setNotice({ tone: "success", text: t("jobQueued") });
@@ -613,6 +640,14 @@ export default function App() {
           </div>
         </div>
         <div className="header-status">
+          <nav className="panel-toggles" aria-label={t("workspaceControls")}>
+            <button type="button" aria-label={t(settingsOpen ? "hideSettings" : "showSettings")} title={t(settingsOpen ? "hideSettings" : "showSettings")} aria-controls="build-settings-panel" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}>
+              {settingsOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}<span>{t("settingsShort")}</span>
+            </button>
+            <button type="button" aria-label={t(resultsOpen ? "hideResults" : "showResults")} title={t(resultsOpen ? "hideResults" : "showResults")} aria-controls="job-results-panel" aria-expanded={resultsOpen} onClick={() => setResultsOpen(value => !value)}>
+              {resultsOpen ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />}<span>{t("resultsShort")}</span>
+            </button>
+          </nav>
           <span className="local-badge">
             <span className="status-dot" />
             {t("localOnly")}
@@ -640,8 +675,10 @@ export default function App() {
 
       {notice && <div className={`notice ${notice.tone}`}>{notice.text}</div>}
 
-      <div className="workspace-layout">
+      <div className={`workspace-layout${settingsOpen ? "" : " settings-collapsed"}${resultsOpen ? "" : " results-collapsed"}`}>
         <BuildPanel
+          collapsed={!settingsOpen}
+          draftStatus={draftStatus}
           language={language}
           form={form}
           normalizedAoi={normalizedAoi}
@@ -657,6 +694,11 @@ export default function App() {
         />
 
         <main className="visual-workspace">
+          <div className="workspace-steps" aria-label={t("workflowGuide")}>
+            <span><b>1</b>{t("selectionStep")}</span><span className="step-rule" />
+            <span><b>2</b>{t("settingsStep")}</span><span className="step-rule" />
+            <span><b>3</b>{t("resultStep")}</span>
+          </div>
           <div className="workspace-toolbar">
             <div className="view-tabs" role="tablist">
               <button
@@ -786,6 +828,8 @@ export default function App() {
         </main>
 
         <ResultsPanel
+          collapsed={!resultsOpen}
+          onPreview={() => setTab("preview")}
           language={language}
           jobs={jobs}
           selectedJob={selectedJob}

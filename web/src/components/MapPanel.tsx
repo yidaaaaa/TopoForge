@@ -321,6 +321,10 @@ export function MapPanel({
       );
     });
     if (attribution) attributionSize.observe(attribution);
+    const containerSize = new ResizeObserver(() => {
+      if (containerRef.current?.clientWidth && containerRef.current.clientHeight) map.resize();
+    });
+    containerSize.observe(containerRef.current);
     map.on("load", () =>
       (map.getSource("aoi") as GeoJSONSource | undefined)?.setData(collectionRef.current),
     );
@@ -366,6 +370,7 @@ export function MapPanel({
     mapRef.current = map;
     return () => {
       attributionSize.disconnect();
+      containerSize.disconnect();
       map.remove();
       mapRef.current = null;
     };

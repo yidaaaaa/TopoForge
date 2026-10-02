@@ -4,9 +4,9 @@ import {
   CheckCircle2,
   CheckSquare2,
   Download,
+  ListX,
   ExternalLink,
   HardDrive,
-  ListX,
   RefreshCw,
   RotateCcw,
   Search,
@@ -34,7 +34,12 @@ import type {
   Language,
 } from "../types";
 
+import { artifactLabel, isPrimaryArtifact } from "../artifactLabels";
+import { ResultDownloads } from "./ResultDownloads";
+
 interface ResultsPanelProps {
+  collapsed: boolean;
+  onPreview: () => void;
   language: Language;
   jobs: JobRecord[];
   selectedJob: JobRecord | null;
@@ -68,29 +73,6 @@ function metricValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function artifactLabel(
-  role: string,
-  t: (key: TranslationKey) => string,
-): string {
-  if (role === "model_3mf") {
-    return t("core3mfArtifact");
-  }
-  if (role.startsWith("bambu_project_3mf")) {
-    const tile = role.slice("bambu_project_3mf".length).replace(/^_/, "");
-    return tile
-      ? `${t("bambuProject3mfArtifact")} · ${tile.replaceAll("_", "-")}`
-      : t("bambuProject3mfArtifact");
-  }
-  if (role.startsWith("bambu_project_validation")) {
-    const tile = role
-      .slice("bambu_project_validation".length)
-      .replace(/^_/, "");
-    return tile
-      ? `${t("bambuProjectValidationArtifact")} · ${tile.replaceAll("_", "-")}`
-      : t("bambuProjectValidationArtifact");
-  }
-  return role.replaceAll("_", " ");
-}
 
 
 function workspaceBasename(path: string): string {
@@ -123,6 +105,8 @@ function matchesStatus(job: JobRecord, filter: JobStatusFilter): boolean {
 }
 
 export function ResultsPanel({
+  collapsed,
+  onPreview,
   language,
   jobs,
   selectedJob,
@@ -237,7 +221,7 @@ export function ResultsPanel({
   };
 
   return (
-    <aside className="results-panel" aria-label={t("tabResults")}>
+    <aside id="job-results-panel" className="results-panel" hidden={collapsed} aria-label={t("tabResults")}>
       <div className="results-heading">
         <h2>{t("jobs")}</h2>
         <button
@@ -250,6 +234,8 @@ export function ResultsPanel({
           <RefreshCw size={17} className={loading ? "spin" : ""} />
         </button>
       </div>
+
+      {selectedJob?.state === "completed" && <ResultDownloads job={selectedJob} language={language} onPreview={onPreview} />}
 
       <div className="job-tools">
         <label className="job-search">
@@ -468,12 +454,9 @@ export function ResultsPanel({
         </section>
       )}
 
-      <section className="trash-section" aria-label={t("trash")}>
-        <div className="subheading">
-          <Trash2 size={16} />
-          <h3>{t("trash")}</h3>
-          <span>{jobTrash.length}</span>
-        </div>
+      <details className="trash-section secondary-details">
+        <summary>{t("trashTools")}<span className="count-badge">{jobTrash.length}</span></summary>
+
         {jobTrash.length === 0 && (
           <div className="empty-state compact">{t("trashEmpty")}</div>
         )}
@@ -514,7 +497,7 @@ export function ResultsPanel({
             </div>
           </div>
         ))}
-      </section>
+      </details>
 
       {selectedJob ? (
         <div className="job-detail">
@@ -582,7 +565,8 @@ export function ResultsPanel({
           )}
 
           {selectedJob.summary && (
-            <>
+            <details className="secondary-details result-inspection" key={`inspection-${selectedJob.job_id}`}>
+              <summary>{t("inspectResult")}</summary>
               <div className="subheading">
                 <CheckCircle2 size={16} />
                 <h3>{t("metrics")}</h3>
@@ -595,11 +579,12 @@ export function ResultsPanel({
                   </div>
                 ))}
               </dl>
-            </>
+            </details>
           )}
 
           {selectedJob.state === "completed" && (
-            <>
+            <details className="secondary-details project-maintenance" key={`maintenance-${selectedJob.job_id}`}>
+              <summary>{t("projectTools")}</summary>
               <div className="subheading">
                 <HardDrive size={16} />
                 <h3>{t("projectMaintenance")}</h3>
@@ -692,15 +677,12 @@ export function ResultsPanel({
                   </div>
                 </div>
               )}
-            </>
+            </details>
           )}
 
           {["cancelled", "failed", "completed"].includes(selectedJob.state) && (
-            <>
-              <div className="subheading">
-                <ListX size={16} />
-                <h3>{t("taskManagement")}</h3>
-              </div>
+            <details className="secondary-details task-management" key={`management-${selectedJob.job_id}`}>
+              <summary>{t("taskManagement")}</summary>
               <div className="task-actions">
                 <button
                   type="button"
@@ -725,18 +707,16 @@ export function ResultsPanel({
                   {t("deleteProjectFiles")}
                 </button>
               </div>
-            </>
+            </details>
           )}
 
-          <div className="subheading">
-            <Download size={16} />
-            <h3>{t("artifacts")}</h3>
-          </div>
+          <details className="secondary-details extra-artifacts" key={`artifacts-${selectedJob.job_id}`}>
+            <summary>{t("moreArtifacts")}</summary>
           <div className="artifact-list">
-            {selectedJob.artifacts.filter((artifact) => artifact.kind === "file").length ===
+            {selectedJob.artifacts.filter((artifact) => artifact.kind === "file" && (selectedJob.state !== "completed" || !isPrimaryArtifact(artifact))).length ===
               0 && <div className="empty-state compact">{t("noArtifacts")}</div>}
             {selectedJob.artifacts
-              .filter((artifact) => artifact.kind === "file")
+              .filter((artifact) => artifact.kind === "file" && (selectedJob.state !== "completed" || !isPrimaryArtifact(artifact)))
               .map((artifact) => (
                 <a
                   key={artifact.artifact_id}
@@ -757,6 +737,7 @@ export function ResultsPanel({
                 </a>
               ))}
           </div>
+          </details>
         </div>
       ) : (
         <div className="empty-state">{t("selectJob")}</div>

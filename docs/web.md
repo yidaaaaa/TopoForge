@@ -58,6 +58,18 @@ The WebUI does not provide a separate terrain implementation. A submitted form i
 validated into the existing workflow launch model and executed by an isolated Python
 child process.
 
+## Drafts and model presets
+
+The header can collapse either side panel without resetting the form. Basic mode keeps source, size and vertical scaling visible; Advanced exposes sampling, resource limits, tiling, connectors, overlays and slicing. Returning to Basic preserves all values and calls out customized advanced settings.
+
+Form edits are saved in a versioned browser-local draft. Reloading restores the inputs and re-normalizes a saved AOI through the local engine; it never submits a job or downloads a DEM. Storage failures are visible and do not prevent using the form. Malformed or incompatible drafts are reported and left untouched until the operator edits the new form.
+
+Model presets store named size, sampling, resource and assembly settings, up to 12 presets. Applying a preset preserves the current source, AOI, project name, input/overlay paths and slicing options. Preset changes re-read stored data before editing; an invalid collection is not silently replaced. Deleting a preset retains the current form.
+
+Drafts and presets belong to the browser's current origin, like saved places. Changing the hostname, port, browser or clearing site data does not transfer them. They are not included in workflow backups. The new versioned storage keys do not migrate server state, caches, job records or existing browser preferences, so returning to the previous application leaves those records compatible.
+
+Completed-job model downloads and 3D preview are at the top of Results. Reports, inspection details, maintenance, task removal and trash recovery remain available in labeled foldouts; partial-job file artifacts remain available in More files and reports.
+
 ## Local boundaries
 
 - Only `localhost`, `127.0.0.0/8`, or `::1` bind addresses are accepted.
