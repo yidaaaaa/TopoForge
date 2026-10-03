@@ -407,6 +407,9 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
     ),
     waitForRestoredData("map/manifest"),
     waitForRestoredData("assembly"),
+    // Observe the five-second notification while slower visualization requests
+    // are still loading, then retain the durable restored-project assertions.
+    expectOperation(page.getByText("备份已恢复为新任务")).toBeVisible(),
     backupRow.getByRole("button", { name: "恢复副本" }).click(),
   ]);
   expect(restoreResponse.ok()).toBe(true);
@@ -420,7 +423,6 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
     expect(response.ok()).toBe(true);
     expect(response.url()).toContain(`/api/v1/jobs/${restoredJob.job_id}/${suffix}`);
   }
-  await expectOperation(page.getByText("备份已恢复为新任务")).toBeVisible();
   await expect(
     page.getByRole("heading", {
       name: `${basename(completedJob.workspace_dir)}-restored-${backup.backup_id.slice(0, 8)}`,
