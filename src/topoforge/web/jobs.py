@@ -1171,6 +1171,8 @@ class LocalJobManager:
                 context="workflow workspace",
                 require_exists=False,
             )
+        if request.reuse_source_job_id is not None:
+            self._validate_reuse_destination(request, workspace)
         launch = request.launch
         if launch.slicing_enabled and launch.slicer_name == "bambu-studio":
             settings = launch.slicer_settings
@@ -1220,7 +1222,7 @@ class LocalJobManager:
                 "build": launch.build.model_copy(update={"output_dir": workspace}),
             }
         )
-        return JobCreateRequest(launch=normalized_launch), slicer
+        return request.model_copy(update={"launch": normalized_launch}), slicer
 
     def start(self) -> None:
         """Create roots, reconcile retained records, and start background polling."""
@@ -1998,6 +2000,74 @@ class LocalJobManager:
             if refresh:
                 self.refresh()
             return self._read_record(job_id)
+
+    def read_request_for_reuse(self, job_id: str) -> tuple[JobRecord, JobCreateRequest]:
+        """Read the original bounded request without refreshing or executing the job."""
+        with self._lock:
+            self._validate_owned_roots()
+            record = self._read_record(job_id)
+            payload = self._read_owned_payload(
+                self._request_path(job_id),
+                root=self.jobs_dir,
+                context="project reuse request; restore the original request before retrying",
+                max_bytes=1024 * 1024,
+            )
+            if (
+                record.request_sha256 is not None
+                and hashlib.sha256(payload).hexdigest() != record.request_sha256
+            ):
+                raise ConfigurationError(
+                    "saved project request changed; restore its original request before copying"
+                )
+            try:
+                request = JobCreateRequest.model_validate_json(payload)
+            except ValueError as exc:
+                raise ConfigurationError(
+                    "saved project request is invalid; restore the original request before copying"
+                ) from exc
+            if payload != _canonical_bytes(request):
+                raise ConfigurationError(
+                    "saved project request is not canonical; restore the original before copying"
+                )
+            if _lexical_absolute(request.launch.workspace_dir) != record.workspace_dir:
+                raise ConfigurationError(
+                    "saved project request does not match its workspace; restore it before copying"
+                )
+            return record, request
+
+    def _validate_reuse_destination(self, request: JobCreateRequest, workspace: Path) -> None:
+        with self._lock:
+            self._validate_owned_roots()
+            source_id = request.reuse_source_job_id
+            if source_id is None:
+                return
+            try:
+                original = self._read_record(source_id)
+            except KeyError as exc:
+                raise ConfigurationError(
+                    "original project is no longer available; select an existing project to copy"
+                ) from exc
+            root = _lexical_absolute(self.config.workspace_root)
+            if workspace.parent != root:
+                raise ConfigurationError(
+                    "a copied project requires a new workspace name "
+                    "directly below the workspace root"
+                )
+            if workspace == original.workspace_dir or original.workspace_dir in workspace.parents:
+                raise ConfigurationError(
+                    "a copied project cannot overwrite its original; choose a new workspace name"
+                )
+            if os.path.lexists(workspace):
+                raise ConfigurationError(
+                    "copied project workspace already exists; choose a new workspace name"
+                )
+            # Conservatively reserve case aliases too, including before workers create
+            # directories on default case-insensitive Windows and macOS volumes.
+            key = str(workspace).casefold()
+            if any(str(item.workspace_dir).casefold() == key for item in self._all_records()):
+                raise ConfigurationError(
+                    "copied project workspace is already reserved; choose a new workspace name"
+                )
 
     def list(self) -> tuple[JobRecord, ...]:
         """Return jobs newest first after reconciliation."""

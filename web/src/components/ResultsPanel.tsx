@@ -38,6 +38,8 @@ import { artifactLabel, isPrimaryArtifact } from "../artifactLabels";
 import { ResultDownloads } from "./ResultDownloads";
 
 interface ResultsPanelProps {
+  onReuse?: (jobId: string) => void;
+  reuseBusy?: boolean;
   collapsed: boolean;
   onPreview: () => void;
   language: Language;
@@ -105,6 +107,8 @@ function matchesStatus(job: JobRecord, filter: JobStatusFilter): boolean {
 }
 
 export function ResultsPanel({
+  onReuse,
+  reuseBusy = false,
   collapsed,
   onPreview,
   language,
@@ -235,6 +239,7 @@ export function ResultsPanel({
         </button>
       </div>
 
+      {selectedJob && onReuse && <button type="button" className="secondary reuse-project-button" disabled={reuseBusy} onClick={() => onReuse(selectedJob.job_id)}>{t(reuseBusy ? "loading" : "copyAndEdit")}</button>}
       {selectedJob?.state === "completed" && <ResultDownloads job={selectedJob} language={language} onPreview={onPreview} />}
 
       <div className="job-tools">

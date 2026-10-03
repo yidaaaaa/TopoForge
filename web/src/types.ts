@@ -10,7 +10,7 @@ export type VerticalScaleMode =
   | "custom";
 export type ResourceBudgetMode = "adapt" | "strict";
 export type TerrainMode = "best-available" | "dtm" | "dsm" | "bathymetry";
-export type ConnectorToleranceMm = 0.1 | 0.15 | 0.2 | 0.25 | 0.3 | 0.4;
+export type ConnectorToleranceMm = number;
 export type WorkspaceTab = "map" | "preview" | "assembly";
 export type ReferenceMapStyle = "standard" | "terrain";
 export type MapTileStyle = "terrain" | "elevation" | "hillshade";
@@ -329,6 +329,8 @@ export interface FileListing {
 }
 
 export interface FormState {
+  reuseProjectId?: string | null;
+  gpxRoute?: import("./routeEditor").RouteEditorDraft | null;
   workspaceName: string;
   sourceMode: SourceMode;
   sourcePath: string;
@@ -344,7 +346,7 @@ export interface FormState {
   samplingMode: SamplingMode;
   meshSamplingMm: number;
   maxGridCells: number;
-  maxEstimatedTriangles: number;
+  maxEstimatedTriangles: number | null;
   maxEstimatedMemoryMb: number;
   resourceBudgetMode: ResourceBudgetMode;
   maximumTileWidthMm: number;
@@ -361,6 +363,7 @@ export interface FormState {
 export type JsonObject = Record<string, unknown>;
 
 export interface JobCreateRequest {
+  reuse_source_job_id?: string | null;
   launch: JsonObject;
 }
 

@@ -209,17 +209,101 @@ def _gpx_point(element: ET.Element) -> tuple[float, float, float | None]:
     return longitude, latitude, elevation
 
 
+class _GpxTreeBuilder(ET.TreeBuilder):
+    """Reject DTDs and enforce optional resource bounds while XML is parsed."""
+
+    def __init__(
+        self,
+        *,
+        max_points: int | None,
+        max_segments: int | None,
+        max_elements: int | None,
+    ) -> None:
+        super().__init__()
+        self.max_points = max_points
+        self.max_segments = max_segments
+        self.max_elements = max_elements
+        self.points = 0
+        self.segments = 0
+        self.elements = 0
+        self.depth = 0
+
+    def doctype(self, name: str, pubid: str | None, system: str | None) -> None:
+        raise ConfigurationError("GPX must not contain a DTD; export a plain GPX track")
+
+    def start(self, tag: str, attrs: dict[str, str]) -> ET.Element:
+        self.elements += 1
+        self.depth += 1
+        local = _local_name(tag)
+        self.points += int(local in {"trkpt", "rtept"})
+        self.segments += int(local in {"trkseg", "rte"})
+        for count, limit, label in (
+            (self.points, self.max_points, "points"),
+            (self.segments, self.max_segments, "segments"),
+            (self.elements, self.max_elements, "XML elements"),
+        ):
+            if limit is not None and count > limit:
+                raise ConfigurationError(
+                    f"GPX exceeds the {limit} {label} limit; split the track before importing"
+                )
+        if self.depth > 256:
+            raise ConfigurationError("GPX nesting exceeds 256 levels; export a plain GPX track")
+        return super().start(tag, attrs)
+
+    def end(self, tag: str) -> ET.Element:
+        self.depth -= 1
+        return super().end(tag)
+
+
+def parse_gpx_bytes(
+    payload: bytes,
+    *,
+    source_name: str,
+    max_points: int | None = None,
+    max_segments: int | None = None,
+    max_elements: int | None = None,
+) -> tuple[ParsedOverlayFeature, ...]:
+    """Parse immutable GPX bytes with shared geometry semantics and optional budgets.
+
+    DTDs are rejected before entity expansion. Budgets count every corresponding
+    element, including points in incomplete segments, before building the tree.
+    Source elevations remain metadata; terrain geometry uses the processed DEM.
+    """
+    if any(limit is not None and limit < 1 for limit in (max_points, max_segments, max_elements)):
+        raise ValueError("GPX parsing budgets must be positive")
+    parser = ET.XMLParser(
+        target=_GpxTreeBuilder(
+            max_points=max_points,
+            max_segments=max_segments,
+            max_elements=max_elements,
+        )
+    )
+    try:
+        root = ET.fromstring(payload, parser=parser)
+    except (ET.ParseError, LookupError, ValueError) as exc:
+        raise ConfigurationError(
+            f"overlay GPX is unreadable: {source_name}; export a valid GPX track"
+        ) from exc
+    return _gpx_features(root, source_name=source_name)
+
+
 def parse_gpx_source(source: OverlaySourceConfig) -> tuple[ParsedOverlayFeature, ...]:
     """Parse GPX tracks and routes without using optional network-aware libraries."""
     if source.path is None:
         raise AssertionError("validated GPX source path disappeared")
     path = source.path.expanduser().resolve()
     try:
-        root = ET.parse(path).getroot()
-    except (OSError, ET.ParseError) as exc:
+        payload = path.read_bytes()
+    except OSError as exc:
         raise ConfigurationError(f"overlay GPX is unreadable: {path}") from exc
+    return parse_gpx_bytes(payload, source_name=str(path))
+
+
+def _gpx_features(root: ET.Element, *, source_name: str) -> tuple[ParsedOverlayFeature, ...]:
     if _local_name(root.tag) != "gpx":
-        raise ConfigurationError(f"overlay GPX root element is not <gpx>: {path}")
+        raise ConfigurationError(
+            f"overlay GPX root element is not <gpx>: {source_name}; choose a GPX track"
+        )
     features: list[ParsedOverlayFeature] = []
     segment_index = 0
     for element in root.iter():
@@ -252,7 +336,9 @@ def parse_gpx_source(source: OverlaySourceConfig) -> tuple[ParsedOverlayFeature,
         )
         segment_index += 1
     if not features:
-        raise ConfigurationError(f"overlay GPX contains no track/route with two points: {path}")
+        raise ConfigurationError(
+            f"overlay GPX contains no track/route with two points: {source_name}"
+        )
     return tuple(features)
 
 

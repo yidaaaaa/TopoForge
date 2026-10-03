@@ -58,6 +58,13 @@ describe("browser-local draft and model presets", () => {
     expect(() => changePresets(() => [preset])).toThrow();
     expect(localStorage.getItem(PRESETS_KEY)).toBe("malformed");
   });
+  it("retains new route/copy draft fields without storing preview geometry or hidden templates", () => {
+    const form = { ...defaultFormState, reuseProjectId: "a".repeat(32), gpxRoute: { path: "/route.gpx", datasetName: "", license: "", attribution: "", color: "#d1495b", lineWidthMm: 0.8, raisedHeightMm: 0.4, embedDepthMm: 0.2 } };
+    saveDraft(form);
+    expect(readDraft()).toEqual({ status: "ready", value: form });
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ version: 1, value: { ...form, reuseProjectId: "../invalid" } }));
+    expect(readDraft().status).toBe("invalid");
+  });
   it("does not touch any existing application preferences or runtime records", () => {
     localStorage.setItem("topoforge-basemap-mode", "cached");
     localStorage.setItem("topoforge-language", "en");

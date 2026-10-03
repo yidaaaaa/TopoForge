@@ -26,6 +26,7 @@ from topoforge.models import AreaOfInterest, AreaOfInterestInput
 from topoforge.raster import normalize_area_of_interest
 from topoforge.util import sha256_file
 from topoforge.web.configuration import LocalConfigLoadRequest, load_local_config
+from topoforge.web.gpx import GpxPreviewRequest, GpxPreviewResponse, preview_gpx
 from topoforge.web.jobs import (
     LocalJobManager,
     VerifiedFileDownload,
@@ -64,6 +65,7 @@ from topoforge.web.place_search import (
     PublicSearchDisabledError,
     WebPlaceSearch,
 )
+from topoforge.web.project_reuse import ProjectReuseResponse, prepare_project_reuse
 from topoforge.web.reference_maps import (
     read_local_standard_map,
     read_standard_map_pyramid,
@@ -462,6 +464,23 @@ def create_app(
             return normalize_area_of_interest(request)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post("/api/v1/overlays/gpx/preview", response_model=GpxPreviewResponse)
+    def gpx_preview(request: GpxPreviewRequest) -> JSONResponse:
+        result = preview_gpx(jobs, request)
+        return JSONResponse(
+            content=result.model_dump(mode="json"), headers={"Cache-Control": "no-store"}
+        )
+
+    @app.get("/api/v1/jobs/{job_id}/reuse", response_model=ProjectReuseResponse)
+    def reuse_project(job_id: str) -> JSONResponse:
+        try:
+            result = prepare_project_reuse(jobs, job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Job not found") from exc
+        return JSONResponse(
+            content=result.model_dump(mode="json"), headers={"Cache-Control": "no-store"}
+        )
 
     @app.post("/api/v1/jobs/validate")
     def validate_job(request: JobCreateRequest) -> dict[str, Any]:

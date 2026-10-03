@@ -1,3 +1,4 @@
+import type { GpxRoutePreview } from "../routeEditor";
 import type { Feature, FeatureCollection, Geometry, LineString } from "geojson";
 import { Crosshair, Layers3, MapPinned, SquareDashedMousePointer } from "lucide-react";
 import maplibregl, {
@@ -27,6 +28,8 @@ import type {
 } from "../types";
 
 interface MapPanelProps {
+  route?: { preview: GpxRoutePreview; color: string; widthMm: number } | null;
+  routeFocus?: GpxRoutePreview | null;
   language: Language;
   locatedPlace?: PlaceCandidate | null;
   sourceMode: SourceMode;
@@ -107,6 +110,7 @@ export function mapStyle(
       attribution: '<a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener noreferrer">Natural Earth</a>',
     },
     aoi: { type: "geojson", data: emptyCollection() },
+    "gpx-route": { type: "geojson", data: emptyCollection() },
   };
   if (basemapEnabled) {
     sources.osm = {
@@ -216,6 +220,11 @@ export function mapStyle(
         paint: { "fill-color": "#0f766e", "fill-opacity": 0.2 },
       },
       {
+        id: "gpx-route-line", type: "line", source: "gpx-route",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": ["get", "route_color"], "line-width": ["get", "route_width"] },
+      },
+      {
         id: "aoi-line",
         type: "line",
         source: "aoi",
@@ -230,6 +239,8 @@ function emptyCollection(): FeatureCollection {
 }
 
 export function MapPanel({
+  route = null,
+  routeFocus = null,
   language,
   locatedPlace = null,
   sourceMode,
@@ -288,6 +299,15 @@ export function MapPanel({
     [activeGeometry],
   );
 
+  const routeCollection = useMemo<FeatureCollection>(() => route ? {
+    ...route.preview.geojson,
+    features: route.preview.geojson.features.map(item => ({ ...item, properties: { ...item.properties,
+      route_color: /^#[0-9a-f]{6}$/i.test(route.color) ? route.color : "#d1495b",
+      route_width: Math.max(2, Math.min(12, Number.isFinite(route.widthMm) ? 2 + route.widthMm * 2 : 4)),
+    } })),
+  } : emptyCollection(), [route?.preview, route?.color, route?.widthMm]);
+  const routeCollectionRef = useRef(routeCollection);
+  routeCollectionRef.current = routeCollection;
   const collectionRef = useRef(collection);
   collectionRef.current = collection;
   const drawCallbacksRef = useRef({ onBboxChange, onCenterChange });
@@ -325,9 +345,12 @@ export function MapPanel({
       if (containerRef.current?.clientWidth && containerRef.current.clientHeight) map.resize();
     });
     containerSize.observe(containerRef.current);
-    map.on("load", () =>
-      (map.getSource("aoi") as GeoJSONSource | undefined)?.setData(collectionRef.current),
-    );
+    // Full style replacements must always restore the latest editor data. This
+    // listener belongs to the map, so parent polling cannot remove it mid-load.
+    map.on("style.load", () => {
+      (map.getSource("aoi") as GeoJSONSource | undefined)?.setData(collectionRef.current);
+      (map.getSource("gpx-route") as GeoJSONSource | undefined)?.setData(routeCollectionRef.current);
+    });
     map.on("error", (event) => {
       if ("sourceId" in event && event.sourceId === "reference-dem") {
         setTerrainReferenceError(true);
@@ -390,12 +413,23 @@ export function MapPanel({
     setBasemapError(false);
     setTerrainReferenceError(false);
     setTerrainReferenceLoading(basemapEnabled && basemapStyle === "terrain");
-    map.setStyle(mapStyle(basemapEnabled, manifest, terrainStyle, language, basemapCacheOnly, basemapStyle));
-    const applyAoi = () =>
-      (map.getSource("aoi") as GeoJSONSource | undefined)?.setData(collectionRef.current);
-    map.once("style.load", applyAoi);
-    return () => { map.off("style.load", applyAoi); };
+    const nextStyle = mapStyle(basemapEnabled, manifest, terrainStyle, language, basemapCacheOnly, basemapStyle);
+    // MapLibre's synchronous style diff does not emit style.load. Empty data in
+    // the style would otherwise clear the visible route and print selection.
+    nextStyle.sources.aoi = { type: "geojson", data: collectionRef.current };
+    nextStyle.sources["gpx-route"] = { type: "geojson", data: routeCollectionRef.current };
+    map.setStyle(nextStyle);
   }, [basemapEnabled, manifest, terrainStyle, language, basemapCacheOnly, basemapStyle]);
+
+  useEffect(() => {
+    (mapRef.current?.getSource("gpx-route") as GeoJSONSource | undefined)?.setData(routeCollection);
+  }, [routeCollection]);
+
+  useEffect(() => {
+    if (!routeFocus || !mapRef.current) return;
+    const [west, south, east, north] = routeFocus.bounds_wgs84;
+    mapRef.current.fitBounds([[west, south], [east, north]], { padding: 64, maxZoom: 20, duration: 500 });
+  }, [routeFocus]);
 
   useEffect(() => {
     const source = mapRef.current?.getSource("aoi") as GeoJSONSource | undefined;
@@ -428,7 +462,9 @@ export function MapPanel({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !normalizedAoi) {
+    // Background normalization may finish after the user explicitly locates a route.
+    // The parent clears routeFocus when the user changes the print area or source.
+    if (!map || !normalizedAoi || routeFocus) {
       return;
     }
     const [west, south, east, north] = normalizedAoi.bounds_wgs84;
@@ -444,7 +480,9 @@ export function MapPanel({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !manifest) {
+    // A copied project can load its terrain after the route has been located.
+    // Add that raster without replacing the user's more recent camera choice.
+    if (!map || !manifest || routeFocus) {
       return;
     }
     const [west, south, east, north] = manifest.bounds_wgs84;
@@ -586,6 +624,7 @@ export function MapPanel({
       data-terrain-error={terrainReferenceError}
       data-has-terrain={manifest ? "true" : "false"}
       data-job-id={manifest?.job_id ?? ""}
+      data-route-points={route?.preview.point_count ?? 0}
       data-place-center={locatedPlace ? `${locatedPlace.longitude},${locatedPlace.latitude}` : ""}
       data-tile-style={terrainStyle}
     >

@@ -1,4 +1,4 @@
-import { CONNECTOR_TOLERANCE_OPTIONS_MM, defaultFormState } from "./config";
+import { defaultFormState } from "./config";
 import type { FormState } from "./types";
 
 export const DRAFT_KEY = "topoforge-form-draft-v1";
@@ -17,7 +17,6 @@ const enumValues: Partial<Record<keyof FormState, readonly unknown[]>> = {
   resourceBudgetMode: ["adapt", "strict"],
   slicerName: ["bambu-studio", "orca", "prusa", "auto"],
   terrainMode: ["best-available", "dtm", "dsm", "bathymetry"],
-  connectorToleranceMm: CONNECTOR_TOLERANCE_OPTIONS_MM,
 };
 
 export const PRESET_FIELDS = [
@@ -41,7 +40,8 @@ function object(value: unknown): value is Record<string, unknown> {
 // still validates ranges and printable geometry when the user submits a job.
 function fieldValid(key: keyof FormState, value: unknown): boolean {
   if (enumValues[key]) return enumValues[key]!.includes(value);
-  if (key === "modelDepthMm") return value === null || (typeof value === "number" && Number.isFinite(value));
+  if (key === "connectorToleranceMm") return typeof value === "number" && Number.isFinite(value) && value >= 0;
+  if (key === "modelDepthMm" || key === "maxEstimatedTriangles") return value === null || (typeof value === "number" && Number.isFinite(value));
   const reference = defaultFormState[key];
   if (Array.isArray(reference)) {
     return Array.isArray(value) && value.length === reference.length && value.every(item => typeof item === "number" && Number.isFinite(item));
@@ -64,6 +64,23 @@ export function applyModelPreset(form: FormState, preset: ModelPreset): FormStat
   return { ...form, ...modelSettings(preset.settings) };
 }
 
+function extras(value: Record<string, unknown>): Partial<FormState> | null {
+  const result: Partial<FormState> = {};
+  if ("reuseProjectId" in value) {
+    if (value.reuseProjectId !== null && (typeof value.reuseProjectId !== "string" || !/^[0-9a-f]{32}$/.test(value.reuseProjectId))) return null;
+    result.reuseProjectId = value.reuseProjectId as string | null;
+  }
+  if ("gpxRoute" in value) {
+    if (value.gpxRoute === null) result.gpxRoute = null;
+    else {
+      const route = value.gpxRoute;
+      if (!object(route) || !["path", "datasetName", "license", "attribution", "color"].every(key => typeof route[key] === "string" && (route[key] as string).length <= 4096) || !["lineWidthMm", "raisedHeightMm", "embedDepthMm"].every(key => typeof route[key] === "number" && Number.isFinite(route[key]))) return null;
+      result.gpxRoute = Object.fromEntries(["path", "datasetName", "license", "attribution", "color", "lineWidthMm", "raisedHeightMm", "embedDepthMm"].map(key => [key, route[key]])) as unknown as NonNullable<FormState["gpxRoute"]>;
+    }
+  }
+  return result;
+}
+
 function readDocument(key: string, storage?: BrowserStorage): StorageResult<unknown> {
   try {
     const raw = (storage ?? window.localStorage).getItem(key);
@@ -84,9 +101,9 @@ export function readDraft(storage?: BrowserStorage): StorageResult<FormState> {
   if (result.status !== "ready") return result;
   const value = result.value;
   const keys = Object.keys(defaultFormState) as (keyof FormState)[];
-  if (!object(value) || !keys.every(key => fieldValid(key, value[key]))) return { status: "invalid", value: null };
+  if (!object(value) || !keys.every(key => fieldValid(key, value[key])) || extras(value) === null) return { status: "invalid", value: null };
   // Reconstruct known keys so old/new browsers never carry unknown launch options.
-  return { status: "ready", value: Object.fromEntries(keys.map(key => [key, value[key]])) as unknown as FormState };
+  return { status: "ready", value: { ...Object.fromEntries(keys.map(key => [key, value[key]])), ...extras(value) } as unknown as FormState };
 }
 
 function writeDocument(key: string, value: unknown, storage?: BrowserStorage): void {
@@ -96,6 +113,7 @@ function writeDocument(key: string, value: unknown, storage?: BrowserStorage): v
 }
 
 export function saveDraft(form: FormState, storage?: BrowserStorage): void {
+  if (extras(form as unknown as Record<string, unknown>) === null) throw new Error("invalid-draft");
   if (!(Object.keys(defaultFormState) as (keyof FormState)[]).every(key => fieldValid(key, form[key]))) throw new Error("invalid-draft");
   writeDocument(DRAFT_KEY, form, storage);
 }

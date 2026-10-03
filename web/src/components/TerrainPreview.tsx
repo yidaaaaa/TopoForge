@@ -89,12 +89,38 @@ function placeholderTerrain(): THREE.Mesh {
   );
 }
 
-function applyTerrainPresentation(object: THREE.Object3D, bounds: THREE.Box3) {
+/** Keep exported overlay colors, including meshes below a named GLTF node. */
+function isOverlayMesh(mesh: THREE.Mesh, root: THREE.Object3D): boolean {
+  let node: THREE.Object3D | null = mesh;
+  while (node) {
+    if (node.name.startsWith("overlay-")) return true;
+    if (node === root) break;
+    node = node.parent;
+  }
+  return false;
+}
+
+/** Color the terrain by elevation without changing the exported route presentation. */
+export function applyTerrainPresentation(object: THREE.Object3D, bounds: THREE.Box3) {
   const height = Math.max(bounds.max.z - bounds.min.z, 0.001);
+  const terrainMeshes: THREE.Mesh[] = [];
+  const overlayMaterials = new Set<THREE.Material>();
+  const overlayGeometries = new Set<THREE.BufferGeometry>();
   object.traverse((child) => {
-    if (!(child instanceof THREE.Mesh)) {
-      return;
+    if (!(child instanceof THREE.Mesh)) return;
+    if (isOverlayMesh(child, object)) {
+      overlayGeometries.add(child.geometry);
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      materials.forEach(material => overlayMaterials.add(material));
+    } else {
+      terrainMeshes.push(child);
     }
+  });
+  const disposed = new Set<THREE.Material>();
+  terrainMeshes.forEach(child => {
+    // GLTF can share geometry or its default material between named objects.
+    // A terrain-only presentation change must not modify or dispose route data.
+    if (overlayGeometries.has(child.geometry)) child.geometry = child.geometry.clone();
     const positions = child.geometry.getAttribute("position");
     const colors = new Float32Array(positions.count * 3);
     const color = new THREE.Color();
@@ -116,7 +142,12 @@ function applyTerrainPresentation(object: THREE.Object3D, bounds: THREE.Box3) {
       flatShading: child.geometry.getAttribute("normal") === undefined,
       side: THREE.FrontSide,
     });
-    previous.forEach((material) => material.dispose());
+    previous.forEach(material => {
+      if (!overlayMaterials.has(material) && !disposed.has(material)) {
+        material.dispose();
+        disposed.add(material);
+      }
+    });
   });
 }
 

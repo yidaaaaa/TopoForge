@@ -1,0 +1,20 @@
+.route-editor { min-width: 0; }
+.route-editor-heading { gap: 7px; }
+.route-editor-heading h2 { margin-right: 0; }
+.route-remove { margin-left: auto; }
+.route-editor-fields { margin: 0; padding: 0; min-width: 0; border: 0; }
+.route-path-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.route-path-field input { width: 100%; min-width: 0; }
+.route-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+.route-actions .secondary { min-height: 34px; font-size: 11px; gap: 5px; }
+.route-loaded { display: grid; gap: 5px; padding: 10px; margin: 0 0 14px; border: 1px solid #d5e1d0; border-radius: 7px; background: #f2f6ee; color: #496544; font-size: 11px; overflow-wrap: anywhere; }
+.route-loaded strong { font-size: 12px; font-weight: 550; }
+.route-style-fields { display: grid; grid-template-columns: 62px minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.route-style-fields .field { min-width: 0; margin-bottom: 4px; }
+.route-style-fields input { width: 100%; min-width: 0; }
+.route-color-field input { padding: 4px; cursor: pointer; }
+.route-provenance { padding-top: 12px; border-top: 1px solid var(--line); }
+.route-readiness.ready { color: #2e6650; }
+.route-extra { margin-bottom: 0; }
+.route-editor .inline-error { overflow-wrap: anywhere; }
+@media (max-width: 940px) { .route-editor { grid-column: 1 / -1; } }

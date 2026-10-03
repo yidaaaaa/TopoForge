@@ -8,12 +8,14 @@ import { formatBytes } from "../config";
 
 interface FileBrowserProps {
   open: boolean;
+  suffix?: string;
   language: Language;
   onClose: () => void;
   onSelect: (path: string) => void;
 }
 
 export function FileBrowser({
+  suffix,
   open,
   language,
   onClose,
@@ -44,6 +46,8 @@ export function FileBrowser({
       void load();
     }
   }, [load, open]);
+
+  const entries = listing?.entries.filter(entry => entry.kind === "directory" || !suffix || entry.name.toLowerCase().endsWith(suffix)) ?? [];
 
   if (!open) {
     return null;
@@ -94,7 +98,7 @@ export function FileBrowser({
         <div className="browser-list" aria-busy={loading}>
           {loading && <div className="empty-state">{t("loading")}</div>}
           {!loading &&
-            listing?.entries.map((entry) => (
+            entries.map((entry) => (
               <button
                 className="browser-entry"
                 type="button"
@@ -117,7 +121,7 @@ export function FileBrowser({
                 <small>{formatBytes(entry.size_bytes)}</small>
               </button>
             ))}
-          {!loading && listing?.entries.length === 0 && (
+          {!loading && listing && entries.length === 0 && (
             <div className="empty-state">{t("fileEmpty")}</div>
           )}
           {error && <div className="inline-error">{error}</div>}

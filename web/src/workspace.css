@@ -120,3 +120,7 @@
 .job-count { grid-column: 3; grid-row: 1; }
 .job-tools select { grid-row: 2; }
 .job-tools select:last-of-type { grid-column: 2 / 4; }
+
+.reuse-project-button { width: 100%; margin: 0 0 12px; }
+.reuse-context p { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.reuse-context { background: #f1f7f2; }

@@ -31,6 +31,8 @@ import {
   fetchJobMaintenance,
   fetchJobMap,
   fetchHealth,
+  fetchProjectReuse,
+  previewGpx,
   listJobs,
   listJobTrash,
   loadLocalConfig,
@@ -69,6 +71,10 @@ import type {
   WorkspaceTab,
 } from "./types";
 
+import { GpxRouteEditor } from "./GpxRouteEditor";
+import { buildRouteOverlay, defaultRouteEditorDraft, routePreviewMatches, type GpxRoutePreview } from "./routeEditor";
+import { buildReusedRequest, formFromProject, projectAoi, projectOverlay, mergeRouteOverlay, type ProjectReuseResponse } from "./projectReuse";
+import { freshForm } from "./workspaceStorage";
 import { useWorkspaceDraft } from "./useWorkspaceDraft";
 
 const TerrainPreview = lazy(() =>
@@ -94,6 +100,8 @@ function initialLanguage(): Language {
 
 function errorMessage(reason: unknown, language: Language): string {
   if (reason instanceof Error) {
+    if (reason.message === "reuse-unsupported-aoi") return translate(language, "reuseUnsupported");
+    if (reason.message === "reuse-not-ready") return translate(language, "reuseNotReady");
     if (reason.message === "invalid-workspace") {
       return translate(language, "invalidWorkspace");
     }
@@ -136,6 +144,14 @@ export default function App() {
   const [language, setLanguage] = useState<Language>(initialLanguage);
   const [health, setHealth] = useState<Health | null>(null);
   const { form, setForm, draftStatus } = useWorkspaceDraft();
+  const [reuseProject, setReuseProject] = useState<ProjectReuseResponse | null>(null);
+  const [reuseMap, setReuseMap] = useState<JobMapManifest | null>(null);
+  const [reuseBusy, setReuseBusy] = useState(false);
+  const [reuseError, setReuseError] = useState<string | null>(null);
+  const [reuseReload, setReuseReload] = useState(0);
+  const reuseGeneration = useRef(0);
+  const [routePreview, setRoutePreview] = useState<GpxRoutePreview | null>(null);
+  const [routeFocus, setRouteFocus] = useState<GpxRoutePreview | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(true);
   const [resultsOpen, setResultsOpen] = useState(true);
   const [normalizedAoi, setNormalizedAoi] = useState<NormalizedAoi | null>(null);
@@ -175,7 +191,7 @@ export default function App() {
   const [jobsLoading, setJobsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [validating, setValidating] = useState(false);
-  const [browserPurpose, setBrowserPurpose] = useState<"dem" | "overlay" | null>(
+  const [browserPurpose, setBrowserPurpose] = useState<"dem" | "overlay" | "gpx" | null>(
     null,
   );
   const [notice, setNotice] = useState<{ tone: "error" | "success"; text: string } | null>(
@@ -207,6 +223,32 @@ export default function App() {
     });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    const id = form.reuseProjectId;
+    if (!id) { setReuseProject(null); setReuseError(null); setReuseBusy(false); return; }
+    if (reuseProject?.source_job_id === id) return;
+    const controller = new AbortController();
+    setReuseBusy(true);
+    setReuseError(null);
+    fetchProjectReuse(id, controller.signal).then(project => {
+      if (controller.signal.aborted) return;
+      formFromProject(project); // Refuse a source format the controls cannot represent.
+      setReuseProject(project);
+    }).catch(reason => {
+      if (!controller.signal.aborted) setReuseError(errorMessage(reason, currentDraftContext.current.language));
+    }).finally(() => { if (!controller.signal.aborted) setReuseBusy(false); });
+    return () => controller.abort();
+  }, [form.reuseProjectId, reuseReload]);
+
+  useEffect(() => {
+    const input = projectAoi(form, reuseProject);
+    if (!input || !reuseProject) return;
+    let active = true;
+    normalizeAoi(input).then(area => { if (active) setNormalizedAoi(area); })
+      .catch(reason => { if (active) setNotice({ tone: "error", text: errorMessage(reason, currentDraftContext.current.language) }); });
+    return () => { active = false; };
+  }, [reuseProject, form.sourceMode, form.sourcePath, JSON.stringify(aoiInput(form))]);
 
   const loadJobs = useCallback((force = false): Promise<void> => {
     if (lifecycleMutationInProgress.current && !force) {
@@ -293,6 +335,8 @@ export default function App() {
   const visibleJobMap = jobMap?.job_id === selectedJob?.job_id ? jobMap : null;
   const visibleJobAssembly =
     jobAssembly?.job_id === selectedJob?.job_id ? jobAssembly : null;
+
+  useEffect(() => { setRouteFocus(null); }, [selectedJobId]);
 
   const handleJobSelect = useCallback((jobId: string | null) => {
     selectionClearedByUser.current = jobId === null;
@@ -407,6 +451,23 @@ export default function App() {
     };
   }, [language, selectedJob?.job_id, selectedJob?.state]);
 
+  useEffect(() => {
+    setReuseMap(null);
+    if (!reuseProject || !jobs.some(job => job.job_id === reuseProject.source_job_id && job.state === "completed")) return;
+    const controller = new AbortController();
+    fetchJobMap(reuseProject.source_job_id, controller.signal).then(manifest => {
+      if (!controller.signal.aborted) setReuseMap({ ...manifest, tile_footprints_geojson: { type: "FeatureCollection", features: [] } });
+    }).catch(() => { /* The source settings remain editable if no processed map is available. */ });
+    return () => controller.abort();
+  }, [reuseProject?.source_job_id, jobs.some(job => job.job_id === reuseProject?.source_job_id && job.state === "completed")]);
+
+  const copiedSourceMap = useMemo(() => {
+    if (!reuseProject || !reuseMap || reuseMap.job_id !== reuseProject.source_job_id || selectedJobId) return null;
+    const baseline = formFromProject(reuseProject);
+    const sameSource = form.sourceMode === baseline.sourceMode && (form.sourceMode !== "local" || form.sourcePath.trim() === baseline.sourcePath.trim());
+    return sameSource && JSON.stringify(aoiInput(form)) === JSON.stringify(aoiInput(baseline)) ? reuseMap : null;
+  }, [reuseMap, reuseProject, selectedJobId, form.sourceMode, form.sourcePath, JSON.stringify(aoiInput(form))]);
+
   const modelUrl = useMemo(() => {
     if (!selectedJob) {
       return null;
@@ -428,17 +489,21 @@ export default function App() {
   }, [selectedJob]);
 
   const updateForm = (next: FormState) => {
+    reuseGeneration.current += 1;
+    if (next.gpxRoute?.path.trim() !== form.gpxRoute?.path.trim()) { setRoutePreview(null); setRouteFocus(null); }
     if (
       next.sourceMode !== form.sourceMode ||
+      (next.sourceMode === "local" && next.sourcePath !== form.sourcePath) ||
       JSON.stringify(aoiInput(next)) !== JSON.stringify(aoiInput(form))
     ) {
       setNormalizedAoi(null);
+      setRouteFocus(null);
     }
     setForm(next);
   };
 
   const validateCurrentAoi = async () => {
-    const input = aoiInput(form);
+    const input = projectAoi(form, reuseProject);
     if (!input) {
       return null;
     }
@@ -461,17 +526,29 @@ export default function App() {
     }
     setSubmitting(true);
     try {
-      if (aoiInput(form)) {
+      if (projectAoi(form, reuseProject)) {
         const normalized = await validateCurrentAoi();
         if (!normalized) {
           return;
         }
       }
-      let overlay: JsonObject | null = null;
-      if (form.overlayConfigPath.trim()) {
-        overlay = await loadLocalConfig("overlay", form.overlayConfigPath.trim());
+      if (form.reuseProjectId && reuseProject?.source_job_id !== form.reuseProjectId) throw new Error("reuse-not-ready");
+      let route: JsonObject | null = null;
+      if (form.gpxRoute) {
+        route = buildRouteOverlay(form.gpxRoute, routePreview);
+        if (!route || !routePreview) throw new Error(t("routeNeedsReview"));
+        const checked = await previewGpx(form.gpxRoute.path, undefined, form.reuseProjectId);
+        if (checked.sha256 !== routePreview.sha256 || checked.path !== routePreview.path) {
+          setRoutePreview(null);
+          throw new Error(t("routeChanged"));
+        }
       }
-      const payload = buildJobRequest(form, health, overlay);
+      let overlay = reuseProject ? projectOverlay(reuseProject, route) : route;
+      if (form.overlayConfigPath.trim()) {
+        const configured = await loadLocalConfig("overlay", form.overlayConfigPath.trim());
+        overlay = route ? mergeRouteOverlay(configured, route) : configured;
+      }
+      const payload = reuseProject ? buildReusedRequest(form, health, reuseProject, overlay) : buildJobRequest(form, health, overlay);
       await validateJob(payload);
       const record = await createJob(payload);
       setResultsOpen(true);
@@ -484,6 +561,31 @@ export default function App() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleReuse = async (jobId: string) => {
+    const generation = ++reuseGeneration.current;
+    setReuseBusy(true);
+    try {
+      const project = await fetchProjectReuse(jobId);
+      if (generation !== reuseGeneration.current || selectedJobIdRef.current !== jobId) return;
+      const next = formFromProject(project);
+      setReuseProject(project);
+      setReuseError(null);
+      setForm(next);
+      setRoutePreview(null);
+      setRouteFocus(null);
+      setNormalizedAoi(null);
+      setLocatedPlace(null);
+      setDrawMode(null);
+      selectionClearedByUser.current = true;
+      setSelectedJobId(null);
+      setSettingsOpen(true);
+      setTab("map");
+      setNotice({ tone: "success", text: t("copyReady") });
+    } catch (reason) {
+      if (generation === reuseGeneration.current) setNotice({ tone: "error", text: errorMessage(reason, language) });
+    } finally { setReuseBusy(false); }
   };
 
   const handleCancel = async (jobId: string) => {
@@ -683,13 +785,26 @@ export default function App() {
           form={form}
           normalizedAoi={normalizedAoi}
           drawMode={drawMode}
-          busy={submitting || !health}
+          busy={submitting || !health || reuseBusy || Boolean(form.reuseProjectId && !reuseProject)}
           validating={validating}
           onFormChange={updateForm}
           onBrowseDem={() => setBrowserPurpose("dem")}
           onBrowseOverlay={() => setBrowserPurpose("overlay")}
           onDrawMode={setDrawMode}
           onValidateAoi={() => void validateCurrentAoi()}
+          projectControls={form.reuseProjectId && <section className="control-section reuse-context">
+            <strong>{t("copyContext")}</strong><p>{t("copyHelp")}</p>
+            {copiedSourceMap && <p>{t("copyMapReference")}</p>}
+            {reuseProject?.issues.map((issue, index) => <p className="inline-warning" key={index}>{language === "zh-CN" ? issue.code === "missing-input" ? "请恢复此源文件，或选择替代文件后生成。" : issue.code === "workspace-dependency" ? "此副本仍使用原工作区内的源文件，请保留原工作区。" : "此文件不在当前文件浏览范围内；更换文件时请从允许的目录选择。" : issue.message}<br /><code>{issue.path}</code></p>)}
+            {reuseError && <><p className="inline-error">{reuseError}</p><button type="button" onClick={() => setReuseReload(value => value + 1)}>{t("retryReuse")}</button></>}
+            <button type="button" className="text-button" disabled={submitting} onClick={() => { updateForm(freshForm()); setReuseProject(null); setNormalizedAoi(null); }}>{t("newBlankProject")}</button>
+          </section>}
+          routeEditor={form.gpxRoute ? <GpxRouteEditor language={language} value={form.gpxRoute}
+            onChange={gpxRoute => updateForm({ ...form, gpxRoute })} onBrowse={() => setBrowserPurpose("gpx")}
+            loadPreview={(path, signal) => previewGpx(path, signal, form.reuseProjectId)} preview={routePreview} onPreviewChange={setRoutePreview}
+            onFocusRoute={preview => { setRouteFocus({ ...preview }); setTab("map"); }}
+            onRemove={() => updateForm({ ...form, gpxRoute: null })} disabled={submitting}
+          /> : <section className="control-section"><button type="button" className="secondary" disabled={submitting} onClick={() => updateForm({ ...form, gpxRoute: defaultRouteEditorDraft() })}>{t("routeAdd")}</button></section>}
           onSubmit={() => void submit()}
         />
 
@@ -774,12 +889,14 @@ export default function App() {
             <div hidden={tab !== "map"} className="stage-view map-stage">
               <PlaceSearch language={language} cacheOnly={basemapCacheOnly}
                 onEnableBasemap={basemapMode === "off" ? () => setBasemapMode("online") : undefined}
-                onLocate={place => { setLocatedPlace(place); setDrawMode(null); }}
+                onLocate={place => { setRouteFocus(null); setLocatedPlace(place); setDrawMode(null); }}
                 onUseCenter={place => {
                   updateForm({ ...form, center: [place.longitude, place.latitude], sourceMode: "center-radius" });
                   setDrawMode(null);
                 }} />
               <MapPanel
+                route={form.gpxRoute && routePreviewMatches(form.gpxRoute, routePreview) ? { preview: routePreview, color: form.gpxRoute.color, widthMm: form.gpxRoute.lineWidthMm } : null}
+                routeFocus={routeFocus}
                 locatedPlace={locatedPlace}
                 language={language}
                 sourceMode={form.sourceMode}
@@ -788,7 +905,7 @@ export default function App() {
                 basemapEnabled={basemapEnabled}
                 basemapCacheOnly={basemapCacheOnly}
                 drawMode={drawMode}
-                manifest={visibleJobMap}
+                manifest={visibleJobMap ?? copiedSourceMap}
                 selectedTileId={selectedTileId}
                 visualizationLoading={visualizationLoading}
                 visualizationError={visualizationError}
@@ -828,6 +945,8 @@ export default function App() {
         </main>
 
         <ResultsPanel
+          onReuse={jobId => void handleReuse(jobId)}
+          reuseBusy={reuseBusy || submitting}
           collapsed={!resultsOpen}
           onPreview={() => setTab("preview")}
           language={language}
@@ -857,11 +976,14 @@ export default function App() {
 
       <FileBrowser
         open={browserPurpose !== null}
+        suffix={browserPurpose === "gpx" ? ".gpx" : undefined}
         language={language}
         onClose={() => setBrowserPurpose(null)}
         onSelect={(path) => {
           if (browserPurpose === "dem") {
             updateForm({ ...form, sourcePath: path });
+          } else if (browserPurpose === "gpx" && form.gpxRoute) {
+            updateForm({ ...form, gpxRoute: { ...form.gpxRoute, path } });
           } else if (browserPurpose === "overlay") {
             updateForm({ ...form, overlayConfigPath: path });
           }

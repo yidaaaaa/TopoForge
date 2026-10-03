@@ -9,6 +9,7 @@ import sys
 import time
 from pathlib import Path
 
+from topoforge.exceptions import ConfigurationError
 from topoforge.web.models import (
     JobCreateRequest,
     JobError,
@@ -23,8 +24,10 @@ from topoforge.web.processes import (
 )
 from topoforge.web.security import (
     canonical_json_bytes,
+    create_owned_directory,
     is_windows_sharing_violation,
     read_owned_regular_bytes,
+    real_directory_tree_identity,
     write_exclusive_owned_regular_bytes,
 )
 from topoforge.workflow import execute_workflow_launch
@@ -223,6 +226,24 @@ def run_worker(
             parent_identity=parent_identity,
             timeout_seconds=gate_timeout_seconds,
         )
+        if request.reuse_source_job_id is not None:
+            workspace = Path(os.path.abspath(request.launch.workspace_dir.expanduser()))
+            workspace_parent_identity = real_directory_tree_identity(
+                workspace.parent,
+                context="copied project workspace parent",
+            )
+            try:
+                create_owned_directory(
+                    workspace,
+                    root=workspace.parent,
+                    root_identity=workspace_parent_identity,
+                    context="copied project workspace",
+                    exist_ok=False,
+                )
+            except FileExistsError as exc:
+                raise ConfigurationError(
+                    "copied project workspace already exists; choose a new name and submit again"
+                ) from exc
         execution = execute_workflow_launch(request.launch)
         result = WorkerResult(
             job_id=job_id,

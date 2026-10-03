@@ -10,7 +10,7 @@ import {
   Settings2,
   SquareDashedMousePointer,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 
 import { CONNECTOR_TOLERANCE_OPTIONS_MM, defaultFormState } from "../config";
 import { translate, type TranslationKey } from "../i18n";
@@ -25,6 +25,8 @@ import type { DraftStatus } from "../useWorkspaceDraft";
 import { PresetPanel } from "./PresetPanel";
 
 interface BuildPanelProps {
+  projectControls?: ReactNode;
+  routeEditor?: ReactNode;
   collapsed: boolean;
   draftStatus: DraftStatus;
   language: Language;
@@ -76,6 +78,8 @@ function NumberField({
 }
 
 export function BuildPanel({
+  projectControls,
+  routeEditor,
   collapsed,
   draftStatus,
   language,
@@ -132,6 +136,7 @@ export function BuildPanel({
         <p className={`draft-status ${draftStatus === "unavailable" || draftStatus === "invalid" ? "warning" : ""}`} role="status"><CheckCircle2 size={13} />{t(draftLabels[draftStatus])}</p>
         <PresetPanel language={language} form={form} onApply={onFormChange} />
       </div>
+      {projectControls}
       <section className="control-section">
         <div className="section-heading">
           <MapPinned size={17} />
@@ -416,7 +421,7 @@ export function BuildPanel({
               value={form.maxEstimatedTriangles}
               min={12}
               step={1000}
-              onChange={(value) => update("maxEstimatedTriangles", value ?? 12)}
+              onChange={(value) => update("maxEstimatedTriangles", value)}
             />
             <NumberField
               label={t("maxMemory")}
@@ -467,7 +472,7 @@ export function BuildPanel({
                 )
               }
             >
-              {CONNECTOR_TOLERANCE_OPTIONS_MM.map((value) => (
+              {Array.from(new Set([...CONNECTOR_TOLERANCE_OPTIONS_MM, form.connectorToleranceMm])).sort((a, b) => a - b).map((value) => (
                 <option key={value} value={value}>
                   {value.toFixed(2)} mm
                 </option>
@@ -549,6 +554,7 @@ export function BuildPanel({
         {advancedModified && <span className="settings-notice">{t("advancedActive")}</span>}
         <button type="button" className="text-button" onClick={() => setAdvanced(true)}>{t("reviewAdvanced")} →</button>
       </section>}
+      {routeEditor}
       <div className="primary-action">
         <div className="build-summary"><span>{t("buildSizeSummary")}</span><strong>{form.modelWidthMm} × {form.modelDepthMm ?? "—"} mm</strong></div>
         <button type="button" className="primary" onClick={onSubmit} disabled={busy}>

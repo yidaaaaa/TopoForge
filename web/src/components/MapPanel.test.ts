@@ -62,6 +62,19 @@ describe("MapLibre local terrain style", () => {
     );
   });
 
+  it.each([false, true])("draws the real GPX style above every filled terrain and selection layer (online=%s)", (online) => {
+    const style = mapStyle(online, manifest, "terrain", "zh-CN", false, "terrain");
+    const routeIndex = style.layers.findIndex(layer => layer.id === "gpx-route-line");
+    for (const [index, layer] of style.layers.entries()) {
+      if (["background", "fill", "raster", "hillshade"].includes(layer.type)) expect(index).toBeLessThan(routeIndex);
+    }
+    expect(style.layers[routeIndex]).toMatchObject({
+      type: "line", source: "gpx-route", layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": ["get", "route_color"], "line-width": ["get", "route_width"] },
+    });
+    expect(style.layers.findIndex(layer => layer.id === "aoi-line")).toBeGreaterThan(routeIndex);
+  });
+
   it("keeps the optional OSM source separate from local terrain", () => {
     const style = mapStyle(true, manifest, "elevation");
     expect(style.sources.osm).toMatchObject({ type: "vector", tiles: [`${window.location.origin}/api/v1/reference/tiles/{z}/{x}/{y}.mvt`], maxzoom: 14 });

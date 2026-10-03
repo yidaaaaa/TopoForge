@@ -351,3 +351,36 @@ boundary catalog and OSM layers remain unchanged. The trial conversion of the
 user-supplied GS(2022)4309 EPS was not activated: the file lacks CRS metadata and
 independent registration checks showed material positional errors, especially in
 the separately scaled South China Sea inset.
+
+
+## Copy and edit projects
+
+Select a job and choose **Copy and edit** to load its source, AOI and model settings.
+The complete saved launch supplies unexposed engine settings; only edited controls
+are patched. A new, unoccupied workspace is required and the original is preserved.
+Loading a copy does not launch a job or acquire data. Local source dependencies remain
+local dependencies, including files inside a restored workspace. Keep those inputs.
+Browser drafts retain the source job reference; reloading requires that job's record.
+Unsupported global polygon AOIs are rejected explicitly by this editor.
+
+## GPX route editor
+
+Choose **Add GPX route**, browse to a GPX under the server's configured input roots,
+and explicitly **Load route**. **Show on map** locates the track without changing the
+print AOI. Edit the model line width/raised height in millimetres and the route colour,
+then enter the actual source license and attribution before building. Manufacturing
+uses the existing overlay engine and DEM heights. The coloured multi-part 3MF still
+requires material assignment in the slicer for multi-colour printing.
+
+The local preview adapter accepts at most 8 MiB, 50000 points and 1000 segments,
+without simplifying valid route segments. It rejects tracks crossing the antimeridian. Drafts
+store settings, not preview geometry; load again after reloading the page. Submission
+rechecks the preview's file hash and requires a new preview after source changes.
+When copying a project, the first GPX layer is editable and other layers remain.
+Removing that route affects only its layer. An explicit advanced overlay config
+replaces inherited overlay configuration and combines with the edited route.
+
+API adapters: `GET /api/v1/jobs/{job_id}/reuse` is read-only; the returned request carries
+`reuse_source_job_id` to enforce new-workspace submission and exclusive worker creation.
+`POST /api/v1/overlays/gpx/preview` accepts a local `path` and returns bounded WGS84
+GeoJSON, source hash and counts. Both retain loopback/same-origin controls.

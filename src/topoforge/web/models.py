@@ -8,7 +8,14 @@ from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from topoforge.platforms import (
     default_web_input_roots,
@@ -98,6 +105,15 @@ class JobCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     launch: WorkflowLaunchConfig
+    reuse_source_job_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+
+    @model_serializer(mode="wrap")
+    def serialize_request(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Keep historical request bytes stable when no copy protection is needed."""
+        result = handler(self)
+        if self.reuse_source_job_id is None:
+            result.pop("reuse_source_job_id", None)
+        return result
 
 
 class JobRecord(BaseModel):

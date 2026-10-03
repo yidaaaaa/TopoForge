@@ -1,6 +1,19 @@
 import type { Language } from "./types";
 
 const zh = {
+  copyAndEdit: "复制并编辑",
+  copyReady: "已载入项目设置；调整后生成新版本，原项目保留。",
+  copyContext: "正在编辑项目副本",
+  copyMapReference: "地图显示原项目的地形参考；修改后的模型在生成后查看。",
+  copyHelp: "原项目的其他生成设置与覆盖物也会保留。新模型将保存到新目录。",
+  newBlankProject: "新建空白项目",
+  reuseNotReady: "原项目设置尚未载入，请重试后再生成。",
+  reuseUnsupported: "该项目使用了当前界面不能编辑的选区格式，请使用原配置，或新建项目重新选择范围。",
+  routeAdd: "添加 GPX 路线",
+  routeNeedsReview: "请先载入 GPX 路线，并填写来源、许可和署名。",
+  routeChanged: "GPX 文件已改变，请重新载入路线并确认预览。",
+  retryReuse: "重新载入原项目设置",
+
   overlay3mfArtifact: "含覆盖物的 3MF 模型",
   workflowGuide: "操作步骤",
   workspaceControls: "工作区面板",
@@ -306,6 +319,19 @@ const zh = {
 export type TranslationKey = keyof typeof zh;
 
 const en: Record<TranslationKey, string> = {
+  copyAndEdit: "Copy and edit",
+  copyReady: "Project settings loaded. Changes will generate a new version and keep the original.",
+  copyContext: "Editing a project copy",
+  copyMapReference: "The map shows the original terrain as a reference. Build to view the modified model.",
+  copyHelp: "Other original build settings and overlays are retained. The new model uses a new folder.",
+  newBlankProject: "New blank project",
+  reuseNotReady: "Original project settings are not loaded. Retry before building.",
+  reuseUnsupported: "This project uses an area format the editor cannot edit. Use its original configuration or start a new project and select an area.",
+  routeAdd: "Add GPX route",
+  routeNeedsReview: "Load the GPX route and fill in its source, license and attribution first.",
+  routeChanged: "The GPX file changed. Reload the route and review the preview.",
+  retryReuse: "Reload original project settings",
+
   overlay3mfArtifact: "3MF model with overlays",
   workflowGuide: "Workflow guide",
   workspaceControls: "Workspace panels",

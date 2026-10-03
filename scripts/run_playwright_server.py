@@ -8,6 +8,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from pyproj import Transformer
+
 from topoforge.raster import SyntheticTerrain, create_synthetic_geotiff
 from topoforge.util import sha256_file
 from topoforge.web import WebAppConfig, run_web_server
@@ -48,6 +50,37 @@ def prepare_source(root: Path) -> Path:
     return source
 
 
+def prepare_route(input_root: Path) -> Path:
+    """Create a deterministic GPX wholly inside the existing synthetic DEM.
+
+    The track is a declared synthetic test fixture, not recorded terrain data.
+    Retained bytes are verified so restarting tests never overwrites an input.
+    """
+    to_wgs84 = Transformer.from_crs("EPSG:32648", "EPSG:4326", always_xy=True)
+    projected_points = ((500040.0, 3299820.0), (500140.0, 3299900.0), (500260.0, 3299840.0))
+    points = [to_wgs84.transform(easting, northing) for easting, northing in projected_points]
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<gpx version="1.1" creator="TopoForge browser acceptance" '
+        'xmlns="http://www.topografix.com/GPX/1/1">',
+        "<trk><name>Synthetic browser route</name><trkseg>",
+        *(f'<trkpt lon="{lon:.12f}" lat="{lat:.12f}" />' for lon, lat in points),
+        "</trkseg></trk></gpx>",
+    ]
+    payload = ("\n".join(lines) + "\n").encode("utf-8")
+    source = input_root / "topoforge-playwright-route.gpx"
+    if source.exists():
+        if source.read_bytes() != payload:
+            raise RuntimeError(
+                f"retained Playwright route checksum changed: {source}; "
+                "choose a fresh test runtime root and rerun"
+            )
+    else:
+        with source.open("xb") as stream:
+            stream.write(payload)
+    return source
+
+
 def main() -> int:
     """Prepare one cross-platform persistent fixture and run the loopback server."""
     parser = argparse.ArgumentParser()
@@ -62,6 +95,7 @@ def main() -> int:
         else default_runtime_root()
     )
     source = prepare_source(root)
+    prepare_route(source.parent)
     config = WebAppConfig(
         state_dir=root / "state",
         workspace_root=root / "workspaces",

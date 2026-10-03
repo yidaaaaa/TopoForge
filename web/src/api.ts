@@ -1,3 +1,5 @@
+import type { ProjectReuseResponse } from "./projectReuse";
+import type { GpxPreviewResponse } from "./routeEditor";
 import type {
   AoiInput,
   Language,
@@ -55,7 +57,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       "detail" in detail &&
       typeof detail.detail === "string"
         ? detail.detail
-        : response.statusText;
+        : typeof detail === "object" && detail !== null && "detail" in detail && typeof detail.detail === "object" && detail.detail !== null && "message" in detail.detail && typeof detail.detail.message === "string"
+          ? detail.detail.message : response.statusText;
     throw new ApiError(response.status, message, detail);
   }
   return (await response.json()) as T;
@@ -229,4 +232,11 @@ export function searchPlaces(query: string, language: Language, cacheOnly: boole
     method: "POST", signal,
     body: JSON.stringify({ query, language, cache_only: cacheOnly, allow_public_service: allowPublicService }),
   });
+}
+
+export function fetchProjectReuse(jobId: string, signal?: AbortSignal): Promise<ProjectReuseResponse> {
+  return request<ProjectReuseResponse>(`/api/v1/jobs/${encodeURIComponent(jobId)}/reuse`, { signal });
+}
+export function previewGpx(path: string, signal?: AbortSignal, reuseSourceJobId?: string | null): Promise<GpxPreviewResponse> {
+  return request<GpxPreviewResponse>("/api/v1/overlays/gpx/preview", { method: "POST", body: JSON.stringify({ path, ...(reuseSourceJobId ? { reuse_source_job_id: reuseSourceJobId } : {}) }), signal });
 }
