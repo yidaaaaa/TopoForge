@@ -500,7 +500,7 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   await page.getByRole("tab", { name: "拼装" }).click();
   await expect(page.getByTestId("assembly-panel")).toBeVisible();
   await expect(page.getByTestId("assembly-diagram")).toBeVisible();
-  await expect(page.getByText("4/4")).toBeVisible();
+  await expect(page.getByTestId("assembly-panel").getByText("4/4", { exact: true })).toBeVisible();
 
   await page.getByText("tile-r0001-c0001", { exact: true }).click();
   await expect(page.getByTestId("assembly-panel")).toHaveAttribute(
@@ -512,7 +512,7 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   });
   await selectedTileRow.getByTitle("隐藏分块").click();
   await expect(selectedTileRow.getByRole("checkbox")).not.toBeChecked();
-  await expect(page.getByText("3/4")).toBeVisible();
+  await expect(page.getByTestId("assembly-panel").getByText("3/4", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "三维拼装" }).click();
   const assemblyCanvas = page.locator(".assembly-3d-canvas canvas");
@@ -540,7 +540,7 @@ test("desktop bilingual map and 3D workspace is visible and nonblank", async ({
   const resetToken = await page.getByTestId("assembly-panel").getAttribute("data-reset-token");
   await page.getByRole("button", { name: "重置拼装视图" }).click();
   await expect(page.getByTestId("assembly-panel")).toHaveAttribute("data-explosion", "0.00");
-  await expect(page.getByText("4/4")).toBeVisible();
+  await expect(page.getByTestId("assembly-panel").getByText("4/4", { exact: true })).toBeVisible();
   await expect
     .poll(async () => page.getByTestId("assembly-panel").getAttribute("data-reset-token"))
     .not.toBe(resetToken);
