@@ -2075,8 +2075,13 @@ def read_owned_regular_bytes(
     root_identity: tuple[int, int],
     context: str,
     max_bytes: int = _DEFAULT_MAX_RECORD_BYTES,
+    allow_atomic_replace: bool = False,
 ) -> bytes:
-    """Read a bounded file through an identity-bound directory chain."""
+    """Read a bounded file through an identity-bound directory chain.
+
+    Atomic-replacement sharing is opt-in for advisory snapshots such as progress.
+    It does not permit in-place writes or relax the final path-identity checks.
+    """
     if max_bytes < 1:
         raise ValueError("maximum record size must be positive")
     candidate = Path(os.path.abspath(path.expanduser()))
@@ -2090,7 +2095,7 @@ def read_owned_regular_bytes(
             directory=False,
             create=False,
             desired_access=_GENERIC_READ | _SYNCHRONIZE,
-            share_access=_FILE_SHARE_READ,
+            share_access=(_FILE_SHARE_READ | (_FILE_SHARE_DELETE if allow_atomic_replace else 0)),
             context=context,
         )
         descriptor: int | None = None

@@ -3242,11 +3242,18 @@ class LocalJobManager:
 
     def _status_update(self, record: JobRecord) -> JobRecord:
         status_path = record.workspace_dir / "workflow-status.json"
-        if not status_path.is_file():
-            return record
+        workspace_root = self.config.workspace_root
+        workspace_root_identity = self._owned_identity(workspace_root)
         try:
             status = LocalWorkflowStatus.model_validate_json(
-                status_path.read_text(encoding="utf-8")
+                read_owned_regular_bytes(
+                    status_path,
+                    root=workspace_root,
+                    root_identity=workspace_root_identity,
+                    context="Web workflow progress",
+                    max_bytes=1024 * 1024,
+                    allow_atomic_replace=True,
+                )
             )
         except (OSError, ValueError):
             return record
