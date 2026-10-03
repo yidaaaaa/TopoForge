@@ -462,6 +462,15 @@ def test_windows_core_ci_contract() -> None:
     windows = jobs["windows-core"]
     windows_steps = json.dumps(windows["steps"], sort_keys=True)
     windows_system = next(step for step in windows["steps"] if step.get("id") == "windows-system")
+    windows_progress = next(
+        step for step in windows["steps"] if step.get("id") == "windows-progress"
+    )
+    windows_pytest = next(step for step in windows["steps"] if step.get("id") == "windows-pytest")
+    python_failure = next(
+        step
+        for step in windows["steps"]
+        if step.get("name") == "Report Windows Python regression failure"
+    )
 
     assert jobs["quality"]["runs-on"] == "ubuntu-22.04"
     assert jobs["release"]["needs"] == "quality"
@@ -484,7 +493,23 @@ def test_windows_core_ci_contract() -> None:
     assert "Tee-Object" in windows_steps
     assert "ci-windows-x64-pytest.log" in windows_steps
     assert "Report Windows Python regression failure" in windows_steps
-    assert "failure() && steps.windows-pytest.outcome == 'failure'" in windows_steps
+    assert windows["steps"].index(windows_progress) < windows["steps"].index(windows_pytest)
+    assert (
+        "tests/web/test_workflow_status_reads.py::"
+        "test_native_windows_reader_sharing_controls_atomic_status_replacement"
+        in windows_progress["run"]
+    )
+    assert "uv run pytest -q --tb=short 2>&1" in windows_pytest["run"]
+    assert "-Append" in windows_pytest["run"]
+    for step in (windows_progress, windows_pytest):
+        assert "if" not in step
+        assert not step.get("continue-on-error", False)
+        assert "exit $LASTEXITCODE" in step["run"]
+        assert 'Tee-Object -FilePath "artifacts/logs/ci-windows-x64-pytest.log"' in step["run"]
+    assert python_failure["if"] == (
+        "failure() && (steps.windows-progress.outcome == 'failure' || "
+        "steps.windows-pytest.outcome == 'failure')"
+    )
     assert "::error title=Windows pytest" in windows_steps
     assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in windows_steps
     assert "setup-node" not in windows_steps
