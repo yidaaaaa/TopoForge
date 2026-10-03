@@ -500,6 +500,7 @@ def _write_canonical(
     value: BaseModel | dict[str, Any],
     *,
     workspace: _WorkspaceLease | None = None,
+    allow_open_destination: bool = False,
 ) -> Path:
     from topoforge.web.security import atomic_write_owned_regular_bytes, ensure_real_directory_tree
 
@@ -525,6 +526,7 @@ def _write_canonical(
             root_identity=active.identity,
             context=f"canonical workflow output {path}",
             replace=True,
+            allow_open_destination=allow_open_destination,
         )
     except (OSError, ValueError) as exc:
         if getattr(exc, "committed", False):
@@ -1114,7 +1116,14 @@ def _status(
         ready_stages=tuple(record.name for record in records),
         failure_path=None if failure_path is None else _relative(root, failure_path),
     )
-    return _write_canonical(root / "workflow-status.json", value, workspace=workspace)
+    # Progress is a replaceable snapshot; readers reject an old file identity.
+    # Other canonical records retain the default Windows replacement behavior.
+    return _write_canonical(
+        root / "workflow-status.json",
+        value,
+        workspace=workspace,
+        allow_open_destination=True,
+    )
 
 
 def _verify_build_stage(

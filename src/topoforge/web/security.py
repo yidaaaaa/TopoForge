@@ -53,6 +53,9 @@ _OBJ_CASE_INSENSITIVE = 0x00000040
 _OBJ_DONT_REPARSE = 0x00001000
 _FILE_ID_INFO_CLASS = 0x12
 _NT_FILE_RENAME_INFORMATION_CLASS = 10
+_NT_FILE_RENAME_INFORMATION_EX_CLASS = 65
+_FILE_RENAME_REPLACE_IF_EXISTS = 0x00000001
+_FILE_RENAME_POSIX_SEMANTICS = 0x00000002
 _FILE_DISPOSITION_INFO_CLASS = 4
 _HANDLE_FLAG_INHERIT = 0x00000001
 _WINDOWS_CTYPES: Any = ctypes
@@ -160,6 +163,7 @@ class _WindowsLeaseBackend(Protocol):
         name: str,
         *,
         replace: bool,
+        allow_open_destination: bool = False,
     ) -> None: ...
 
     def delete_file(self, handle: int) -> None: ...
@@ -223,6 +227,14 @@ class _FileIdInfo(ctypes.Structure):
 class _FileRenameInfoHeader(ctypes.Structure):
     _fields_ = [
         ("ReplaceIfExists", ctypes.c_uint32),
+        ("RootDirectory", ctypes.c_void_p),
+        ("FileNameLength", ctypes.c_uint32),
+    ]
+
+
+class _FileRenameInfoExHeader(ctypes.Structure):
+    _fields_ = [
+        ("Flags", ctypes.c_uint32),
         ("RootDirectory", ctypes.c_void_p),
         ("FileNameLength", ctypes.c_uint32),
     ]
@@ -528,17 +540,28 @@ class _WindowsNativeLeaseBackend:
         name: str,
         *,
         replace: bool,
+        allow_open_destination: bool = False,
     ) -> None:
+        if allow_open_destination and not replace:
+            raise ValueError("open-destination publication requires replace=True")
         self._validate_basename(name)
         encoded_name = name.encode("utf-16-le")
-        header_bytes = _FileRenameInfoHeader.FileNameLength.offset + ctypes.sizeof(ctypes.c_uint32)
-        buffer = ctypes.create_string_buffer(
-            ctypes.sizeof(_FileRenameInfoHeader) + len(encoded_name)
-        )
-        header = ctypes.cast(buffer, ctypes.POINTER(_FileRenameInfoHeader)).contents
-        header.ReplaceIfExists = int(replace)
-        header.RootDirectory = ctypes.c_void_p(parent_handle)
-        header.FileNameLength = len(encoded_name)
+        header: _FileRenameInfoHeader | _FileRenameInfoExHeader
+        if allow_open_destination:
+            header = _FileRenameInfoExHeader(
+                _FILE_RENAME_REPLACE_IF_EXISTS | _FILE_RENAME_POSIX_SEMANTICS,
+                ctypes.c_void_p(parent_handle),
+                len(encoded_name),
+            )
+            information_class = _NT_FILE_RENAME_INFORMATION_EX_CLASS
+        else:
+            header = _FileRenameInfoHeader(
+                int(replace), ctypes.c_void_p(parent_handle), len(encoded_name)
+            )
+            information_class = _NT_FILE_RENAME_INFORMATION_CLASS
+        header_bytes = type(header).FileNameLength.offset + ctypes.sizeof(ctypes.c_uint32)
+        buffer = ctypes.create_string_buffer(ctypes.sizeof(header) + len(encoded_name))
+        ctypes.memmove(buffer, ctypes.byref(header), ctypes.sizeof(header))
         ctypes.memmove(ctypes.addressof(buffer) + header_bytes, encoded_name, len(encoded_name))
         io_status = _IoStatusBlock()
         status = int(
@@ -547,7 +570,7 @@ class _WindowsNativeLeaseBackend:
                 ctypes.byref(io_status),
                 ctypes.byref(buffer),
                 ctypes.sizeof(buffer),
-                _NT_FILE_RENAME_INFORMATION_CLASS,
+                information_class,
             )
         )
         if status < 0:
@@ -1769,9 +1792,12 @@ def _write_atomic_owned_regular_bytes_windows(
     root_identity: tuple[int, int],
     context: str,
     replace: bool,
+    allow_open_destination: bool = False,
     backend: _WindowsLeaseBackend | None = None,
 ) -> None:
     """Atomically publish a file below one identity-bound Windows root."""
+    if allow_open_destination and not replace:
+        raise ValueError("open-destination publication requires replace=True")
     active = _WindowsNativeLeaseBackend() if backend is None else backend
     parent = _open_windows_pinned_directory(
         root,
@@ -1841,6 +1867,7 @@ def _write_atomic_owned_regular_bytes_windows(
             parent.handle,
             destination.name,
             replace=replace,
+            allow_open_destination=allow_open_destination,
         )
         published = True
         try:
@@ -1920,8 +1947,15 @@ def atomic_write_owned_regular_bytes(
     root_identity: tuple[int, int],
     context: str,
     replace: bool = True,
+    allow_open_destination: bool = False,
 ) -> None:
-    """Atomically publish below an identity-bound root using relative syscalls only."""
+    """Atomically publish below an identity-bound root using relative syscalls only.
+
+    Advisory snapshots may opt into replacing an open Windows destination. Readers
+    must still share deletion; all containment and publication checks remain active.
+    """
+    if allow_open_destination and not replace:
+        raise ValueError("open-destination publication requires replace=True")
     destination = Path(os.path.abspath(path.expanduser()))
     _lexical_relative_parts(root, destination, context=context)
     if os.name == "nt":
@@ -1932,6 +1966,7 @@ def atomic_write_owned_regular_bytes(
             root_identity=root_identity,
             context=context,
             replace=replace,
+            allow_open_destination=allow_open_destination,
         )
         return
 

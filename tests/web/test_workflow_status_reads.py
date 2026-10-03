@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 
+from topoforge.exceptions import ConfigurationError
 from topoforge.web import jobs as jobs_module
 from topoforge.web import security as security_module
 from topoforge.web.jobs import LocalJobManager
@@ -20,6 +21,7 @@ from topoforge.web.security import (
     read_owned_regular_bytes,
 )
 from topoforge.workflow import LocalWorkflowStatus, WorkflowStage, WorkflowState
+from topoforge.workflow import local as workflow_module
 
 from .test_jobs import _PosixWindowsLeaseBackend
 
@@ -284,6 +286,24 @@ def test_native_windows_reader_sharing_controls_atomic_status_replacement(
     writer_errors: list[BaseException] = []
     writer_finished_while_reader_held: list[bool] = []
     original_open = security_module._open_windows_owned_entry
+    replacement_payload = canonical_json_bytes(
+        LocalWorkflowStatus(
+            workflow_id="updated",
+            state=WorkflowState.RUNNING,
+            current_stage=WorkflowStage.BUILD,
+            ready_stages=(),
+        )
+    )
+
+    def publish_status() -> None:
+        workflow_module._status(
+            root,
+            workspace=workflow_module._WorkspaceLease(root, identity),
+            workflow_id="updated",
+            state=WorkflowState.RUNNING,
+            current_stage=WorkflowStage.BUILD,
+            records=[],
+        )
 
     def pause_after_open(
         candidate_root: Path,
@@ -303,14 +323,7 @@ def test_native_windows_reader_sharing_controls_atomic_status_replacement(
         try:
             if not reader_opened.wait(5):
                 raise AssertionError("reader did not acquire its file handle")
-            atomic_write_owned_regular_bytes(
-                path,
-                b"replacement status\n",
-                root=root,
-                root_identity=identity,
-                context="concurrent progress publication",
-                replace=True,
-            )
+            publish_status()
         except BaseException as exc:
             writer_errors.append(exc)
         finally:
@@ -343,20 +356,233 @@ def test_native_windows_reader_sharing_controls_atomic_status_replacement(
         assert writer_errors == []
         assert read_error is not None
         assert payload is None
-        assert path.read_bytes() == b"replacement status\n"
+        assert path.read_bytes() == replacement_payload
     else:
         assert len(writer_errors) == 1
-        assert isinstance(writer_errors[0], OSError)
+        assert isinstance(writer_errors[0], ConfigurationError)
+        assert isinstance(writer_errors[0].__cause__, OSError)
+        assert not getattr(writer_errors[0].__cause__, "committed", False)
         assert read_error is None
         assert payload == b"original status\n"
         assert path.read_bytes() == b"original status\n"
         # Releasing the default reader removes the sharing conflict.
+        publish_status()
+        assert path.read_bytes() == replacement_payload
+
+
+@pytest.mark.parametrize("name", ["x", "地形😀.json"])
+@pytest.mark.parametrize(
+    ("replace", "allow_open_destination", "expected_class", "expected_flags"),
+    [(False, False, 10, 0), (True, False, 10, 1), (True, True, 65, 3)],
+)
+def test_windows_rename_open_destination_uses_explicit_class_flags_and_utf16(
+    name: str,
+    replace: bool,
+    allow_open_destination: bool,
+    expected_class: int,
+    expected_flags: int,
+) -> None:
+    calls: list[tuple[int, bytes]] = []
+
+    def capture(
+        _handle: object,
+        _io_status: object,
+        buffer: Any,
+        length: int,
+        information_class: int,
+    ) -> int:
+        calls.append((information_class, security_module.ctypes.string_at(buffer, length)))
+        return 0
+
+    backend = object.__new__(security_module._WindowsNativeLeaseBackend)
+    backend._nt_set_information_file = capture
+    options: dict[str, Any] = {"allow_open_destination": True} if allow_open_destination else {}
+    backend.rename_relative(11, 22, name, replace=replace, **options)
+    assert len(calls) == 1
+    information_class, payload = calls[0]
+    assert information_class == expected_class
+    header_type = (
+        security_module._FileRenameInfoExHeader
+        if allow_open_destination
+        else security_module._FileRenameInfoHeader
+    )
+    header_size = security_module.ctypes.sizeof(header_type)
+    header = header_type.from_buffer_copy(payload[:header_size])
+    encoded_name = name.encode("utf-16-le")
+    assert int.from_bytes(payload[:4], "little") == expected_flags
+    assert header.RootDirectory == 22
+    assert header.FileNameLength == len(encoded_name)
+    filename_offset = header_type.FileNameLength.offset + 4
+    assert payload[filename_offset : filename_offset + len(encoded_name)] == encoded_name
+    assert len(payload) == header_size + len(encoded_name)
+    if security_module.ctypes.sizeof(security_module.ctypes.c_void_p) == 8:
+        assert header_size == 24
+        assert header_type.RootDirectory.offset == 8
+        assert filename_offset == 20
+
+
+@pytest.mark.parametrize("entry", ["public", "windows-helper", "native-backend"])
+def test_open_destination_publication_requires_replace_before_filesystem_access(
+    tmp_path: Path,
+    entry: str,
+) -> None:
+    root = tmp_path / "absent-workspace"
+    path = root / "workflow-status.json"
+    with pytest.raises(ValueError, match="requires replace=True"):
+        if entry == "native-backend":
+            backend = object.__new__(security_module._WindowsNativeLeaseBackend)
+            backend.rename_relative(11, 22, path.name, replace=False, allow_open_destination=True)
+        else:
+            write = (
+                atomic_write_owned_regular_bytes
+                if entry == "public"
+                else security_module._write_atomic_owned_regular_bytes_windows
+            )
+            write(
+                path,
+                b"status",
+                root=root,
+                root_identity=(1, 2),
+                context="invalid publication fixture",
+                replace=False,
+                allow_open_destination=True,
+            )
+    assert not root.exists()
+
+
+@pytest.mark.parametrize(
+    "name", ["", ".", "..", "../status", "nested\\status", "status:stream", "a\x00b"]
+)
+def test_windows_open_destination_rename_rejects_unsafe_names(name: str) -> None:
+    backend = object.__new__(security_module._WindowsNativeLeaseBackend)
+    with pytest.raises(RuntimeError, match="unsafe Windows filesystem basename"):
+        backend.rename_relative(11, 22, name, replace=True, allow_open_destination=True)
+
+
+@pytest.mark.parametrize(
+    ("ntstatus", "winerror"),
+    [(0xC0000022, 5), (0xC0000003, 87), (0xC00000BB, 50)],
+)
+def test_windows_open_destination_rename_propagates_failure_without_fallback(
+    ntstatus: int,
+    winerror: int,
+) -> None:
+    calls: list[int] = []
+
+    def fail(
+        _handle: object,
+        _io_status: object,
+        _buffer: object,
+        _length: int,
+        information_class: int,
+    ) -> int:
+        calls.append(information_class)
+        return security_module.ctypes.c_int32(ntstatus).value
+
+    backend = object.__new__(security_module._WindowsNativeLeaseBackend)
+    backend._nt_set_information_file = fail
+    backend._rtl_status_to_error = lambda _status: winerror
+    with pytest.raises(OSError, match=f"NTSTATUS 0x{ntstatus:08x}") as caught:
+        backend.rename_relative(11, 22, "status.json", replace=True, allow_open_destination=True)
+    reported_error = getattr(caught.value, "winerror", None)
+    if reported_error is None:
+        reported_error = vars(caught.value).get("winerror")
+    assert reported_error == winerror
+    assert calls == [65]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX backend exercises Windows publisher selection")
+@pytest.mark.parametrize("allow_open_destination", [False, True])
+def test_windows_owned_publication_preserves_explicit_open_destination_option(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    allow_open_destination: bool,
+) -> None:
+    root = tmp_path / "workspace"
+    root.mkdir()
+    path = root / "workflow-status.json"
+    path.write_bytes(b"original")
+    observed: list[bool] = []
+
+    class CapturingBackend(_PosixWindowsLeaseBackend):
+        def rename_relative(
+            self,
+            handle: int,
+            parent_handle: int,
+            name: str,
+            *,
+            replace: bool,
+            allow_open_destination: bool = False,
+        ) -> None:
+            observed.append(allow_open_destination)
+            super().rename_relative(
+                handle,
+                parent_handle,
+                name,
+                replace=replace,
+                allow_open_destination=allow_open_destination,
+            )
+
+    backend = CapturingBackend()
+    monkeypatch.setattr(security_module, "os", SimpleNamespace(**{**vars(os), "name": "nt"}))
+    monkeypatch.setattr(security_module, "_WindowsNativeLeaseBackend", lambda: backend)
+    options: dict[str, Any] = {"allow_open_destination": True} if allow_open_destination else {}
+    atomic_write_owned_regular_bytes(
+        path,
+        b"replacement",
+        root=root,
+        root_identity=(root.stat().st_dev, root.stat().st_ino),
+        context="progress publication",
+        **options,
+    )
+    assert path.read_bytes() == b"replacement"
+    assert observed == [allow_open_destination]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX backend exercises no-follow publisher checks")
+@pytest.mark.parametrize("case", ["symlink", "hardlink", "root-replaced", "rename-failed"])
+def test_windows_open_destination_publication_preserves_path_guards_and_failed_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+) -> None:
+    root = tmp_path / "workspace"
+    root.mkdir()
+    path = root / "workflow-status.json"
+    path.write_bytes(b"original")
+    identity = (root.stat().st_dev, root.stat().st_ino)
+    external = tmp_path / "external.json"
+    external.write_bytes(b"external")
+    if case in {"symlink", "hardlink"}:
+        path.unlink()
+        if case == "symlink":
+            path.symlink_to(external)
+        else:
+            os.link(external, path)
+    elif case == "root-replaced":
+        root.rename(tmp_path / "original-workspace")
+        root.mkdir()
+        path.write_bytes(b"replacement-root")
+    before = path.read_bytes()
+
+    def before_rename() -> None:
+        if case == "rename-failed":
+            raise PermissionError(errno.EACCES, "injected native publication failure")
+
+    backend = _PosixWindowsLeaseBackend(before_rename=before_rename)
+    monkeypatch.setattr(security_module, "os", SimpleNamespace(**{**vars(os), "name": "nt"}))
+    monkeypatch.setattr(security_module, "_WindowsNativeLeaseBackend", lambda: backend)
+    with pytest.raises((OSError, ValueError)):
         atomic_write_owned_regular_bytes(
             path,
-            b"replacement status\n",
+            b"must not publish",
             root=root,
             root_identity=identity,
-            context="publication after reader close",
-            replace=True,
+            context="unsafe progress publication",
+            allow_open_destination=True,
         )
-        assert path.read_bytes() == b"replacement status\n"
+    assert path.read_bytes() == before
+    assert external.read_bytes() == b"external"
+    assert list(root.iterdir()) == [path]
+    if case == "root-replaced":
+        assert (tmp_path / "original-workspace" / path.name).read_bytes() == b"original"

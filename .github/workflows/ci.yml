@@ -199,16 +199,23 @@ jobs:
           }
           $message = $message.Replace("%", "%25").Replace("`r", "%0D").Replace("`n", "%0A")
           Write-Output "::error title=Windows system acceptance::$message"
+      - id: windows-progress
+        name: Verify concurrent Windows workflow status publication
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "artifacts/logs" | Out-Null
+          uv run pytest -q --tb=short tests/web/test_workflow_status_reads.py::test_native_windows_reader_sharing_controls_atomic_status_replacement 2>&1 |
+            Tee-Object -FilePath "artifacts/logs/ci-windows-x64-pytest.log"
+          exit $LASTEXITCODE
       - id: windows-pytest
         name: Run Python regression suite
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force "artifacts/logs" | Out-Null
           uv run pytest -q --tb=short 2>&1 |
-            Tee-Object -FilePath "artifacts/logs/ci-windows-x64-pytest.log"
+            Tee-Object -FilePath "artifacts/logs/ci-windows-x64-pytest.log" -Append
           exit $LASTEXITCODE
       - name: Report Windows Python regression failure
-        if: failure() && steps.windows-pytest.outcome == 'failure'
+        if: failure() && (steps.windows-progress.outcome == 'failure' || steps.windows-pytest.outcome == 'failure')
         shell: pwsh
         run: |
           $logPath = "artifacts/logs/ci-windows-x64-pytest.log"

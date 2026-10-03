@@ -3431,7 +3431,10 @@ class _PosixWindowsLeaseBackend:
         name: str,
         *,
         replace: bool,
+        allow_open_destination: bool = False,
     ) -> None:
+        if allow_open_destination and not replace:
+            raise ValueError("open-destination publication requires replace=True")
         self._before_rename()
         source_parent, source_name = self._names[handle]
         source_metadata = os.fstat(handle)
